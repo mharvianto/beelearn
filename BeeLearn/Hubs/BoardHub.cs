@@ -13,11 +13,13 @@ public class BoardHub : Hub
 {
     private readonly AppDbContext _db;
     private readonly PresenceTracker _presence;
+    private readonly DraftStore _drafts;
 
-    public BoardHub(AppDbContext db, PresenceTracker presence)
+    public BoardHub(AppDbContext db, PresenceTracker presence, DraftStore drafts)
     {
         _db = db;
         _presence = presence;
+        _drafts = drafts;
     }
 
     private int UserId => int.Parse(Context.User!.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -47,6 +49,32 @@ public class BoardHub : Hub
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, StaffGroup(boardId));
         _presence.Remove(Context.ConnectionId);
         await Clients.Group(BoardGroup(boardId)).SendAsync("presence", _presence.ForBoard(boardId));
+    }
+
+    /// <summary>
+    /// Student streams their current editor buffer. Broadcast to staff only so a teacher
+    /// can watch progress without the student running or submitting.
+    /// </summary>
+    public async Task PushDraft(int boardId, int problemId, string code)
+    {
+        var membership = await _db.BoardMemberships
+            .FirstOrDefaultAsync(m => m.BoardId == boardId && m.UserId == UserId);
+        if (membership is null) return;
+        if (code is { Length: > 200_000 }) code = code[..200_000];
+
+        var name = Context.User!.FindFirstValue(ClaimTypes.Name) ?? "user";
+        var draft = _drafts.Set(boardId, problemId, UserId, name, code ?? "");
+        await Clients.Group(StaffGroup(boardId)).SendAsync("draftUpdated", draft);
+    }
+
+    /// <summary>Staff pulls the current draft snapshot for a board (e.g. on load).</summary>
+    public async Task<IEnumerable<Draft>> GetDrafts(int boardId)
+    {
+        var membership = await _db.BoardMemberships
+            .FirstOrDefaultAsync(m => m.BoardId == boardId && m.UserId == UserId);
+        if (membership is null || membership.Role is MembershipRole.Student)
+            return Enumerable.Empty<Draft>();
+        return _drafts.ForBoard(boardId);
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)

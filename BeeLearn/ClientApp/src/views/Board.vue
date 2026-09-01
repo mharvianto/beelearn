@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
+import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '../lib/api';
 import { useAuth } from '../stores/auth';
@@ -37,6 +37,7 @@ async function loadProgress() {
   progress.value = await api.get(`/api/boards/${props.id}/progress`);
 }
 const wallSignal = ref(0);
+const drafts = reactive({});   // "problemId:userId" -> { code, updatedAt, authorName }
 function scheduleRefresh() {
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(loadProgress, 250);
@@ -64,9 +65,17 @@ onMounted(async () => {
   conn.on('examModeChanged', async () => { await loadAll(); });
   conn.on('problemChanged', async () => { problems.value = await api.get(`/api/boards/${props.id}/problems`); scheduleRefresh(); });
   conn.on('presence', (list) => { presence.value = list; });
+  conn.on('draftUpdated', (d) => {
+    drafts[`${d.problemId}:${d.userId}`] = { code: d.code, updatedAt: d.updatedAt, authorName: d.authorName };
+  });
   try {
     await conn.start();
     await conn.invoke('JoinBoard', Number(props.id));
+    if (isStaff.value) {
+      const list = await conn.invoke('GetDrafts', Number(props.id));
+      for (const d of list || [])
+        drafts[`${d.problemId}:${d.userId}`] = { code: d.code, updatedAt: d.updatedAt, authorName: d.authorName };
+    }
   } catch (e) { /* realtime is best-effort */ }
 });
 
@@ -152,7 +161,8 @@ onBeforeUnmount(async () => {
     <PadletWall v-if="view === 'wall'"
       :board-id="board.id"
       :current-user-id="auth.user?.id"
-      :refresh-signal="wallSignal" />
+      :refresh-signal="wallSignal"
+      :drafts="drafts" />
 
     <ProgressGrid v-else
       :students="progress.students"

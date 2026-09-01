@@ -32,6 +32,27 @@ public class WallController : ApiControllerBase
         return wall is null ? Forbid() : wall;
     }
 
+    /// <summary>Ensure a wall post exists for the current student + problem (called when they open it).</summary>
+    [HttpPost("api/problems/{problemId:int}/post")]
+    public async Task<ActionResult<object>> EnsurePost(int problemId)
+    {
+        var problem = await _db.Problems.FirstOrDefaultAsync(p => p.Id == problemId);
+        if (problem is null) return NotFound();
+        var membership = await _db.BoardMemberships
+            .FirstOrDefaultAsync(m => m.BoardId == problem.BoardId && m.UserId == UserId);
+        if (membership is null) return Forbid();
+
+        var post = await _db.Posts.FirstOrDefaultAsync(p => p.ProblemId == problemId && p.UserId == UserId);
+        if (post is null)
+        {
+            post = new Post { BoardId = problem.BoardId, ProblemId = problemId, UserId = UserId };
+            _db.Posts.Add(post);
+            await _db.SaveChangesAsync();
+            await _notifier.WallChangedAsync(problem.BoardId);
+        }
+        return new { postId = post.Id };
+    }
+
     [HttpPut("api/posts/{postId:int}/note")]
     public async Task<IActionResult> SetNote(int postId, NoteDto dto)
     {

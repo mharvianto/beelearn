@@ -26,6 +26,10 @@ everyone's progress — with layered controls over who can see whose answers.
    - **Grid**: compact students × problems table (`ProgressGrid.vue`).
    Both refetch the visibility-filtered `/api/boards/{id}/wall` or `/progress` on SignalR
    events; hidden posts show as a locked card / neutral dot.
+   - **Live drafts**: the Solve editor streams the student's buffer over the hub
+     (`PushDraft`, ~900 ms debounce) to the **staff group only** — a teacher watches
+     work-in-progress on the wall (amber "✎ editing / LIVE" card) without the student
+     running or submitting. Buffers are in-memory (`DraftStore`), never sent to peers.
 3. **Run code** — `POST /api/run`, default limits **1 s CPU / 32 MB** (per-problem limits on
    submit). Enforced with `RLIMIT_CPU`, `RLIMIT_AS`, `RLIMIT_STACK`, `RLIMIT_NPROC`,
    `RLIMIT_FSIZE` + a wall-clock backstop. Verdicts: AC / WA / TLE / MLE / RE / CE.

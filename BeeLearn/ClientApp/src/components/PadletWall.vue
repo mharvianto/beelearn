@@ -8,6 +8,7 @@ const props = defineProps({
   boardId: { type: [String, Number], required: true },
   currentUserId: Number,
   refreshSignal: { type: Number, default: 0 },
+  drafts: { type: Object, default: () => ({}) },   // "problemId:userId" -> { code, updatedAt, authorName }
 });
 const router = useRouter();
 
@@ -30,8 +31,36 @@ async function load() {
 onMounted(load);
 watch(() => props.refreshSignal, load);
 
-const visiblePosts = computed(() =>
-  wall.value.posts.filter((p) => p.problemId === activeProblem.value));
+const visiblePosts = computed(() => {
+  const posts = wall.value.posts.filter((p) => p.problemId === activeProblem.value);
+  const seen = new Set(posts.map((p) => `${p.problemId}:${p.userId}`));
+  // Staff may receive live drafts for students who have no post row yet.
+  const draftOnly = Object.entries(props.drafts)
+    .filter(([k]) => k.startsWith(`${activeProblem.value}:`) && !seen.has(k))
+    .map(([k, d]) => {
+      const [problemId, userId] = k.split(':').map(Number);
+      return {
+        postId: null, problemId, userId, authorName: d.authorName, note: '', mine: userId === props.currentUserId,
+        redacted: false, verdict: 'None', score: 0, attempts: 0, runtimeMs: 0, memoryKb: 0,
+        language: 'cpp', codePreview: null, updatedAt: d.updatedAt, reactions: [], comments: [],
+      };
+    });
+  return [...posts, ...draftOnly];
+});
+
+function draftFor(post) {
+  const d = props.drafts[`${post.problemId}:${post.userId}`];
+  if (!d || post.mine) return null;   // no need to show a student their own live buffer
+  return d;
+}
+function truncate(code, n = 14) {
+  const lines = (code || '').split('\n');
+  return lines.length > n ? lines.slice(0, n).join('\n') + '\n…' : lines.join('\n');
+}
+function previewCode(post) {
+  const d = draftFor(post);
+  return d ? truncate(d.code) : post.codePreview;
+}
 
 const pastels = ['bg-rose-50', 'bg-amber-50', 'bg-lime-50', 'bg-sky-50', 'bg-violet-50', 'bg-teal-50', 'bg-orange-50'];
 const avatarColors = ['bg-rose-400', 'bg-amber-400', 'bg-lime-500', 'bg-sky-400', 'bg-violet-400', 'bg-teal-400', 'bg-orange-400'];
@@ -111,9 +140,11 @@ function openPost(post) {
 
     <!-- masonry wall -->
     <div class="[column-fill:_balance] columns-1 sm:columns-2 xl:columns-3 gap-4">
-      <article v-for="post in visiblePosts" :key="post.postId"
-               class="mb-4 break-inside-avoid rounded-2xl border border-slate-200 shadow-sm relative"
-               :class="post.redacted ? 'bg-white border-dashed' : pastels[hash(post.userId)]">
+      <article v-for="post in visiblePosts" :key="post.postId ?? ('d' + post.userId)"
+               class="mb-4 break-inside-avoid rounded-2xl border shadow-sm relative"
+               :class="post.redacted ? 'bg-white border-dashed border-slate-200'
+                 : draftFor(post) ? 'bg-amber-50 border-amber-300'
+                 : pastels[hash(post.userId)] + ' border-slate-200'">
         <!-- header -->
         <div class="flex items-center gap-2 px-4 pt-3">
           <span class="w-7 h-7 rounded-full text-white text-xs font-bold grid place-items-center shrink-0"
@@ -123,9 +154,13 @@ function openPost(post) {
               {{ post.redacted ? 'Hidden' : post.authorName }}
               <span v-if="post.mine" class="text-xs text-slate-400 font-normal">· you</span>
             </div>
-            <div class="text-[11px] text-slate-400">{{ ago(post.updatedAt) }} ago</div>
+            <div class="text-[11px] text-slate-400">
+              <span v-if="draftFor(post)" class="text-amber-600 font-medium">✎ editing · {{ ago(draftFor(post).updatedAt) }} ago</span>
+              <span v-else>{{ ago(post.updatedAt) }} ago</span>
+            </div>
           </div>
-          <VerdictBadge v-if="!post.redacted" :verdict="post.verdict" small class="ml-auto" />
+          <VerdictBadge v-if="!post.redacted && post.verdict !== 'None'" :verdict="post.verdict" small class="ml-auto" />
+          <span v-else-if="draftFor(post)" class="ml-auto text-[10px] bg-amber-200 text-amber-800 rounded px-1.5 py-0.5 font-semibold">LIVE</span>
         </div>
 
         <div v-if="post.redacted" class="px-4 py-4 text-sm text-slate-400">
@@ -134,7 +169,7 @@ function openPost(post) {
 
         <template v-else>
           <!-- note -->
-          <div class="px-4 pt-2">
+          <div v-if="post.postId" class="px-4 pt-2">
             <div v-if="noteDraft[post.postId] !== undefined" class="flex gap-1">
               <input v-model="noteDraft[post.postId]" @keyup.enter="saveNote(post)"
                      placeholder="Add a note…" maxlength="500"
@@ -148,17 +183,20 @@ function openPost(post) {
             </button>
           </div>
 
-          <!-- code preview -->
-          <pre v-if="post.codePreview"
-               class="mx-4 mt-2 bg-slate-900 text-slate-100 text-[11px] leading-snug rounded-lg p-2 overflow-x-auto max-h-44">{{ post.codePreview }}</pre>
+          <!-- code preview (live draft overrides the last submitted snapshot) -->
+          <pre v-if="previewCode(post)"
+               class="mx-4 mt-2 text-[11px] leading-snug rounded-lg p-2 overflow-x-auto max-h-44"
+               :class="draftFor(post) ? 'bg-slate-800 text-amber-50 ring-1 ring-amber-400' : 'bg-slate-900 text-slate-100'">{{ previewCode(post) }}</pre>
           <div class="px-4 mt-1 text-[11px] text-slate-400">
             <span v-if="post.attempts">{{ post.attempts }} attempt{{ post.attempts === 1 ? '' : 's' }}</span>
             <span v-if="post.runtimeMs"> · {{ post.runtimeMs }}ms · {{ post.memoryKb }}KB</span>
             <span v-if="post.score"> · {{ Math.round(post.score * 100) }}%</span>
           </div>
 
+          <div v-if="!post.postId" class="px-4 pb-3 pt-1 text-[11px] text-slate-400">watching live · not submitted yet</div>
+
           <!-- reactions -->
-          <div class="flex flex-wrap gap-1 px-4 mt-2">
+          <div v-if="post.postId" class="flex flex-wrap gap-1 px-4 mt-2">
             <button v-for="e in EMOJIS" :key="e" @click="toggleReaction(post, e)"
                     class="text-xs rounded-full px-2 py-0.5 border transition"
                     :class="reactionCount(post, e)?.mine
@@ -169,7 +207,7 @@ function openPost(post) {
           </div>
 
           <!-- comments -->
-          <div class="px-4 mt-2 pb-3">
+          <div v-if="post.postId" class="px-4 mt-2 pb-3">
             <button @click="openComments[post.postId] = !openComments[post.postId]"
                     class="text-xs text-slate-500 hover:text-slate-800">
               💬 {{ post.comments.length }} comment{{ post.comments.length === 1 ? '' : 's' }}

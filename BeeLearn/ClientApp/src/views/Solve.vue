@@ -1,12 +1,14 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
 import { api } from '../lib/api';
+import { useAuth } from '../stores/auth';
 import { createBoardConnection } from '../lib/signalr';
 import MonacoEditor from '../components/MonacoEditor.vue';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
 import VerdictBadge from '../components/VerdictBadge.vue';
 
 const props = defineProps({ id: [String, Number], problemId: [String, Number] });
+const auth = useAuth();
 
 const problem = ref(null);
 const code = ref('');
@@ -53,15 +55,37 @@ async function toggleHidden(s) {
   await loadSubs();
 }
 
+let draftTimer = null;
+const isStudent = () => auth.user?.role === 'Student';
+
+function pushDraftSoon() {
+  if (!conn || conn.state !== 'Connected' || !isStudent()) return;
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => {
+    conn.invoke('PushDraft', Number(props.id), Number(props.problemId), code.value).catch(() => {});
+  }, 900);
+}
+watch(code, pushDraftSoon);
+
 onMounted(async () => {
   try { await load(); } catch (e) { error.value = e.message; return; }
+  // Make sure a wall card exists for this student even before they run/submit.
+  if (isStudent()) api.post(`/api/problems/${props.problemId}/post`).catch(() => {});
+
   conn = createBoardConnection();
   conn.on('submissionResult', (dto) => {
     if (dto.problemId === Number(props.problemId)) loadSubs();
   });
-  try { await conn.start(); await conn.invoke('JoinBoard', Number(props.id)); } catch {}
+  try {
+    await conn.start();
+    await conn.invoke('JoinBoard', Number(props.id));
+    if (isStudent()) conn.invoke('PushDraft', Number(props.id), Number(props.problemId), code.value).catch(() => {});
+  } catch {}
 });
-onBeforeUnmount(async () => { try { await conn?.stop(); } catch {} });
+onBeforeUnmount(async () => {
+  clearTimeout(draftTimer);
+  try { await conn?.stop(); } catch {}
+});
 </script>
 
 <template>
