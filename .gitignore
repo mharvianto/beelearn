@@ -1,0 +1,9 @@
+bin/
+obj/
+*.user
+BeeLearn/wwwroot/
+BeeLearn/beelearn.db
+BeeLearn/beelearn.db-*
+BeeLearn/ClientApp/node_modules/
+BeeLearn/ClientApp/dist/
+/tmp/

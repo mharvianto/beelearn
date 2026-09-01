@@ -1,0 +1,159 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace BeeLearn.Models;
+
+public enum UserRole { Teacher, Student }
+
+public enum MembershipRole { Owner, Teacher, Student }
+
+public enum SubmissionStatus { Queued, Running, Done }
+
+public enum Verdict
+{
+    None,
+    Accepted,
+    WrongAnswer,
+    TimeLimit,
+    MemoryLimit,
+    RuntimeError,
+    CompileError
+}
+
+public class User
+{
+    public int Id { get; set; }
+
+    [MaxLength(256)]
+    public string Email { get; set; } = "";
+
+    public string PasswordHash { get; set; } = "";
+
+    [MaxLength(120)]
+    public string DisplayName { get; set; } = "";
+
+    public UserRole Role { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public List<BoardMembership> Memberships { get; set; } = new();
+}
+
+public class Board
+{
+    public int Id { get; set; }
+
+    [MaxLength(160)]
+    public string Title { get; set; } = "";
+
+    [MaxLength(12)]
+    public string JoinCode { get; set; } = "";
+
+    public int OwnerId { get; set; }
+    public User? Owner { get; set; }
+
+    /// <summary>Board-wide exam mode: students never see peers' answers/progress.</summary>
+    public bool ExamMode { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public List<BoardMembership> Members { get; set; } = new();
+    public List<Problem> Problems { get; set; } = new();
+}
+
+public class BoardMembership
+{
+    public int Id { get; set; }
+
+    public int BoardId { get; set; }
+    public Board? Board { get; set; }
+
+    public int UserId { get; set; }
+    public User? User { get; set; }
+
+    public MembershipRole Role { get; set; }
+
+    /// <summary>Feature 5 (per-student): teacher hides this student's cells from other students.</summary>
+    public bool HiddenByTeacher { get; set; }
+
+    public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class Problem
+{
+    public int Id { get; set; }
+
+    public int BoardId { get; set; }
+    public Board? Board { get; set; }
+
+    [MaxLength(200)]
+    public string Title { get; set; } = "";
+
+    public string StatementMarkdown { get; set; } = "";
+
+    /// <summary>"c" or "cpp".</summary>
+    [MaxLength(8)]
+    public string Language { get; set; } = "cpp";
+
+    public string StarterCode { get; set; } = "";
+
+    public int TimeLimitMs { get; set; } = 1000;
+
+    public int MemoryLimitKb { get; set; } = 32768;
+
+    public int Position { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public List<TestCase> TestCases { get; set; } = new();
+}
+
+public class TestCase
+{
+    public int Id { get; set; }
+
+    public int ProblemId { get; set; }
+    public Problem? Problem { get; set; }
+
+    public string Stdin { get; set; } = "";
+
+    public string ExpectedStdout { get; set; } = "";
+
+    public bool IsSample { get; set; }
+
+    public int Points { get; set; } = 1;
+
+    public int Position { get; set; }
+}
+
+public class Submission
+{
+    public int Id { get; set; }
+
+    public int ProblemId { get; set; }
+    public Problem? Problem { get; set; }
+
+    public int UserId { get; set; }
+    public User? User { get; set; }
+
+    public string Code { get; set; } = "";
+
+    public SubmissionStatus Status { get; set; } = SubmissionStatus.Queued;
+
+    public Verdict Verdict { get; set; } = Verdict.None;
+
+    public int RuntimeMs { get; set; }
+
+    public int MemoryKb { get; set; }
+
+    /// <summary>0..1 fraction of testcase points passed.</summary>
+    public double Score { get; set; }
+
+    /// <summary>Feature 4: student hides their own answer from other students.</summary>
+    public bool HiddenByStudent { get; set; }
+
+    public string CompilerOutput { get; set; } = "";
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public DateTime? JudgedAt { get; set; }
+}
