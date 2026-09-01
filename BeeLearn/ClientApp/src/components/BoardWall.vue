@@ -17,7 +17,7 @@ function cardsFor(problemId) {
   return props.cells
     .filter((c) => c.problemId === problemId)
     .slice()
-    .sort((a, b) => new Date(b.lastAt) - new Date(a.lastAt));
+    .sort((a, b) => (Date.parse(b.lastAt) || 0) - (Date.parse(a.lastAt) || 0));
 }
 function solvedFor(problemId) {
   return props.cells.filter((c) => c.problemId === problemId && c.latest).length;
@@ -33,7 +33,10 @@ const accent = {
 };
 
 function ago(iso) {
-  const s = Math.max(1, Math.floor((Date.now() - new Date(iso + (iso.endsWith('Z') ? '' : 'Z'))) / 1000));
+  if (!iso) return '';
+  const t = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + 'Z');
+  if (!t) return '';
+  const s = Math.max(1, Math.floor((Date.now() - t) / 1000));
   if (s < 60) return s + 's ago';
   if (s < 3600) return Math.floor(s / 60) + 'm ago';
   if (s < 86400) return Math.floor(s / 3600) + 'h ago';
