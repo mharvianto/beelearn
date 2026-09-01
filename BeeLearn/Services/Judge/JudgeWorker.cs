@@ -158,6 +158,7 @@ public class JudgeWorker : BackgroundService
         finally { CleanUp(dir); }
 
         await _notifier.ProgressChangedAsync(boardId, problem.Id, sub.UserId);
+        await _notifier.WallChangedAsync(boardId);
         await _notifier.SubmissionResultAsync(sub.UserId,
             Mapping.ToDto(sub, sub.UserId, canSeeCode: true, authorName));
     }

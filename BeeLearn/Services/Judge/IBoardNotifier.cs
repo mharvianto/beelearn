@@ -22,4 +22,7 @@ public interface IBoardNotifier
 
     /// <summary>Teacher toggled per-student visibility.</summary>
     Task MemberVisibilityChangedAsync(int boardId, int studentUserId, bool hiddenByTeacher);
+
+    /// <summary>A wall post changed: note edited, reaction toggled, comment added.</summary>
+    Task WallChangedAsync(int boardId);
 }

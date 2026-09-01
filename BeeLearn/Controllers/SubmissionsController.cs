@@ -50,6 +50,13 @@ public class SubmissionsController : ApiControllerBase
             Status = SubmissionStatus.Queued,
         };
         _db.Submissions.Add(sub);
+
+        // Upsert the wall post for (problem, student) so it exists as soon as they try.
+        var post = await _db.Posts.FirstOrDefaultAsync(p => p.ProblemId == problemId && p.UserId == UserId);
+        if (post is null)
+            _db.Posts.Add(new Post { BoardId = problem.BoardId, ProblemId = problemId, UserId = UserId });
+        else
+            post.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
         await _queue.EnqueueAsync(new SubmissionJob(sub.Id));

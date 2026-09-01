@@ -28,4 +28,7 @@ public class BoardNotifier : IBoardNotifier
     public Task MemberVisibilityChangedAsync(int boardId, int studentUserId, bool hiddenByTeacher) =>
         _hub.Clients.Group(BoardHub.BoardGroup(boardId))
             .SendAsync("memberVisibilityChanged", new { boardId, studentUserId, hiddenByTeacher });
+
+    public Task WallChangedAsync(int boardId) =>
+        _hub.Clients.Group(BoardHub.BoardGroup(boardId)).SendAsync("wallChanged", new { boardId });
 }

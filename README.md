@@ -18,8 +18,14 @@ everyone's progress — with layered controls over who can see whose answers.
 ## Features
 
 1. **Teacher posts problems** — CRUD problems + test cases per board (`ProblemsController`).
-2. **Live progress board** — `BoardHub` broadcasts `progressChanged`; clients refetch the
-   visibility-filtered `/api/boards/{id}/progress` grid.
+2. **Live board** — two views, toggle persisted per browser:
+   - **Wall** (Padlet-style): one tab per problem, a card per student's post — avatar,
+     verdict sticker, code preview, a note the author can write, emoji reactions, and a
+     comment thread. `PadletWall.vue` + `WallController` / `WallService`; realtime via
+     `wallChanged`.
+   - **Grid**: compact students × problems table (`ProgressGrid.vue`).
+   Both refetch the visibility-filtered `/api/boards/{id}/wall` or `/progress` on SignalR
+   events; hidden posts show as a locked card / neutral dot.
 3. **Run code** — `POST /api/run`, default limits **1 s CPU / 32 MB** (per-problem limits on
    submit). Enforced with `RLIMIT_CPU`, `RLIMIT_AS`, `RLIMIT_STACK`, `RLIMIT_NPROC`,
    `RLIMIT_FSIZE` + a wall-clock backstop. Verdicts: AC / WA / TLE / MLE / RE / CE.

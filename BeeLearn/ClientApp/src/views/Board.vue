@@ -5,7 +5,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../stores/auth';
 import { createBoardConnection } from '../lib/signalr';
 import ProgressGrid from '../components/ProgressGrid.vue';
-import BoardWall from '../components/BoardWall.vue';
+import PadletWall from '../components/PadletWall.vue';
 import ProblemEditor from '../components/ProblemEditor.vue';
 import VerdictBadge from '../components/VerdictBadge.vue';
 
@@ -36,9 +36,11 @@ async function loadAll() {
 async function loadProgress() {
   progress.value = await api.get(`/api/boards/${props.id}/progress`);
 }
+const wallSignal = ref(0);
 function scheduleRefresh() {
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(loadProgress, 250);
+  wallSignal.value++;
 }
 
 async function toggleExam() {
@@ -57,6 +59,7 @@ onMounted(async () => {
 
   conn = createBoardConnection();
   conn.on('progressChanged', scheduleRefresh);
+  conn.on('wallChanged', () => { wallSignal.value++; });
   conn.on('memberVisibilityChanged', scheduleRefresh);
   conn.on('examModeChanged', async () => { await loadAll(); });
   conn.on('problemChanged', async () => { problems.value = await api.get(`/api/boards/${props.id}/problems`); scheduleRefresh(); });
@@ -146,13 +149,10 @@ onBeforeUnmount(async () => {
       </div>
     </div>
 
-    <BoardWall v-if="view === 'wall'"
-      :students="progress.students"
-      :problems="progress.problems"
-      :cells="progress.cells"
-      :is-staff="progress.viewerIsStaff"
+    <PadletWall v-if="view === 'wall'"
+      :board-id="board.id"
       :current-user-id="auth.user?.id"
-      @open="openCard" />
+      :refresh-signal="wallSignal" />
 
     <ProgressGrid v-else
       :students="progress.students"

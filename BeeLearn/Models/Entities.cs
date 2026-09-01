@@ -157,3 +157,58 @@ public class Submission
 
     public DateTime? JudgedAt { get; set; }
 }
+
+/// <summary>
+/// A student's living "post" on the board wall for one problem. Persists across
+/// resubmissions (always shows the latest submission) and carries the social bits.
+/// </summary>
+public class Post
+{
+    public int Id { get; set; }
+
+    public int BoardId { get; set; }
+    public Board? Board { get; set; }
+
+    public int ProblemId { get; set; }
+    public Problem? Problem { get; set; }
+
+    public int UserId { get; set; }
+    public User? User { get; set; }
+
+    /// <summary>Free-text caption the author can add ("stuck on test 3").</summary>
+    public string Note { get; set; } = "";
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    public List<PostReaction> Reactions { get; set; } = new();
+    public List<PostComment> Comments { get; set; } = new();
+}
+
+public class PostReaction
+{
+    public int Id { get; set; }
+    public int PostId { get; set; }
+    public Post? Post { get; set; }
+    public int UserId { get; set; }
+    public User? User { get; set; }
+
+    [MaxLength(16)]
+    public string Emoji { get; set; } = "";
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class PostComment
+{
+    public int Id { get; set; }
+    public int PostId { get; set; }
+    public Post? Post { get; set; }
+    public int UserId { get; set; }
+    public User? User { get; set; }
+
+    [MaxLength(2000)]
+    public string Body { get; set; } = "";
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}

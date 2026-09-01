@@ -13,6 +13,9 @@ public class AppDbContext : DbContext
     public DbSet<Problem> Problems => Set<Problem>();
     public DbSet<TestCase> TestCases => Set<TestCase>();
     public DbSet<Submission> Submissions => Set<Submission>();
+    public DbSet<Post> Posts => Set<Post>();
+    public DbSet<PostReaction> PostReactions => Set<PostReaction>();
+    public DbSet<PostComment> PostComments => Set<PostComment>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -46,5 +49,33 @@ public class AppDbContext : DbContext
             .HasOne(x => x.User).WithMany()
             .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<Submission>().HasIndex(x => new { x.ProblemId, x.UserId });
+
+        b.Entity<Post>().HasIndex(x => new { x.ProblemId, x.UserId }).IsUnique();
+        b.Entity<Post>().HasIndex(x => x.BoardId);
+        b.Entity<Post>()
+            .HasOne(x => x.Board).WithMany()
+            .HasForeignKey(x => x.BoardId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<Post>()
+            .HasOne(x => x.Problem).WithMany()
+            .HasForeignKey(x => x.ProblemId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<Post>()
+            .HasOne(x => x.User).WithMany()
+            .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+        b.Entity<PostReaction>().HasIndex(x => new { x.PostId, x.UserId, x.Emoji }).IsUnique();
+        b.Entity<PostReaction>()
+            .HasOne(x => x.Post).WithMany(p => p.Reactions)
+            .HasForeignKey(x => x.PostId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<PostReaction>()
+            .HasOne(x => x.User).WithMany()
+            .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+        b.Entity<PostComment>().HasIndex(x => x.PostId);
+        b.Entity<PostComment>()
+            .HasOne(x => x.Post).WithMany(p => p.Comments)
+            .HasForeignKey(x => x.PostId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<PostComment>()
+            .HasOne(x => x.User).WithMany()
+            .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
     }
 }

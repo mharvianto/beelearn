@@ -41,6 +41,7 @@ builder.Services.AddHostedService<JudgeWorker>();
 
 builder.Services.AddScoped<VisibilityService>();
 builder.Services.AddScoped<BoardService>();
+builder.Services.AddScoped<WallService>();
 
 const string DevCors = "dev-spa";
 builder.Services.AddCors(o => o.AddPolicy(DevCors, p => p
@@ -54,6 +55,19 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
     await DbSeeder.SeedAsync(db, scope.ServiceProvider.GetRequiredService<PasswordService>());
+
+    // Backfill wall posts for submissions made before the wall existed.
+    var missing = await db.Submissions
+        .Select(s => new { s.UserId, s.ProblemId })
+        .Distinct()
+        .Where(k => !db.Posts.Any(p => p.ProblemId == k.ProblemId && p.UserId == k.UserId))
+        .ToListAsync();
+    foreach (var k in missing)
+    {
+        var boardId = await db.Problems.Where(p => p.Id == k.ProblemId).Select(p => p.BoardId).FirstAsync();
+        db.Posts.Add(new BeeLearn.Models.Post { BoardId = boardId, ProblemId = k.ProblemId, UserId = k.UserId });
+    }
+    if (missing.Count > 0) await db.SaveChangesAsync();
 }
 
 // Build the sandbox runner + probe capabilities before serving traffic.

@@ -68,6 +68,40 @@ public record ProgressBoardDto(
 
 public record ProblemSummaryDto(int Id, string Title, int Position, int TimeLimitMs, int MemoryLimitKb, string Language);
 
+// ---- Padlet-style wall ----
+public record ReactionDto(string Emoji, int Count, bool Mine);
+public record CommentDto(int Id, int UserId, string AuthorName, string Body, DateTime CreatedAt, bool CanDelete);
+
+public record WallPostDto(
+    int PostId,
+    int ProblemId,
+    int UserId,
+    string AuthorName,
+    string Note,
+    bool Mine,
+    bool Redacted,            // peer post hidden -> show only that it exists
+    string Verdict,           // "None" if not yet judged / no submission
+    double Score,
+    int Attempts,
+    int RuntimeMs,
+    int MemoryKb,
+    string Language,
+    string? CodePreview,      // first lines of latest submission, null when not visible
+    DateTime UpdatedAt,
+    List<ReactionDto> Reactions,
+    List<CommentDto> Comments);
+
+public record WallDto(
+    int BoardId,
+    bool ExamMode,
+    bool ViewerIsStaff,
+    List<ProblemSummaryDto> Problems,
+    List<WallPostDto> Posts);
+
+public record NoteDto(string Note);
+public record ReactDto(string Emoji);
+public record CommentBodyDto(string Body);
+
 // ---- Ad-hoc run ----
 public record RunDto(string Language, string Code, string Stdin);
 public record RunResultDto(
