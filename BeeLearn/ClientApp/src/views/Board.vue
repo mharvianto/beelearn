@@ -1,14 +1,21 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import { api } from '../lib/api';
 import { useAuth } from '../stores/auth';
 import { createBoardConnection } from '../lib/signalr';
 import ProgressGrid from '../components/ProgressGrid.vue';
+import BoardWall from '../components/BoardWall.vue';
 import ProblemEditor from '../components/ProblemEditor.vue';
 import VerdictBadge from '../components/VerdictBadge.vue';
 
 const props = defineProps({ id: [String, Number] });
 const auth = useAuth();
+const router = useRouter();
+
+const view = ref(localStorage.getItem('beelearn.boardView') || 'wall');
+function setView(v) { view.value = v; localStorage.setItem('beelearn.boardView', v); }
+function openCard({ problemId }) { router.push(`/boards/${props.id}/problems/${problemId}`); }
 
 const board = ref(null);
 const problems = ref([]);
@@ -92,6 +99,18 @@ onBeforeUnmount(async () => {
       </button>
     </div>
 
+    <!-- Staff: per-student visibility (feature 5, per student) -->
+    <div v-if="isStaff && progress.students.length" class="flex flex-wrap gap-1.5 mb-4">
+      <span class="text-xs text-slate-400 self-center mr-1">Hide from peers:</span>
+      <button v-for="s in progress.students" :key="s.userId" @click="toggleHide(s)"
+              class="text-xs px-2 py-0.5 rounded-full border"
+              :class="s.hiddenByTeacher
+                ? 'bg-purple-100 text-purple-700 border-purple-200'
+                : 'text-slate-500 border-slate-200 hover:border-slate-400'">
+        {{ s.displayName }} {{ s.hiddenByTeacher ? '🔒' : '' }}
+      </button>
+    </div>
+
     <!-- Student: exam-mode notice -->
     <div v-else-if="progress.examMode" class="my-4 text-sm bg-purple-50 text-purple-700 rounded-lg px-3 py-2">
       🔒 Exam mode is on — you can’t see other students’ progress.
@@ -117,8 +136,25 @@ onBeforeUnmount(async () => {
     </div>
 
     <!-- Live board -->
-    <h2 class="font-semibold text-slate-600 text-sm mt-8 mb-2">Live progress</h2>
-    <ProgressGrid
+    <div class="flex items-center justify-between mt-8 mb-2">
+      <h2 class="font-semibold text-slate-600 text-sm">Live progress</h2>
+      <div class="flex rounded-lg border border-slate-300 overflow-hidden text-xs">
+        <button @click="setView('wall')" class="px-3 py-1"
+                :class="view === 'wall' ? 'bg-amber-500 text-white' : 'bg-white text-slate-500'">Wall</button>
+        <button @click="setView('grid')" class="px-3 py-1 border-l border-slate-300"
+                :class="view === 'grid' ? 'bg-amber-500 text-white' : 'bg-white text-slate-500'">Grid</button>
+      </div>
+    </div>
+
+    <BoardWall v-if="view === 'wall'"
+      :students="progress.students"
+      :problems="progress.problems"
+      :cells="progress.cells"
+      :is-staff="progress.viewerIsStaff"
+      :current-user-id="auth.user?.id"
+      @open="openCard" />
+
+    <ProgressGrid v-else
       :students="progress.students"
       :problems="progress.problems"
       :cells="progress.cells"

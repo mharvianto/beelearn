@@ -92,12 +92,14 @@ public class BoardService
                         agg.BestScore,
                         agg.Attempts,
                         Redacted: false,
-                        Latest: agg.Latest.Verdict == Verdict.Accepted));
+                        Latest: agg.Latest.Verdict == Verdict.Accepted,
+                        LastAt: agg.Latest.CreatedAt));
                 }
                 else
                 {
                     cells.Add(new ProgressCellDto(
-                        m.UserId, p.Id, "Hidden", 0, agg.Attempts, Redacted: true, Latest: false));
+                        m.UserId, p.Id, "Hidden", 0, agg.Attempts,
+                        Redacted: true, Latest: false, LastAt: agg.Latest.CreatedAt));
                 }
             }
         }

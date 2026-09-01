@@ -55,7 +55,8 @@ public record ProgressCellDto(
     double Score,
     int Attempts,
     bool Redacted,         // true => viewer may only see that an attempt exists
-    bool Latest);          // latest submission is Accepted
+    bool Latest,           // latest submission is Accepted
+    DateTime LastAt);      // time of the latest submission
 
 public record ProgressBoardDto(
     int BoardId,
