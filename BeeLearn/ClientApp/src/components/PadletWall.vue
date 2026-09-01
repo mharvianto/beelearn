@@ -62,7 +62,15 @@ function previewCode(post) {
   return d ? truncate(d.code) : post.codePreview;
 }
 
-const pastels = ['bg-rose-50', 'bg-amber-50', 'bg-lime-50', 'bg-sky-50', 'bg-violet-50', 'bg-teal-50', 'bg-orange-50'];
+const pastels = [
+  'bg-rose-50 dark:bg-rose-500/10',
+  'bg-amber-50 dark:bg-amber-500/10',
+  'bg-lime-50 dark:bg-lime-500/10',
+  'bg-sky-50 dark:bg-sky-500/10',
+  'bg-violet-50 dark:bg-violet-500/10',
+  'bg-teal-50 dark:bg-teal-500/10',
+  'bg-orange-50 dark:bg-orange-500/10',
+];
 const avatarColors = ['bg-rose-400', 'bg-amber-400', 'bg-lime-500', 'bg-sky-400', 'bg-violet-400', 'bg-teal-400', 'bg-orange-400'];
 function hash(n) { return ((n * 2654435761) >>> 0) % pastels.length; }
 function initials(name) {
@@ -120,7 +128,7 @@ function openPost(post) {
 
 <template>
   <div>
-    <p v-if="error" class="text-sm text-red-600 mb-2">{{ error }}</p>
+    <p v-if="error" class="text-sm text-red-600 dark:text-red-400 mb-2">{{ error }}</p>
 
     <!-- problem tabs -->
     <div class="flex gap-1 flex-wrap mb-4">
@@ -128,13 +136,13 @@ function openPost(post) {
               class="px-3 py-1.5 rounded-full text-sm border transition"
               :class="activeProblem === p.id
                 ? 'bg-amber-500 text-white border-amber-500'
-                : 'bg-white text-slate-600 border-slate-200 hover:border-amber-300'">
+                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-amber-300'">
         {{ p.title }}
       </button>
     </div>
 
     <div v-if="wall.examMode && !wall.viewerIsStaff"
-         class="text-sm bg-purple-50 text-purple-700 rounded-lg px-3 py-2 mb-3">
+         class="text-sm bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-300 rounded-lg px-3 py-2 mb-3">
       🔒 Exam mode — only your own posts are shown.
     </div>
 
@@ -142,9 +150,9 @@ function openPost(post) {
     <div class="[column-fill:_balance] columns-1 sm:columns-2 xl:columns-3 gap-4">
       <article v-for="post in visiblePosts" :key="post.postId ?? ('d' + post.userId)"
                class="mb-4 break-inside-avoid rounded-2xl border shadow-sm relative"
-               :class="post.redacted ? 'bg-white border-dashed border-slate-200'
-                 : draftFor(post) ? 'bg-amber-50 border-amber-300'
-                 : pastels[hash(post.userId)] + ' border-slate-200'">
+               :class="post.redacted ? 'bg-white dark:bg-slate-900 border-dashed border-slate-200 dark:border-slate-700'
+                 : draftFor(post) ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-300 dark:border-amber-500/40'
+                 : pastels[hash(post.userId)] + ' border-slate-200 dark:border-slate-800'">
         <!-- header -->
         <div class="flex items-center gap-2 px-4 pt-3">
           <span class="w-7 h-7 rounded-full text-white text-xs font-bold grid place-items-center shrink-0"
@@ -152,18 +160,18 @@ function openPost(post) {
           <div class="min-w-0">
             <div class="text-sm font-semibold truncate">
               {{ post.redacted ? 'Hidden' : post.authorName }}
-              <span v-if="post.mine" class="text-xs text-slate-400 font-normal">· you</span>
+              <span v-if="post.mine" class="text-xs text-slate-400 dark:text-slate-500 font-normal">· you</span>
             </div>
-            <div class="text-[11px] text-slate-400">
-              <span v-if="draftFor(post)" class="text-amber-600 font-medium">✎ editing · {{ ago(draftFor(post).updatedAt) }} ago</span>
+            <div class="text-[11px] text-slate-400 dark:text-slate-500">
+              <span v-if="draftFor(post)" class="text-amber-600 dark:text-amber-400 font-medium">✎ editing · {{ ago(draftFor(post).updatedAt) }} ago</span>
               <span v-else>{{ ago(post.updatedAt) }} ago</span>
             </div>
           </div>
           <VerdictBadge v-if="!post.redacted && post.verdict !== 'None'" :verdict="post.verdict" small class="ml-auto" />
-          <span v-else-if="draftFor(post)" class="ml-auto text-[10px] bg-amber-200 text-amber-800 rounded px-1.5 py-0.5 font-semibold">LIVE</span>
+          <span v-else-if="draftFor(post)" class="ml-auto text-[10px] bg-amber-200 text-amber-800 dark:bg-amber-500/25 dark:text-amber-200 rounded px-1.5 py-0.5 font-semibold">LIVE</span>
         </div>
 
-        <div v-if="post.redacted" class="px-4 py-4 text-sm text-slate-400">
+        <div v-if="post.redacted" class="px-4 py-4 text-sm text-slate-400 dark:text-slate-500">
           🔒 This student’s answer is hidden from peers.
         </div>
 
@@ -173,12 +181,12 @@ function openPost(post) {
             <div v-if="noteDraft[post.postId] !== undefined" class="flex gap-1">
               <input v-model="noteDraft[post.postId]" @keyup.enter="saveNote(post)"
                      placeholder="Add a note…" maxlength="500"
-                     class="flex-1 text-sm border border-slate-300 rounded-lg px-2 py-1 bg-white" />
-              <button @click="saveNote(post)" class="text-xs text-amber-600 px-1">save</button>
+                     class="flex-1 text-sm border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 bg-white dark:bg-slate-800" />
+              <button @click="saveNote(post)" class="text-xs text-amber-600 dark:text-amber-400 px-1">save</button>
             </div>
             <p v-else-if="post.note" @click="post.mine && startNote(post)"
-               class="text-sm text-slate-700" :class="{ 'cursor-text': post.mine }">{{ post.note }}</p>
-            <button v-else-if="post.mine" @click="startNote(post)" class="text-xs text-slate-400 hover:text-slate-600">
+               class="text-sm text-slate-700 dark:text-slate-200" :class="{ 'cursor-text': post.mine }">{{ post.note }}</p>
+            <button v-else-if="post.mine" @click="startNote(post)" class="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">
               + add a note
             </button>
           </div>
@@ -187,55 +195,55 @@ function openPost(post) {
           <pre v-if="previewCode(post)"
                class="mx-4 mt-2 text-[11px] leading-snug rounded-lg p-2 overflow-x-auto max-h-44"
                :class="draftFor(post) ? 'bg-slate-800 text-amber-50 ring-1 ring-amber-400' : 'bg-slate-900 text-slate-100'">{{ previewCode(post) }}</pre>
-          <div class="px-4 mt-1 text-[11px] text-slate-400">
+          <div class="px-4 mt-1 text-[11px] text-slate-400 dark:text-slate-500">
             <span v-if="post.attempts">{{ post.attempts }} attempt{{ post.attempts === 1 ? '' : 's' }}</span>
             <span v-if="post.runtimeMs"> · {{ post.runtimeMs }}ms · {{ post.memoryKb }}KB</span>
             <span v-if="post.score"> · {{ Math.round(post.score * 100) }}%</span>
           </div>
 
-          <div v-if="!post.postId" class="px-4 pb-3 pt-1 text-[11px] text-slate-400">watching live · not submitted yet</div>
+          <div v-if="!post.postId" class="px-4 pb-3 pt-1 text-[11px] text-slate-400 dark:text-slate-500">watching live · not submitted yet</div>
 
           <!-- reactions -->
           <div v-if="post.postId" class="flex flex-wrap gap-1 px-4 mt-2">
             <button v-for="e in EMOJIS" :key="e" @click="toggleReaction(post, e)"
                     class="text-xs rounded-full px-2 py-0.5 border transition"
                     :class="reactionCount(post, e)?.mine
-                      ? 'bg-amber-100 border-amber-300'
-                      : 'bg-white/70 border-slate-200 hover:border-slate-300'">
-              {{ e }}<span v-if="reactionCount(post, e)" class="ml-1 text-slate-500">{{ reactionCount(post, e).count }}</span>
+                      ? 'bg-amber-100 border-amber-300 dark:bg-amber-500/20 dark:border-amber-500/40'
+                      : 'bg-white/70 dark:bg-slate-800/70 border-slate-200 dark:border-slate-700 hover:border-slate-300'">
+              {{ e }}<span v-if="reactionCount(post, e)" class="ml-1 text-slate-500 dark:text-slate-400">{{ reactionCount(post, e).count }}</span>
             </button>
           </div>
 
           <!-- comments -->
           <div v-if="post.postId" class="px-4 mt-2 pb-3">
             <button @click="openComments[post.postId] = !openComments[post.postId]"
-                    class="text-xs text-slate-500 hover:text-slate-800">
+                    class="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200">
               💬 {{ post.comments.length }} comment{{ post.comments.length === 1 ? '' : 's' }}
             </button>
             <div v-if="openComments[post.postId]" class="mt-2 space-y-1.5">
-              <div v-for="c in post.comments" :key="c.id" class="text-xs bg-white/70 rounded-lg px-2 py-1">
+              <div v-for="c in post.comments" :key="c.id" class="text-xs bg-white/70 dark:bg-slate-800/70 rounded-lg px-2 py-1">
                 <span class="font-semibold">{{ c.authorName }}</span>
-                <span class="text-slate-400"> · {{ ago(c.createdAt) }} ago</span>
+                <span class="text-slate-400 dark:text-slate-500"> · {{ ago(c.createdAt) }} ago</span>
                 <button v-if="c.canDelete" @click="delComment(post, c)"
-                        class="text-slate-300 hover:text-red-500 float-right">×</button>
-                <div class="text-slate-700 whitespace-pre-wrap">{{ c.body }}</div>
+                        class="text-slate-300 dark:text-slate-600 hover:text-red-500 float-right">×</button>
+                <div class="text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{{ c.body }}</div>
               </div>
               <div class="flex gap-1">
                 <input v-model="commentDraft[post.postId]" @keyup.enter="addComment(post)"
                        placeholder="Write a comment…"
-                       class="flex-1 text-xs border border-slate-300 rounded-lg px-2 py-1 bg-white" />
-                <button @click="addComment(post)" class="text-xs text-amber-600 px-1">send</button>
+                       class="flex-1 text-xs border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-1 bg-white dark:bg-slate-800" />
+                <button @click="addComment(post)" class="text-xs text-amber-600 dark:text-amber-400 px-1">send</button>
               </div>
             </div>
           </div>
         </template>
 
         <button @click="openPost(post)"
-                class="absolute bottom-2 right-3 text-[11px] text-slate-400 hover:text-slate-700">open ↗</button>
+                class="absolute bottom-2 right-3 text-[11px] text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">open ↗</button>
       </article>
     </div>
 
-    <p v-if="!visiblePosts.length" class="text-slate-400 text-sm">
+    <p v-if="!visiblePosts.length" class="text-slate-400 dark:text-slate-500 text-sm">
       No posts yet — a card appears here when a student runs their first submission.
     </p>
   </div>

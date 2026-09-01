@@ -1,6 +1,13 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import * as monaco from 'monaco-editor';
+import { theme as appTheme } from '../lib/theme';
+
+function editorTheme() {
+  const dark = appTheme.value === 'dark'
+    || (appTheme.value === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  return dark ? 'vs-dark' : 'vs';
+}
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -15,7 +22,7 @@ onMounted(() => {
   editor = monaco.editor.create(el.value, {
     value: props.modelValue,
     language: props.language,
-    theme: 'vs-dark',
+    theme: editorTheme(),
     fontSize: 13,
     minimap: { enabled: false },
     scrollBeyondLastLine: false,
@@ -31,6 +38,7 @@ watch(() => props.modelValue, (v) => {
 watch(() => props.language, (l) => {
   if (editor) monaco.editor.setModelLanguage(editor.getModel(), l);
 });
+watch(appTheme, () => monaco.editor.setTheme(editorTheme()));
 
 onBeforeUnmount(() => editor?.dispose());
 </script>

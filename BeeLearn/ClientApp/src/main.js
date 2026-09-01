@@ -3,6 +3,7 @@ import { createPinia } from 'pinia';
 import { router } from './router';
 import App from './App.vue';
 import './style.css';
+import './lib/theme';
 
 // Monaco: use its bundled workers via Vite ?worker imports (no CDN).
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';

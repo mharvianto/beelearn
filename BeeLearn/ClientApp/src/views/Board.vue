@@ -90,12 +90,12 @@ onBeforeUnmount(async () => {
   <div class="max-w-6xl mx-auto px-4 py-6" v-if="board">
     <div class="flex items-center justify-between mb-1">
       <h1 class="text-xl font-bold">{{ board.title }}</h1>
-      <div class="text-sm text-slate-500 flex items-center gap-3">
+      <div class="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-3">
         <span v-if="presence.length">🟢 {{ presence.length }} online</span>
-        <span v-if="isStaff">Join code: <span class="font-mono font-semibold text-slate-700">{{ board.joinCode }}</span></span>
+        <span v-if="isStaff">Join code: <span class="font-mono font-semibold text-slate-700 dark:text-slate-200">{{ board.joinCode }}</span></span>
       </div>
     </div>
-    <p v-if="error" class="text-red-600 text-sm">{{ error }}</p>
+    <p v-if="error" class="text-red-600 dark:text-red-400 text-sm">{{ error }}</p>
 
     <!-- Staff controls -->
     <div v-if="isStaff" class="flex items-center gap-3 my-4">
@@ -103,7 +103,7 @@ onBeforeUnmount(async () => {
               class="px-3 py-1.5 rounded-lg text-sm font-medium border"
               :class="progress.examMode
                 ? 'bg-purple-600 text-white border-purple-600'
-                : 'bg-white text-slate-600 border-slate-300'">
+                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700'">
         {{ progress.examMode ? '🔒 Exam mode ON — peers hidden' : 'Exam mode off' }}
       </button>
       <button @click="editing = {}" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500 text-white">
@@ -113,48 +113,48 @@ onBeforeUnmount(async () => {
 
     <!-- Staff: per-student visibility (feature 5, per student) -->
     <div v-if="isStaff && progress.students.length" class="flex flex-wrap gap-1.5 mb-4">
-      <span class="text-xs text-slate-400 self-center mr-1">Hide from peers:</span>
+      <span class="text-xs text-slate-400 dark:text-slate-500 self-center mr-1">Hide from peers:</span>
       <button v-for="s in progress.students" :key="s.userId" @click="toggleHide(s)"
               class="text-xs px-2 py-0.5 rounded-full border"
               :class="s.hiddenByTeacher
-                ? 'bg-purple-100 text-purple-700 border-purple-200'
-                : 'text-slate-500 border-slate-200 hover:border-slate-400'">
+                ? 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-500/15 dark:text-purple-300 dark:border-purple-500/30'
+                : 'text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-400'">
         {{ s.displayName }} {{ s.hiddenByTeacher ? '🔒' : '' }}
       </button>
     </div>
 
     <!-- Student: exam-mode notice -->
-    <div v-else-if="progress.examMode" class="my-4 text-sm bg-purple-50 text-purple-700 rounded-lg px-3 py-2">
+    <div v-else-if="progress.examMode" class="my-4 text-sm bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-300 rounded-lg px-3 py-2">
       🔒 Exam mode is on — you can’t see other students’ progress.
     </div>
 
     <!-- Problem list -->
     <div class="grid gap-2 my-4">
       <div v-for="p in problems" :key="p.id"
-           class="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center justify-between">
+           class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 flex items-center justify-between">
         <div>
           <div class="font-medium">{{ p.title }}</div>
-          <div class="text-xs text-slate-400">{{ p.language.toUpperCase() }} · {{ p.timeLimitMs }}ms · {{ p.memoryLimitKb }}KB</div>
+          <div class="text-xs text-slate-400 dark:text-slate-500">{{ p.language.toUpperCase() }} · {{ p.timeLimitMs }}ms · {{ p.memoryLimitKb }}KB</div>
         </div>
         <div class="flex items-center gap-2">
-          <button v-if="isStaff" @click="editing = p" class="text-sm text-slate-500 hover:text-slate-900">edit</button>
+          <button v-if="isStaff" @click="editing = p" class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">edit</button>
           <RouterLink :to="`/boards/${board.id}/problems/${p.id}`"
-                      class="text-sm bg-slate-800 text-white rounded-lg px-3 py-1.5">
+                      class="text-sm bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-3 py-1.5">
             {{ isStaff ? 'View' : 'Solve' }}
           </RouterLink>
         </div>
       </div>
-      <p v-if="!problems.length" class="text-slate-400 text-sm">No problems yet.</p>
+      <p v-if="!problems.length" class="text-slate-400 dark:text-slate-500 text-sm">No problems yet.</p>
     </div>
 
     <!-- Live board -->
     <div class="flex items-center justify-between mt-8 mb-2">
-      <h2 class="font-semibold text-slate-600 text-sm">Live progress</h2>
-      <div class="flex rounded-lg border border-slate-300 overflow-hidden text-xs">
+      <h2 class="font-semibold text-slate-600 dark:text-slate-300 text-sm">Live progress</h2>
+      <div class="flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden text-xs">
         <button @click="setView('wall')" class="px-3 py-1"
-                :class="view === 'wall' ? 'bg-amber-500 text-white' : 'bg-white text-slate-500'">Wall</button>
-        <button @click="setView('grid')" class="px-3 py-1 border-l border-slate-300"
-                :class="view === 'grid' ? 'bg-amber-500 text-white' : 'bg-white text-slate-500'">Grid</button>
+                :class="view === 'wall' ? 'bg-amber-500 text-white' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400'">Wall</button>
+        <button @click="setView('grid')" class="px-3 py-1 border-l border-slate-300 dark:border-slate-700"
+                :class="view === 'grid' ? 'bg-amber-500 text-white' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400'">Grid</button>
       </div>
     </div>
 
