@@ -238,8 +238,10 @@ function openPost(post) {
           </div>
         </template>
 
-        <button @click="openPost(post)"
-                class="absolute bottom-2 right-3 text-[11px] text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">open ↗</button>
+        <div class="px-4 py-1.5 text-right border-t border-slate-100 dark:border-slate-800">
+          <button @click="openPost(post)"
+                  class="text-[11px] text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">open ↗</button>
+        </div>
       </article>
     </div>
 
