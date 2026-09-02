@@ -4,6 +4,8 @@ namespace BeeLearn.Models;
 
 public enum UserRole { Teacher, Student }
 
+public enum ProblemLevel { Easy = 1, Medium = 2, Hard = 3 }
+
 public enum MembershipRole { Owner, Teacher, Student }
 
 public enum SubmissionStatus { Queued, Running, Done }
@@ -103,6 +105,12 @@ public class Problem
     [MaxLength(8)]
     public string Language { get; set; } = "cpp";
 
+    /// <summary>Primary topic, e.g. "Array", "Graph", "DP".</summary>
+    [MaxLength(60)]
+    public string Category { get; set; } = "";
+
+    public ProblemLevel Level { get; set; } = ProblemLevel.Medium;
+
     public string StarterCode { get; set; } = "";
 
     public int TimeLimitMs { get; set; } = 1000;
@@ -143,6 +151,12 @@ public class BankProblem
     public int TimeLimitMs { get; set; } = 1000;
 
     public int MemoryLimitKb { get; set; } = 32_768;
+
+    /// <summary>Primary topic, e.g. "Array", "Graph", "DP".</summary>
+    [MaxLength(60)]
+    public string Category { get; set; } = "";
+
+    public ProblemLevel Level { get; set; } = ProblemLevel.Medium;
 
     /// <summary>Comma-separated, lowercase.</summary>
     [MaxLength(300)]

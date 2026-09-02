@@ -25,34 +25,38 @@ public record UpsertProblemDto(
     int TimeLimitMs,
     int MemoryLimitKb,
     int Position,
+    string? Category,
+    string? Level,
     List<UpsertTestCaseDto>? TestCases);   // null => leave test cases untouched
 
 /// <summary>Full problem view for the board owner/teacher.</summary>
 public record ProblemDto(
     int Id, int BoardId, string Title, string StatementMarkdown, string Language,
     string StarterCode, int TimeLimitMs, int MemoryLimitKb, int Position,
+    string Category, string Level,
     List<TestCaseDto> TestCases);
 
 /// <summary>Problem view for a student: only sample tests exposed.</summary>
 public record StudentProblemDto(
     int Id, int BoardId, string Title, string StatementMarkdown, string Language,
     string StarterCode, int TimeLimitMs, int MemoryLimitKb, int Position,
+    string Category, string Level,
     List<TestCaseDto> SampleTests);
 
 // ---- Problem bank ----
 public record BankSummaryDto(
-    int Id, string Title, string Language, string Tags, bool IsPublic,
+    int Id, string Title, string Language, string Category, string Level, string Tags, bool IsPublic,
     bool Mine, string OwnerName, int TestCount, int SampleCount, DateTime UpdatedAt);
 
 public record BankProblemDto(
     int Id, string Title, string StatementMarkdown, string Language, string StarterCode,
-    int TimeLimitMs, int MemoryLimitKb, string Tags, bool IsPublic,
+    int TimeLimitMs, int MemoryLimitKb, string Category, string Level, string Tags, bool IsPublic,
     bool Mine, string OwnerName, DateTime UpdatedAt,
     List<TestCaseDto> TestCases);   // full set only for the owner; samples only otherwise
 
 public record UpsertBankProblemDto(
     string Title, string StatementMarkdown, string Language, string StarterCode,
-    int TimeLimitMs, int MemoryLimitKb, string Tags, bool IsPublic,
+    int TimeLimitMs, int MemoryLimitKb, string? Category, string? Level, string Tags, bool IsPublic,
     List<UpsertTestCaseDto>? TestCases);   // null => leave test cases untouched
 
 // ---- Submissions ----
@@ -82,7 +86,7 @@ public record ProgressBoardDto(
     List<ProblemSummaryDto> Problems,
     List<ProgressCellDto> Cells);
 
-public record ProblemSummaryDto(int Id, string Title, int Position, int TimeLimitMs, int MemoryLimitKb, string Language);
+public record ProblemSummaryDto(int Id, string Title, int Position, int TimeLimitMs, int MemoryLimitKb, string Language, string Category, string Level);
 
 // ---- Padlet-style wall ----
 public record ReactionDto(string Emoji, int Count, bool Mine);

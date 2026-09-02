@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { api } from '../lib/api';
+import LevelBadge from './LevelBadge.vue';
 
 const props = defineProps({ boardSlug: { type: String, required: true } });
 const emit = defineEmits(['added', 'cancel']);
@@ -57,7 +58,11 @@ async function add(item) {
         <div v-for="b in items" :key="b.id"
              class="border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 flex items-center gap-3">
           <div class="min-w-0 flex-1">
-            <div class="font-medium text-sm truncate">{{ b.title }}</div>
+            <div class="flex items-center gap-1.5">
+              <span class="font-medium text-sm truncate">{{ b.title }}</span>
+              <LevelBadge :level="b.level" />
+              <span v-if="b.category" class="text-[10px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300 shrink-0">{{ b.category }}</span>
+            </div>
             <div class="text-[11px] text-slate-400 dark:text-slate-500">
               {{ b.language.toUpperCase() }} · {{ b.testCount }} test ({{ b.sampleCount }} sample)
               <span v-if="!b.mine"> · oleh {{ b.ownerName }}</span>

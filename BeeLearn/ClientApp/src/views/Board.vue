@@ -8,6 +8,7 @@ import ProgressGrid from '../components/ProgressGrid.vue';
 import PadletWall from '../components/PadletWall.vue';
 import ProblemEditor from '../components/ProblemEditor.vue';
 import BankPicker from '../components/BankPicker.vue';
+import LevelBadge from '../components/LevelBadge.vue';
 import VerdictBadge from '../components/VerdictBadge.vue';
 
 const props = defineProps({ slug: { type: String, required: true } });
@@ -188,7 +189,11 @@ onBeforeUnmount(async () => {
       <div v-for="p in problems" :key="p.id"
            class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 flex items-center justify-between">
         <div>
-          <div class="font-medium">{{ p.title }}</div>
+          <div class="font-medium flex items-center gap-2">
+            {{ p.title }}
+            <LevelBadge :level="p.level" />
+            <span v-if="p.category" class="text-[10px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">{{ p.category }}</span>
+          </div>
           <div class="text-xs text-slate-400 dark:text-slate-500">{{ p.language.toUpperCase() }} · {{ p.timeLimitMs }}ms · {{ p.memoryLimitKb }}KB</div>
         </div>
         <div class="flex items-center gap-2">

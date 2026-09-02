@@ -31,7 +31,8 @@ public class BankController : ApiControllerBase
 
     [HttpGet("api/bank")]
     public async Task<ActionResult<IEnumerable<BankSummaryDto>>> List(
-        [FromQuery] string? q, [FromQuery] string? tag, [FromQuery] string? scope)
+        [FromQuery] string? q, [FromQuery] string? tag, [FromQuery] string? scope,
+        [FromQuery] string? category, [FromQuery] string? level)
     {
         var query = (scope ?? "all").ToLowerInvariant() switch
         {
@@ -44,12 +45,22 @@ public class BankController : ApiControllerBase
         {
             var needle = q.Trim();
             query = query.Where(b => EF.Functions.Like(b.Title, $"%{needle}%")
-                                  || EF.Functions.Like(b.Tags, $"%{needle}%"));
+                                  || EF.Functions.Like(b.Tags, $"%{needle}%")
+                                  || EF.Functions.Like(b.Category, $"%{needle}%"));
         }
         if (!string.IsNullOrWhiteSpace(tag))
         {
             var t = tag.Trim().ToLowerInvariant();
             query = query.Where(b => EF.Functions.Like(b.Tags, $"%{t}%"));
+        }
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            var c = category.Trim();
+            query = query.Where(b => b.Category == c);
+        }
+        if (Enum.TryParse<ProblemLevel>(level, ignoreCase: true, out var lvl))
+        {
+            query = query.Where(b => b.Level == lvl);
         }
 
         var rows = await query
@@ -139,6 +150,8 @@ public class BankController : ApiControllerBase
             Title = bank.Title,
             StatementMarkdown = bank.StatementMarkdown,
             Language = bank.Language,
+            Category = bank.Category,
+            Level = bank.Level,
             StarterCode = bank.StarterCode,
             TimeLimitMs = bank.TimeLimitMs,
             MemoryLimitKb = bank.MemoryLimitKb,
@@ -180,6 +193,8 @@ public class BankController : ApiControllerBase
             Title = p.Title,
             StatementMarkdown = p.StatementMarkdown,
             Language = p.Language,
+            Category = p.Category,
+            Level = p.Level,
             StarterCode = p.StarterCode,
             TimeLimitMs = p.TimeLimitMs,
             MemoryLimitKb = p.MemoryLimitKb,
@@ -206,6 +221,8 @@ public class BankController : ApiControllerBase
         b.Title = (dto.Title ?? "").Trim();
         b.StatementMarkdown = dto.StatementMarkdown ?? "";
         b.Language = NativeCompiler.Normalize(dto.Language);
+        b.Category = (dto.Category ?? "").Trim();
+        b.Level = Mapping.ParseLevel(dto.Level);
         b.StarterCode = dto.StarterCode ?? "";
         b.TimeLimitMs = Math.Clamp(dto.TimeLimitMs <= 0 ? 1000 : dto.TimeLimitMs, 100, 10_000);
         b.MemoryLimitKb = Math.Clamp(dto.MemoryLimitKb <= 0 ? 32_768 : dto.MemoryLimitKb, 4_096, 512_000);

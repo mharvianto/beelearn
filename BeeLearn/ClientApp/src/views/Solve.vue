@@ -6,6 +6,7 @@ import { createBoardConnection } from '../lib/signalr';
 import MonacoEditor from '../components/MonacoEditor.vue';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
 import VerdictBadge from '../components/VerdictBadge.vue';
+import LevelBadge from '../components/LevelBadge.vue';
 import ContentGuard from '../components/ContentGuard.vue';
 import StatementImage from '../components/StatementImage.vue';
 
@@ -105,7 +106,11 @@ onBeforeUnmount(async () => {
     <!-- Left: statement + submissions -->
     <div class="p-5 overflow-y-auto border-r border-slate-200 dark:border-slate-800">
       <RouterLink :to="`/boards/${props.slug}`" class="text-sm text-slate-400 dark:text-slate-500">&larr; back to board</RouterLink>
-      <h1 class="text-lg font-bold mt-2 mb-3">{{ problem.title }}</h1>
+      <div class="flex items-center gap-2 mt-2 mb-1">
+        <h1 class="text-lg font-bold">{{ problem.title }}</h1>
+        <LevelBadge :level="problem.level" />
+        <span v-if="problem.category" class="text-[10px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">{{ problem.category }}</span>
+      </div>
       <div class="text-xs text-slate-400 dark:text-slate-500 mb-3">
         {{ problem.language.toUpperCase() }} · limit {{ problem.timeLimitMs }} ms · {{ problem.memoryLimitKb }} KB
       </div>

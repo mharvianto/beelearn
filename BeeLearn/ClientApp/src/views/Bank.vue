@@ -2,10 +2,12 @@
 import { ref, onMounted } from 'vue';
 import { api } from '../lib/api';
 import ProblemEditor from '../components/ProblemEditor.vue';
+import LevelBadge from '../components/LevelBadge.vue';
 
 const items = ref([]);
 const q = ref('');
 const scope = ref('mine');
+const level = ref('');
 const editing = ref(null);   // {} = new, object = edit, null = closed
 const error = ref('');
 const editError = ref('');
@@ -16,6 +18,7 @@ async function load() {
   try {
     const p = new URLSearchParams({ scope: scope.value });
     if (q.value.trim()) p.set('q', q.value.trim());
+    if (level.value) p.set('level', level.value);
     items.value = await api.get(`/api/bank?${p}`);
   } catch (e) { error.value = e.message; }
 }
@@ -67,6 +70,11 @@ async function remove() {
         <option value="public">Dibagikan guru lain</option>
         <option value="all">Semua</option>
       </select>
+      <select v-model="level" @change="load"
+              class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 text-sm">
+        <option value="">Semua level</option>
+        <option>Easy</option><option>Medium</option><option>Hard</option>
+      </select>
       <button @click="load" class="text-sm bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4">Cari</button>
     </div>
 
@@ -79,6 +87,12 @@ async function remove() {
           <h3 class="font-semibold text-sm">{{ b.title }}</h3>
           <span v-if="b.isPublic" class="text-[10px] shrink-0 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
             dibagikan
+          </span>
+        </div>
+        <div class="flex items-center gap-1.5 mt-1">
+          <LevelBadge :level="b.level" />
+          <span v-if="b.category" class="text-[10px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">
+            {{ b.category }}
           </span>
         </div>
         <div class="text-[11px] text-slate-400 dark:text-slate-500 mt-1">

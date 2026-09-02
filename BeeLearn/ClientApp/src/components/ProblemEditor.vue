@@ -17,6 +17,7 @@ const emit = defineEmits(['save', 'delete', 'cancel']);
 const blank = () => ({
   title: '', statementMarkdown: '', language: 'cpp', starterCode: '',
   timeLimitMs: 1000, memoryLimitKb: 32768, position: 0,
+  category: '', level: 'Medium',
   tags: '', isPublic: false, testCases: [],
 });
 const form = ref(blank());
@@ -44,6 +45,15 @@ function removeTest(i) { form.value.testCases.splice(i, 1); }
             <select v-model="form.language" class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1">
               <option value="cpp">C++</option><option value="c">C</option>
             </select>
+          </label>
+          <label class="flex items-center gap-1">Level
+            <select v-model="form.level" class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1">
+              <option>Easy</option><option>Medium</option><option>Hard</option>
+            </select>
+          </label>
+          <label class="flex items-center gap-1">Category
+            <input v-model="form.category" placeholder="Array, Graph, DP…"
+                   class="w-40 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1" />
           </label>
           <label class="flex items-center gap-1">Time (ms)
             <input v-model.number="form.timeLimitMs" type="number" class="w-24 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1" />
