@@ -7,3 +7,7 @@ BeeLearn/beelearn.db-*
 BeeLearn/ClientApp/node_modules/
 BeeLearn/ClientApp/dist/
 /tmp/
+
+# core dumps
+core
+core.*

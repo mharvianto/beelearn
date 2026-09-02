@@ -7,6 +7,7 @@ import MonacoEditor from '../components/MonacoEditor.vue';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
 import VerdictBadge from '../components/VerdictBadge.vue';
 import ContentGuard from '../components/ContentGuard.vue';
+import StatementImage from '../components/StatementImage.vue';
 
 const props = defineProps({ id: [String, Number], problemId: [String, Number] });
 const auth = useAuth();
@@ -104,11 +105,15 @@ onBeforeUnmount(async () => {
         {{ problem.language.toUpperCase() }} · limit {{ problem.timeLimitMs }} ms · {{ problem.memoryLimitKb }} KB
       </div>
       <p v-if="protectOn" class="text-[11px] text-amber-600 dark:text-amber-400 mb-2">
-        🔒 Soal dilindungi — teks tidak bisa disalin, layar diberi watermark identitasmu.
+        🔒 Soal dilindungi — dikirim sebagai gambar terenkripsi dengan watermark identitasmu.
       </p>
-      <ContentGuard :active="protectOn" :watermark="watermark">
-        <MarkdownBlock :text="problem.statementMarkdown" />
 
+      <ContentGuard v-if="protectOn" :active="true" :watermark="''">
+        <StatementImage :problem-id="props.problemId" />
+      </ContentGuard>
+
+      <template v-else>
+        <MarkdownBlock :text="problem.statementMarkdown" />
         <div v-if="problem.sampleTests?.length" class="mt-4">
           <h3 class="font-semibold text-sm mb-1">Samples</h3>
           <div v-for="(t, i) in problem.sampleTests" :key="i" class="grid grid-cols-2 gap-2 mb-2 text-xs">
@@ -116,7 +121,7 @@ onBeforeUnmount(async () => {
             <pre class="bg-slate-100 dark:bg-slate-800 rounded p-2 overflow-x-auto">{{ t.expectedStdout }}</pre>
           </div>
         </div>
-      </ContentGuard>
+      </template>
 
       <h3 class="font-semibold text-sm mt-5 mb-2">Submissions</h3>
       <div class="space-y-1">

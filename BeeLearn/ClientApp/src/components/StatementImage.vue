@@ -1,0 +1,50 @@
+<script setup>
+import { ref, watch, onBeforeUnmount } from 'vue';
+import { theme as appTheme } from '../lib/theme';
+
+const props = defineProps({ problemId: { type: [String, Number], required: true } });
+
+const src = ref('');
+const err = ref('');
+let objectUrl = '';
+
+function fromB64(s) {
+  const bin = atob(s);
+  const a = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+  return a;
+}
+function revoke() {
+  if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = ''; }
+}
+
+async function load() {
+  err.value = '';
+  try {
+    const dark = document.documentElement.classList.contains('dark');
+    const res = await fetch(`/api/problems/${props.problemId}/statement?theme=${dark ? 'dark' : 'light'}`,
+      { credentials: 'include' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const j = await res.json();
+    const key = await crypto.subtle.importKey('raw', fromB64(j.key), 'AES-GCM', false, ['decrypt']);
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(j.iv) }, key, fromB64(j.data));
+    revoke();
+    objectUrl = URL.createObjectURL(new Blob([plain], { type: 'image/png' }));
+    src.value = objectUrl;
+  } catch {
+    err.value = 'Gagal memuat soal.';
+  }
+}
+
+watch(() => [props.problemId, appTheme.value], load, { immediate: true });
+onBeforeUnmount(revoke);
+</script>
+
+<template>
+  <div>
+    <p v-if="err" class="text-sm text-red-600 dark:text-red-400">{{ err }}</p>
+    <img v-else-if="src" :src="src" alt="" draggable="false"
+         class="w-full rounded-lg border border-slate-200 dark:border-slate-800 select-none pointer-events-none" />
+    <p v-else class="text-sm text-slate-400 dark:text-slate-500">Memuat soal…</p>
+  </div>
+</template>

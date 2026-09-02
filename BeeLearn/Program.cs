@@ -36,6 +36,7 @@ builder.Services.AddSingleton<NativeSandbox>();
 builder.Services.AddSingleton<JudgeQueue>();
 builder.Services.AddSingleton<PresenceTracker>();
 builder.Services.AddSingleton<DraftStore>();
+builder.Services.AddSingleton<StatementImageService>();
 builder.Services.AddSingleton<RateLimiter>();
 builder.Services.AddSingleton<IBoardNotifier, BoardNotifier>();
 builder.Services.AddHostedService<JudgeWorker>();

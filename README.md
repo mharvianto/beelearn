@@ -71,6 +71,23 @@ dotnet publish -c Release -o out     # runs `npm ci && npm run build` into wwwro
 environment allows unprivileged user namespaces**; otherwise the judge falls back to
 rlimits only and logs which mode it picked at startup.
 
+## Content protection (per-board `ProtectContent` toggle)
+
+When a teacher turns it on, a student opening a problem gets:
+
+- The statement + samples **rendered to a PNG server-side** (`StatementImageService`,
+  SkiaSharp + Markdig, DejaVu fonts vendored in `Assets/fonts/`) with a per-viewer
+  identity watermark **baked into the pixels** — there is no text in the DOM to select,
+  copy, or read via inspect-element.
+- That PNG returned **AES-256-GCM encrypted** (`GET /api/problems/{id}/statement`, fresh
+  key+nonce per request, `Cache-Control: no-store`); the client decrypts via WebCrypto to
+  a `blob:` URL. No stable image URL, nothing reusable in a HAR/cache.
+- `ContentGuard.vue` on top: blocks selection / copy / context-menu / drag, blurs the
+  content while the tab is hidden or unfocused, and disables printing.
+
+**This cannot stop a second camera** pointed at the screen — nothing can. The watermark is
+what makes such a leak attributable. Everything else raises the effort for casual copying.
+
 ## Security note
 
 The judge is **classroom-grade**, not hardened multi-tenant isolation:
