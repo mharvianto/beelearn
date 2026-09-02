@@ -6,11 +6,16 @@ import { createBoardConnection } from '../lib/signalr';
 import MonacoEditor from '../components/MonacoEditor.vue';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
 import VerdictBadge from '../components/VerdictBadge.vue';
+import ContentGuard from '../components/ContentGuard.vue';
 
 const props = defineProps({ id: [String, Number], problemId: [String, Number] });
 const auth = useAuth();
 
+const board = ref(null);
 const problem = ref(null);
+const protectOn = computed(() => !!board.value?.protectContent && auth.user?.role === 'Student');
+const watermark = computed(() =>
+  `${auth.user?.email || auth.user?.displayName || ''} · ${new Date().toLocaleString()}`);
 const code = ref('');
 const stdin = ref('');
 const runOut = ref(null);
@@ -24,6 +29,7 @@ const mine = computed(() => submissions.value.filter((s) => s.mine));
 const latestMine = computed(() => mine.value[0]);
 
 async function load() {
+  board.value = await api.get(`/api/boards/${props.id}`);
   problem.value = await api.get(`/api/boards/${props.id}/problems/${props.problemId}`);
   code.value = problem.value.starterCode || '';
   if (problem.value.sampleTests?.[0]) stdin.value = problem.value.sampleTests[0].stdin;
@@ -97,15 +103,20 @@ onBeforeUnmount(async () => {
       <div class="text-xs text-slate-400 dark:text-slate-500 mb-3">
         {{ problem.language.toUpperCase() }} · limit {{ problem.timeLimitMs }} ms · {{ problem.memoryLimitKb }} KB
       </div>
-      <MarkdownBlock :text="problem.statementMarkdown" />
+      <p v-if="protectOn" class="text-[11px] text-amber-600 dark:text-amber-400 mb-2">
+        🔒 Soal dilindungi — teks tidak bisa disalin, layar diberi watermark identitasmu.
+      </p>
+      <ContentGuard :active="protectOn" :watermark="watermark">
+        <MarkdownBlock :text="problem.statementMarkdown" />
 
-      <div v-if="problem.sampleTests?.length" class="mt-4">
-        <h3 class="font-semibold text-sm mb-1">Samples</h3>
-        <div v-for="(t, i) in problem.sampleTests" :key="i" class="grid grid-cols-2 gap-2 mb-2 text-xs">
-          <pre class="bg-slate-100 dark:bg-slate-800 rounded p-2 overflow-x-auto">{{ t.stdin }}</pre>
-          <pre class="bg-slate-100 dark:bg-slate-800 rounded p-2 overflow-x-auto">{{ t.expectedStdout }}</pre>
+        <div v-if="problem.sampleTests?.length" class="mt-4">
+          <h3 class="font-semibold text-sm mb-1">Samples</h3>
+          <div v-for="(t, i) in problem.sampleTests" :key="i" class="grid grid-cols-2 gap-2 mb-2 text-xs">
+            <pre class="bg-slate-100 dark:bg-slate-800 rounded p-2 overflow-x-auto">{{ t.stdin }}</pre>
+            <pre class="bg-slate-100 dark:bg-slate-800 rounded p-2 overflow-x-auto">{{ t.expectedStdout }}</pre>
+          </div>
         </div>
-      </div>
+      </ContentGuard>
 
       <h3 class="font-semibold text-sm mt-5 mb-2">Submissions</h3>
       <div class="space-y-1">

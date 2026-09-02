@@ -48,6 +48,9 @@ async function toggleExam() {
   board.value = await api.patch(`/api/boards/${props.id}`, { examMode: !progress.value.examMode });
   await loadProgress();
 }
+async function toggleProtect() {
+  board.value = await api.patch(`/api/boards/${props.id}`, { protectContent: !board.value.protectContent });
+}
 async function toggleHide(student) {
   await api.patch(`/api/boards/${props.id}/members/${student.userId}`, { hiddenByTeacher: !student.hiddenByTeacher });
   await loadProgress();
@@ -105,6 +108,13 @@ onBeforeUnmount(async () => {
                 ? 'bg-purple-600 text-white border-purple-600'
                 : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700'">
         {{ progress.examMode ? '🔒 Exam mode ON — peers hidden' : 'Exam mode off' }}
+      </button>
+      <button @click="toggleProtect"
+              class="px-3 py-1.5 rounded-lg text-sm font-medium border"
+              :class="board.protectContent
+                ? 'bg-slate-800 text-white border-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:border-slate-200'
+                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700'">
+        {{ board.protectContent ? '🔒 Content protected' : 'Protect content' }}
       </button>
       <button @click="editing = {}" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500 text-white">
         + Add problem

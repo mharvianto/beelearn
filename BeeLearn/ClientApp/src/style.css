@@ -12,3 +12,8 @@ body {
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 .dark body { background: #0b1120; color: #e2e8f0; }
+
+/* Content protection: block printing the page while a guarded problem is open. */
+@media print {
+  html.protected body { display: none !important; }
+}

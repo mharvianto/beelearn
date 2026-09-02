@@ -54,6 +54,10 @@ public class Board
     /// <summary>Board-wide exam mode: students never see peers' answers/progress.</summary>
     public bool ExamMode { get; set; }
 
+    /// <summary>Deter casual copying/screenshots of problem statements (select/copy blocked,
+    /// blur-on-leave, name watermark). Cannot truly stop a camera — makes leaks attributable.</summary>
+    public bool ProtectContent { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public List<BoardMembership> Members { get; set; } = new();
