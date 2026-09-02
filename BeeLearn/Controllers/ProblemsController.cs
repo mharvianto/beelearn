@@ -121,7 +121,7 @@ public class ProblemsController : ApiControllerBase
         p.Title = (dto.Title ?? "").Trim();
         p.StatementMarkdown = dto.StatementMarkdown ?? "";
         p.Language = NativeCompiler.Normalize(dto.Language);
-        p.Category = (dto.Category ?? "").Trim();
+        p.Tags = Mapping.NormalizeTags(dto.Tags);
         p.Level = Mapping.ParseLevel(dto.Level);
         p.StarterCode = dto.StarterCode ?? "";
         p.TimeLimitMs = Math.Clamp(dto.TimeLimitMs <= 0 ? 1000 : dto.TimeLimitMs, 100, 10_000);

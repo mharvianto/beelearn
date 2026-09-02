@@ -36,7 +36,7 @@ public static class DbSeeder
                 "Read two integers `a` and `b` on one line, print `a + b`.\n\n" +
                 "**Input:** `2 3` — **Output:** `5`",
             Language = "cpp",
-            Category = "Math",
+            Tags = "math",
             Level = ProblemLevel.Easy,
             StarterCode =
                 "#include <iostream>\nusing namespace std;\nint main(){\n    long long a, b;\n    cin >> a >> b;\n    cout << a + b << endl;\n}\n",

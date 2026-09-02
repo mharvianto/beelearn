@@ -105,9 +105,9 @@ public class Problem
     [MaxLength(8)]
     public string Language { get; set; } = "cpp";
 
-    /// <summary>Primary topic, e.g. "Array", "Graph", "DP".</summary>
-    [MaxLength(60)]
-    public string Category { get; set; } = "";
+    /// <summary>Comma-separated, lowercase topic tags, e.g. "array,graph,dp".</summary>
+    [MaxLength(300)]
+    public string Tags { get; set; } = "";
 
     public ProblemLevel Level { get; set; } = ProblemLevel.Medium;
 
@@ -152,13 +152,9 @@ public class BankProblem
 
     public int MemoryLimitKb { get; set; } = 32_768;
 
-    /// <summary>Primary topic, e.g. "Array", "Graph", "DP".</summary>
-    [MaxLength(60)]
-    public string Category { get; set; } = "";
-
     public ProblemLevel Level { get; set; } = ProblemLevel.Medium;
 
-    /// <summary>Comma-separated, lowercase.</summary>
+    /// <summary>Comma-separated, lowercase topic tags.</summary>
     [MaxLength(300)]
     public string Tags { get; set; } = "";
 

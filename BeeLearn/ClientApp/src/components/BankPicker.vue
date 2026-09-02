@@ -61,7 +61,6 @@ async function add(item) {
             <div class="flex items-center gap-1.5">
               <span class="font-medium text-sm truncate">{{ b.title }}</span>
               <LevelBadge :level="b.level" />
-              <span v-if="b.category" class="text-[10px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300 shrink-0">{{ b.category }}</span>
             </div>
             <div class="text-[11px] text-slate-400 dark:text-slate-500">
               {{ b.language.toUpperCase() }} · {{ b.testCount }} test ({{ b.sampleCount }} sample)

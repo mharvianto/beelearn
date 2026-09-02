@@ -189,10 +189,11 @@ onBeforeUnmount(async () => {
       <div v-for="p in problems" :key="p.id"
            class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 flex items-center justify-between">
         <div>
-          <div class="font-medium flex items-center gap-2">
+          <div class="font-medium flex items-center gap-2 flex-wrap">
             {{ p.title }}
             <LevelBadge :level="p.level" />
-            <span v-if="p.category" class="text-[10px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">{{ p.category }}</span>
+            <span v-for="t in (p.tags ? p.tags.split(',') : [])" :key="t"
+                  class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{{ t }}</span>
           </div>
           <div class="text-xs text-slate-400 dark:text-slate-500">{{ p.language.toUpperCase() }} · {{ p.timeLimitMs }}ms · {{ p.memoryLimitKb }}KB</div>
         </div>

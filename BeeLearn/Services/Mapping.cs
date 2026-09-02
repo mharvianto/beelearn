@@ -7,6 +7,13 @@ public static class Mapping
     public static ProblemLevel ParseLevel(string? s) =>
         Enum.TryParse<ProblemLevel>((s ?? "").Trim(), ignoreCase: true, out var l) ? l : ProblemLevel.Medium;
 
+    public static string NormalizeTags(string? tags) =>
+        string.Join(',', (tags ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(t => t.ToLowerInvariant())
+            .Distinct()
+            .Take(12));
+
     public static SubmissionDto ToDto(Submission s, int viewerUserId, bool canSeeCode, string authorName)
     {
         bool mine = s.UserId == viewerUserId;
@@ -25,19 +32,19 @@ public static class Mapping
 
     public static ProblemDto ToOwnerDto(Problem p) => new(
         p.Id, p.BoardId, p.Title, p.StatementMarkdown, p.Language, p.StarterCode,
-        p.TimeLimitMs, p.MemoryLimitKb, p.Position, p.Category, p.Level.ToString(),
+        p.TimeLimitMs, p.MemoryLimitKb, p.Position, p.Tags, p.Level.ToString(),
         p.TestCases.OrderBy(t => t.Position).ThenBy(t => t.Id).Select(ToDto).ToList());
 
     public static StudentProblemDto ToStudentDto(Problem p) => new(
         p.Id, p.BoardId, p.Title, p.StatementMarkdown, p.Language, p.StarterCode,
-        p.TimeLimitMs, p.MemoryLimitKb, p.Position, p.Category, p.Level.ToString(),
+        p.TimeLimitMs, p.MemoryLimitKb, p.Position, p.Tags, p.Level.ToString(),
         p.TestCases.Where(t => t.IsSample).OrderBy(t => t.Position).ThenBy(t => t.Id).Select(ToDto).ToList());
 
     public static TestCaseDto ToDto(BankTestCase t) =>
         new(t.Id, t.Stdin, t.ExpectedStdout, t.IsSample, t.Points, t.Position);
 
     public static BankSummaryDto ToSummary(BankProblem b, int viewerUserId) => new(
-        b.Id, b.Title, b.Language, b.Category, b.Level.ToString(), b.Tags, b.IsPublic,
+        b.Id, b.Title, b.Language, b.Level.ToString(), b.Tags, b.IsPublic,
         b.OwnerId == viewerUserId, b.Owner?.DisplayName ?? "teacher",
         b.TestCases.Count, b.TestCases.Count(t => t.IsSample), b.UpdatedAt);
 
@@ -51,10 +58,10 @@ public static class Mapping
             .Select(ToDto).ToList();
         return new(
             b.Id, b.Title, b.StatementMarkdown, b.Language, b.StarterCode,
-            b.TimeLimitMs, b.MemoryLimitKb, b.Category, b.Level.ToString(), b.Tags, b.IsPublic,
+            b.TimeLimitMs, b.MemoryLimitKb, b.Level.ToString(), b.Tags, b.IsPublic,
             mine, b.Owner?.DisplayName ?? "teacher", b.UpdatedAt, tests);
     }
 
     public static ProblemSummaryDto ToSummary(Problem p) =>
-        new(p.Id, p.Title, p.Position, p.TimeLimitMs, p.MemoryLimitKb, p.Language, p.Category, p.Level.ToString());
+        new(p.Id, p.Title, p.Position, p.TimeLimitMs, p.MemoryLimitKb, p.Language, p.Tags, p.Level.ToString());
 }

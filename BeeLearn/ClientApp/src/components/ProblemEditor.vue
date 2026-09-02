@@ -17,8 +17,7 @@ const emit = defineEmits(['save', 'delete', 'cancel']);
 const blank = () => ({
   title: '', statementMarkdown: '', language: 'cpp', starterCode: '',
   timeLimitMs: 1000, memoryLimitKb: 32768, position: 0,
-  category: '', level: 'Medium',
-  tags: '', isPublic: false, testCases: [],
+  level: 'Medium', tags: '', isPublic: false, testCases: [],
 });
 const form = ref(blank());
 
@@ -51,10 +50,6 @@ function removeTest(i) { form.value.testCases.splice(i, 1); }
               <option>Easy</option><option>Medium</option><option>Hard</option>
             </select>
           </label>
-          <label class="flex items-center gap-1">Category
-            <input v-model="form.category" placeholder="Array, Graph, DP…"
-                   class="w-40 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1" />
-          </label>
           <label class="flex items-center gap-1">Time (ms)
             <input v-model.number="form.timeLimitMs" type="number" class="w-24 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1" />
           </label>
@@ -66,12 +61,12 @@ function removeTest(i) { form.value.testCases.splice(i, 1); }
           </label>
         </div>
 
-        <div v-if="showBankFields" class="flex gap-3 flex-wrap text-sm items-center">
+        <div class="flex gap-3 flex-wrap text-sm items-center">
           <label class="flex items-center gap-1 flex-1 min-w-48">Tags
             <input v-model="form.tags" placeholder="loop, array, dp"
                    class="flex-1 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1" />
           </label>
-          <label class="flex items-center gap-2">
+          <label v-if="showBankFields" class="flex items-center gap-2">
             <input type="checkbox" v-model="form.isPublic" />
             Bagikan ke guru lain
           </label>

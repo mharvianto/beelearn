@@ -89,12 +89,7 @@ async function remove() {
             dibagikan
           </span>
         </div>
-        <div class="flex items-center gap-1.5 mt-1">
-          <LevelBadge :level="b.level" />
-          <span v-if="b.category" class="text-[10px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">
-            {{ b.category }}
-          </span>
-        </div>
+        <div class="mt-1"><LevelBadge :level="b.level" /></div>
         <div class="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
           {{ b.language.toUpperCase() }} · {{ b.testCount }} test ({{ b.sampleCount }} sample)
           <span v-if="!b.mine"> · oleh {{ b.ownerName }}</span>
