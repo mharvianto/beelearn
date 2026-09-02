@@ -43,6 +43,15 @@ everyone's progress — with layered controls over who can see whose answers.
 
 All five visibility rules live in one place: `Services/VisibilityService.cs`.
 
+6. **Problem bank** (`/bank`, teachers) — a reusable library of problems, private by default
+   with a per-problem "share" toggle. Other teachers browsing a shared problem see only its
+   **sample** tests; copying it onto their board carries the hidden tests server-side, so
+   secret test data is never sent to a non-owner. Adding to a board **copies** (the board's
+   problem is independent afterwards; `Problem.SourceBankProblemId` records provenance), and
+   an existing board problem can be saved back into the bank.
+   `BankController`: `GET/POST /api/bank`, `GET/PUT/DELETE /api/bank/{id}`,
+   `POST /api/bank/{id}/copy-to/{slug}`, `POST /api/boards/{slug}/problems/{id}/to-bank`.
+
 ## Running (dev)
 
 ```bash

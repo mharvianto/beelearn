@@ -1,41 +1,34 @@
 <script setup>
 import { ref, watch } from 'vue';
-import { api } from '../lib/api';
 import MonacoEditor from './MonacoEditor.vue';
 
-const props = defineProps({ boardSlug: String, problem: Object });
-const emit = defineEmits(['saved', 'cancel', 'deleted']);
+/**
+ * Form for a problem. API-agnostic: the parent decides where `save` writes
+ * (a board's problems, or the teacher's bank).
+ */
+const props = defineProps({
+  problem: Object,                 // null => new
+  showBankFields: Boolean,         // tags + public toggle (bank only)
+  error: String,
+  busy: Boolean,
+});
+const emit = defineEmits(['save', 'delete', 'cancel']);
 
 const blank = () => ({
   title: '', statementMarkdown: '', language: 'cpp', starterCode: '',
-  timeLimitMs: 1000, memoryLimitKb: 32768, position: 0, testCases: [],
+  timeLimitMs: 1000, memoryLimitKb: 32768, position: 0,
+  tags: '', isPublic: false, testCases: [],
 });
 const form = ref(blank());
-const error = ref('');
 
 watch(() => props.problem, (p) => {
-  form.value = p ? JSON.parse(JSON.stringify(p)) : blank();
+  form.value = p ? { ...blank(), ...JSON.parse(JSON.stringify(p)) } : blank();
 }, { immediate: true });
 
 function addTest() {
   form.value.testCases.push({ id: null, stdin: '', expectedStdout: '', isSample: false, points: 1, position: form.value.testCases.length });
 }
 function removeTest(i) { form.value.testCases.splice(i, 1); }
-
-async function save() {
-  error.value = '';
-  try {
-    const body = { ...form.value };
-    if (props.problem?.id) await api.put(`/api/boards/${props.boardSlug}/problems/${props.problem.id}`, body);
-    else await api.post(`/api/boards/${props.boardSlug}/problems`, body);
-    emit('saved');
-  } catch (e) { error.value = e.message; }
-}
-async function del() {
-  if (!props.problem?.id || !confirm('Delete this problem?')) return;
-  await api.del(`/api/boards/${props.boardSlug}/problems/${props.problem.id}`);
-  emit('deleted');
-}
 </script>
 
 <template>
@@ -58,10 +51,22 @@ async function del() {
           <label class="flex items-center gap-1">Memory (KB)
             <input v-model.number="form.memoryLimitKb" type="number" class="w-28 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1" />
           </label>
-          <label class="flex items-center gap-1">Position
+          <label v-if="!showBankFields" class="flex items-center gap-1">Position
             <input v-model.number="form.position" type="number" class="w-16 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1" />
           </label>
         </div>
+
+        <div v-if="showBankFields" class="flex gap-3 flex-wrap text-sm items-center">
+          <label class="flex items-center gap-1 flex-1 min-w-48">Tags
+            <input v-model="form.tags" placeholder="loop, array, dp"
+                   class="flex-1 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1" />
+          </label>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" v-model="form.isPublic" />
+            Bagikan ke guru lain
+          </label>
+        </div>
+
         <div>
           <label class="text-xs text-slate-400 dark:text-slate-500">Starter code</label>
           <div class="h-52 border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden mt-1">
@@ -91,9 +96,10 @@ async function del() {
 
         <p v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
         <div class="flex gap-2 pt-1">
-          <button @click="save" class="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-4 py-2 font-medium">Save</button>
+          <button @click="emit('save', form)" :disabled="busy"
+                  class="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-4 py-2 font-medium disabled:opacity-50">Save</button>
           <button @click="emit('cancel')" class="text-slate-500 dark:text-slate-400 px-3">Cancel</button>
-          <button v-if="props.problem?.id" @click="del" class="text-red-600 dark:text-red-400 ml-auto px-3">Delete</button>
+          <button v-if="props.problem?.id" @click="emit('delete')" class="text-red-600 dark:text-red-400 ml-auto px-3">Delete</button>
         </div>
       </div>
     </div>

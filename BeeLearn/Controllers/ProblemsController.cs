@@ -88,8 +88,11 @@ public class ProblemsController : ApiControllerBase
 
         Apply(p, dto);
 
-        var keepIds = dto.TestCases.Where(t => t.Id is > 0).Select(t => t.Id!.Value).ToHashSet();
-        _db.TestCases.RemoveRange(p.TestCases.Where(t => !keepIds.Contains(t.Id)));
+        if (dto.TestCases is not null)
+        {
+            var keepIds = dto.TestCases.Where(t => t.Id is > 0).Select(t => t.Id!.Value).ToHashSet();
+            _db.TestCases.RemoveRange(p.TestCases.Where(t => !keepIds.Contains(t.Id)));
+        }
 
         await _db.SaveChangesAsync();
         await _notifier.ProblemChangedAsync(boardId!.Value);
@@ -123,7 +126,7 @@ public class ProblemsController : ApiControllerBase
         p.MemoryLimitKb = Math.Clamp(dto.MemoryLimitKb <= 0 ? 32_768 : dto.MemoryLimitKb, 4_096, 512_000);
         p.Position = dto.Position;
 
-        foreach (var t in dto.TestCases ?? new())
+        foreach (var t in dto.TestCases ?? Enumerable.Empty<UpsertTestCaseDto>())
         {
             var tc = t.Id is > 0 ? p.TestCases.FirstOrDefault(x => x.Id == t.Id) : null;
             if (tc is null)

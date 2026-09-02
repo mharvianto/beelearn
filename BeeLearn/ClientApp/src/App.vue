@@ -16,7 +16,13 @@ async function logout() {
   <div class="h-full min-h-0 flex flex-col">
     <header v-if="auth.user" class="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
       <div class="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
-        <RouterLink to="/boards" class="font-bold text-lg text-amber-600 dark:text-amber-400">🐝 BeeLearn</RouterLink>
+        <div class="flex items-center gap-4">
+          <RouterLink to="/boards" class="font-bold text-lg text-amber-600 dark:text-amber-400">🐝 BeeLearn</RouterLink>
+          <RouterLink v-if="auth.isTeacher" to="/bank"
+                      class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
+            Bank soal
+          </RouterLink>
+        </div>
         <div class="flex items-center gap-3 text-sm">
           <span class="text-slate-500 dark:text-slate-400">{{ auth.user.displayName }}</span>
           <span class="px-2 py-0.5 rounded-full text-xs"

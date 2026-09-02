@@ -25,7 +25,7 @@ public record UpsertProblemDto(
     int TimeLimitMs,
     int MemoryLimitKb,
     int Position,
-    List<UpsertTestCaseDto> TestCases);
+    List<UpsertTestCaseDto>? TestCases);   // null => leave test cases untouched
 
 /// <summary>Full problem view for the board owner/teacher.</summary>
 public record ProblemDto(
@@ -38,6 +38,22 @@ public record StudentProblemDto(
     int Id, int BoardId, string Title, string StatementMarkdown, string Language,
     string StarterCode, int TimeLimitMs, int MemoryLimitKb, int Position,
     List<TestCaseDto> SampleTests);
+
+// ---- Problem bank ----
+public record BankSummaryDto(
+    int Id, string Title, string Language, string Tags, bool IsPublic,
+    bool Mine, string OwnerName, int TestCount, int SampleCount, DateTime UpdatedAt);
+
+public record BankProblemDto(
+    int Id, string Title, string StatementMarkdown, string Language, string StarterCode,
+    int TimeLimitMs, int MemoryLimitKb, string Tags, bool IsPublic,
+    bool Mine, string OwnerName, DateTime UpdatedAt,
+    List<TestCaseDto> TestCases);   // full set only for the owner; samples only otherwise
+
+public record UpsertBankProblemDto(
+    string Title, string StatementMarkdown, string Language, string StarterCode,
+    int TimeLimitMs, int MemoryLimitKb, string Tags, bool IsPublic,
+    List<UpsertTestCaseDto>? TestCases);   // null => leave test cases untouched
 
 // ---- Submissions ----
 public record SubmitDto(string Code);

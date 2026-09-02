@@ -16,6 +16,8 @@ public class AppDbContext : DbContext
     public DbSet<Post> Posts => Set<Post>();
     public DbSet<PostReaction> PostReactions => Set<PostReaction>();
     public DbSet<PostComment> PostComments => Set<PostComment>();
+    public DbSet<BankProblem> BankProblems => Set<BankProblem>();
+    public DbSet<BankTestCase> BankTestCases => Set<BankTestCase>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -70,6 +72,15 @@ public class AppDbContext : DbContext
         b.Entity<PostReaction>()
             .HasOne(x => x.User).WithMany()
             .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+        b.Entity<BankProblem>().HasIndex(x => x.OwnerId);
+        b.Entity<BankProblem>().HasIndex(x => x.IsPublic);
+        b.Entity<BankProblem>()
+            .HasOne(x => x.Owner).WithMany()
+            .HasForeignKey(x => x.OwnerId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<BankTestCase>()
+            .HasOne(x => x.BankProblem).WithMany(p => p.TestCases)
+            .HasForeignKey(x => x.BankProblemId).OnDelete(DeleteBehavior.Cascade);
 
         b.Entity<PostComment>().HasIndex(x => x.PostId);
         b.Entity<PostComment>()

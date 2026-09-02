@@ -6,6 +6,7 @@ const routes = [
   { path: '/login', component: () => import('./views/Login.vue'), meta: { anon: true } },
   { path: '/register', component: () => import('./views/Register.vue'), meta: { anon: true } },
   { path: '/boards', component: () => import('./views/Dashboard.vue') },
+  { path: '/bank', component: () => import('./views/Bank.vue') },
   { path: '/boards/:slug', component: () => import('./views/Board.vue'), props: true },
   { path: '/boards/:slug/problems/:problemId', component: () => import('./views/Solve.vue'), props: true },
 ];

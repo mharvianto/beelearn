@@ -113,7 +113,62 @@ public class Problem
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>Provenance when this problem was copied in from the bank.</summary>
+    public int? SourceBankProblemId { get; set; }
+
     public List<TestCase> TestCases { get; set; } = new();
+}
+
+/// <summary>
+/// A reusable problem in a teacher's private bank. Adding one to a board COPIES it into
+/// <see cref="Problem"/> — the board copy is independent afterwards.
+/// </summary>
+public class BankProblem
+{
+    public int Id { get; set; }
+
+    public int OwnerId { get; set; }
+    public User? Owner { get; set; }
+
+    [MaxLength(200)]
+    public string Title { get; set; } = "";
+
+    public string StatementMarkdown { get; set; } = "";
+
+    [MaxLength(8)]
+    public string Language { get; set; } = "cpp";
+
+    public string StarterCode { get; set; } = "";
+
+    public int TimeLimitMs { get; set; } = 1000;
+
+    public int MemoryLimitKb { get; set; } = 32_768;
+
+    /// <summary>Comma-separated, lowercase.</summary>
+    [MaxLength(300)]
+    public string Tags { get; set; } = "";
+
+    /// <summary>Other teachers may browse and copy it (hidden tests are never sent to them).</summary>
+    public bool IsPublic { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    public List<BankTestCase> TestCases { get; set; } = new();
+}
+
+public class BankTestCase
+{
+    public int Id { get; set; }
+
+    public int BankProblemId { get; set; }
+    public BankProblem? BankProblem { get; set; }
+
+    public string Stdin { get; set; } = "";
+    public string ExpectedStdout { get; set; } = "";
+    public bool IsSample { get; set; }
+    public int Points { get; set; } = 1;
+    public int Position { get; set; }
 }
 
 public class TestCase
