@@ -6,6 +6,44 @@ namespace BeeLearn.Data;
 
 public static class DbSeeder
 {
+    /// <summary>Curated 20-problem starter bank, owned by the first teacher, shared publicly.</summary>
+    public static async Task SeedBankAsync(AppDbContext db)
+    {
+        if (await db.BankProblems.AnyAsync()) return;
+        var owner = await db.Users.Where(u => u.Role == UserRole.Teacher)
+            .OrderBy(u => u.Id).FirstOrDefaultAsync();
+        if (owner is null) return;
+
+        foreach (var s in BankSeed.Problems)
+        {
+            var b = new BankProblem
+            {
+                OwnerId = owner.Id,
+                Title = s.Title,
+                StatementMarkdown = s.Statement,
+                Language = "cpp",
+                StarterCode = BankSeed.Starter,
+                TimeLimitMs = 1000,
+                MemoryLimitKb = 32_768,
+                Level = s.Level,
+                Tags = s.Tags,
+                IsPublic = true,
+            };
+            int pos = 0;
+            foreach (var (input, output, sample) in s.Tests)
+                b.TestCases.Add(new BankTestCase
+                {
+                    Stdin = input,
+                    ExpectedStdout = output,
+                    IsSample = sample,
+                    Points = sample ? 0 : 1,
+                    Position = pos++,
+                });
+            db.BankProblems.Add(b);
+        }
+        await db.SaveChangesAsync();
+    }
+
     public static async Task SeedAsync(AppDbContext db, PasswordService pw)
     {
         if (await db.Users.AnyAsync()) return;

@@ -57,6 +57,7 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
     await DbSeeder.SeedAsync(db, scope.ServiceProvider.GetRequiredService<PasswordService>());
+    await DbSeeder.SeedBankAsync(db);
 
     // Backfill public slugs for boards created before slugs existed.
     var boardSvc = scope.ServiceProvider.GetRequiredService<BeeLearn.Services.BoardService>();
