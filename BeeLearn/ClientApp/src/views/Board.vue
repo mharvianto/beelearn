@@ -9,13 +9,13 @@ import PadletWall from '../components/PadletWall.vue';
 import ProblemEditor from '../components/ProblemEditor.vue';
 import VerdictBadge from '../components/VerdictBadge.vue';
 
-const props = defineProps({ id: [String, Number] });
+const props = defineProps({ slug: { type: String, required: true } });
 const auth = useAuth();
 const router = useRouter();
 
 const view = ref(localStorage.getItem('beelearn.boardView') || 'wall');
 function setView(v) { view.value = v; localStorage.setItem('beelearn.boardView', v); }
-function openCard({ problemId }) { router.push(`/boards/${props.id}/problems/${problemId}`); }
+function openCard({ problemId }) { router.push(`/boards/${props.slug}/problems/${problemId}`); }
 
 const board = ref(null);
 const problems = ref([]);
@@ -29,12 +29,12 @@ let refreshTimer = null;
 const isStaff = computed(() => board.value && board.value.role !== 'Student');
 
 async function loadAll() {
-  board.value = await api.get(`/api/boards/${props.id}`);
-  problems.value = await api.get(`/api/boards/${props.id}/problems`);
+  board.value = await api.get(`/api/boards/${props.slug}`);
+  problems.value = await api.get(`/api/boards/${props.slug}/problems`);
   await loadProgress();
 }
 async function loadProgress() {
-  progress.value = await api.get(`/api/boards/${props.id}/progress`);
+  progress.value = await api.get(`/api/boards/${props.slug}/progress`);
 }
 const wallSignal = ref(0);
 const drafts = reactive({});   // "problemId:userId" -> { code, updatedAt, authorName }
@@ -45,14 +45,14 @@ function scheduleRefresh() {
 }
 
 async function toggleExam() {
-  board.value = await api.patch(`/api/boards/${props.id}`, { examMode: !progress.value.examMode });
+  board.value = await api.patch(`/api/boards/${props.slug}`, { examMode: !progress.value.examMode });
   await loadProgress();
 }
 async function toggleProtect() {
-  board.value = await api.patch(`/api/boards/${props.id}`, { protectContent: !board.value.protectContent });
+  board.value = await api.patch(`/api/boards/${props.slug}`, { protectContent: !board.value.protectContent });
 }
 async function toggleHide(student) {
-  await api.patch(`/api/boards/${props.id}/members/${student.userId}`, { hiddenByTeacher: !student.hiddenByTeacher });
+  await api.patch(`/api/boards/${props.slug}/members/${student.userId}`, { hiddenByTeacher: !student.hiddenByTeacher });
   await loadProgress();
 }
 
@@ -62,7 +62,7 @@ async function onEditorSaved() { editing.value = null; await loadAll(); }
 async function refreshDrafts() {
   if (!conn || conn.state !== 'Connected') return;
   try {
-    const list = await conn.invoke('GetDrafts', Number(props.id));
+    const list = await conn.invoke('GetDrafts', board.value.id);
     for (const k of Object.keys(drafts)) delete drafts[k];
     for (const d of list || [])
       drafts[`${d.problemId}:${d.userId}`] = { code: d.code, updatedAt: d.updatedAt, authorName: d.authorName };
@@ -77,21 +77,21 @@ onMounted(async () => {
   conn.on('wallChanged', () => { wallSignal.value++; refreshDrafts(); });
   conn.on('memberVisibilityChanged', () => { scheduleRefresh(); refreshDrafts(); });
   conn.on('examModeChanged', async () => { await loadAll(); refreshDrafts(); });
-  conn.on('problemChanged', async () => { problems.value = await api.get(`/api/boards/${props.id}/problems`); scheduleRefresh(); });
+  conn.on('problemChanged', async () => { problems.value = await api.get(`/api/boards/${props.slug}/problems`); scheduleRefresh(); });
   conn.on('presence', (list) => { presence.value = list; });
   conn.on('draftUpdated', (d) => {
     drafts[`${d.problemId}:${d.userId}`] = { code: d.code, updatedAt: d.updatedAt, authorName: d.authorName };
   });
   try {
     await conn.start();
-    await conn.invoke('JoinBoard', Number(props.id));
+    await conn.invoke('JoinBoard', board.value.id);
     await refreshDrafts();
   } catch (e) { /* realtime is best-effort */ }
 });
 
 onBeforeUnmount(async () => {
   clearTimeout(refreshTimer);
-  try { await conn?.invoke('LeaveBoard', Number(props.id)); } catch {}
+  try { await conn?.invoke('LeaveBoard', board.value?.id); } catch {}
   await conn?.stop();
 });
 </script>
@@ -155,7 +155,7 @@ onBeforeUnmount(async () => {
         </div>
         <div class="flex items-center gap-2">
           <button v-if="isStaff" @click="editing = p" class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">edit</button>
-          <RouterLink :to="`/boards/${board.id}/problems/${p.id}`"
+          <RouterLink :to="`/boards/${board.slug}/problems/${p.id}`"
                       class="text-sm bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-3 py-1.5">
             {{ isStaff ? 'View' : 'Solve' }}
           </RouterLink>
@@ -176,7 +176,7 @@ onBeforeUnmount(async () => {
     </div>
 
     <PadletWall v-if="view === 'wall'"
-      :board-id="board.id"
+      :board-slug="board.slug"
       :current-user-id="auth.user?.id"
       :refresh-signal="wallSignal"
       :drafts="drafts" />
@@ -190,7 +190,7 @@ onBeforeUnmount(async () => {
       @toggle-hide="toggleHide" />
 
     <ProblemEditor v-if="editing !== null"
-      :board-id="board.id"
+      :board-slug="board.slug"
       :problem="editing.id ? editing : null"
       @saved="onEditorSaved" @deleted="onEditorSaved" @cancel="editing = null" />
   </div>

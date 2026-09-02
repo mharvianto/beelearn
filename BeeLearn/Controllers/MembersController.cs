@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace BeeLearn.Controllers;
 
 [Authorize]
-[Route("api/boards/{boardId:int}/members")]
+[Route("api/boards/{slug}/members")]
 public class MembersController : ApiControllerBase
 {
     private readonly AppDbContext _db;
@@ -26,14 +26,16 @@ public class MembersController : ApiControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<MemberDto>>> List(int boardId)
+    public async Task<ActionResult<IEnumerable<MemberDto>>> List(string slug)
     {
-        var me = await _boards.GetMembershipAsync(boardId, UserId);
+        var boardId = await _boards.ResolveBoardIdAsync(slug);
+        if (boardId is null) return NotFound();
+        var me = await _boards.GetMembershipAsync(boardId.Value, UserId);
         if (me is null) return Forbid();
         bool staff = _vis.IsStaff(me.Role);
 
         var members = await _db.BoardMemberships
-            .Where(m => m.BoardId == boardId)
+            .Where(m => m.BoardId == boardId.Value)
             .Include(m => m.User)
             .OrderBy(m => m.Role)
             .ThenBy(m => m.User!.DisplayName)
@@ -47,21 +49,21 @@ public class MembersController : ApiControllerBase
 
     /// <summary>Feature 5 (per student): owner hides/shows one student's cells from other students.</summary>
     [HttpPatch("{userId:int}")]
-    public async Task<ActionResult<MemberDto>> Update(int boardId, int userId, UpdateMemberDto dto)
+    public async Task<ActionResult<MemberDto>> Update(string slug, int userId, UpdateMemberDto dto)
     {
-        var board = await _db.Boards.FindAsync(boardId);
+        var board = await _db.Boards.FirstOrDefaultAsync(b => b.Slug == slug);
         if (board is null) return NotFound();
         if (board.OwnerId != UserId) return Forbid();
 
         var target = await _db.BoardMemberships
             .Include(m => m.User)
-            .FirstOrDefaultAsync(m => m.BoardId == boardId && m.UserId == userId);
+            .FirstOrDefaultAsync(m => m.BoardId == board.Id && m.UserId == userId);
         if (target is null) return NotFound();
         if (target.Role != MembershipRole.Student) return BadRequest("Only students can be hidden.");
 
         target.HiddenByTeacher = dto.HiddenByTeacher;
         await _db.SaveChangesAsync();
-        await _notifier.MemberVisibilityChangedAsync(boardId, userId, dto.HiddenByTeacher);
+        await _notifier.MemberVisibilityChangedAsync(board.Id, userId, dto.HiddenByTeacher);
 
         return new MemberDto(target.UserId, target.User!.DisplayName, target.Role.ToString(), target.HiddenByTeacher);
     }

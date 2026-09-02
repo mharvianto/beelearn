@@ -51,6 +51,7 @@ public class BoardsController : ApiControllerBase
             Title = dto.Title.Trim(),
             OwnerId = UserId,
             JoinCode = await _boards.GenerateJoinCodeAsync(),
+            Slug = await _boards.GenerateSlugAsync(),
         };
         _db.Boards.Add(board);
         _db.BoardMemberships.Add(new BoardMembership
@@ -84,24 +85,25 @@ public class BoardsController : ApiControllerBase
         return ToDto(board, role);
     }
 
-    [HttpGet("{id:int}")]
-    public async Task<ActionResult<BoardDto>> Get(int id)
+    [HttpGet("{slug}")]
+    public async Task<ActionResult<BoardDto>> Get(string slug)
     {
-        var membership = await _boards.GetMembershipAsync(id, UserId);
-        if (membership is null) return Forbid();
-
         var board = await _db.Boards
             .Include(b => b.Members)
             .Include(b => b.Problems)
-            .FirstAsync(b => b.Id == id);
+            .FirstOrDefaultAsync(b => b.Slug == slug);
+        if (board is null) return NotFound();
+
+        var membership = board.Members.FirstOrDefault(m => m.UserId == UserId);
+        if (membership is null) return Forbid();
         return ToDto(board, membership.Role);
     }
 
-    [HttpPatch("{id:int}")]
-    public async Task<ActionResult<BoardDto>> Update(int id, UpdateBoardDto dto)
+    [HttpPatch("{slug}")]
+    public async Task<ActionResult<BoardDto>> Update(string slug, UpdateBoardDto dto)
     {
         var board = await _db.Boards.Include(b => b.Members).Include(b => b.Problems)
-            .FirstOrDefaultAsync(b => b.Id == id);
+            .FirstOrDefaultAsync(b => b.Slug == slug);
         if (board is null) return NotFound();
         if (board.OwnerId != UserId) return Forbid();
 
@@ -113,15 +115,17 @@ public class BoardsController : ApiControllerBase
         return ToDto(board, MembershipRole.Owner);
     }
 
-    [HttpGet("{id:int}/progress")]
-    public async Task<ActionResult<ProgressBoardDto>> Progress(int id)
+    [HttpGet("{slug}/progress")]
+    public async Task<ActionResult<ProgressBoardDto>> Progress(string slug)
     {
-        var progress = await _boards.BuildProgressAsync(id, UserId);
+        var boardId = await _boards.ResolveBoardIdAsync(slug);
+        if (boardId is null) return NotFound();
+        var progress = await _boards.BuildProgressAsync(boardId.Value, UserId);
         return progress is null ? Forbid() : progress;
     }
 
     private BoardDto ToDto(Board b, MembershipRole role) => new(
-        b.Id, b.Title, b.JoinCode, b.ExamMode, b.ProtectContent,
+        b.Id, b.Slug, b.Title, b.JoinCode, b.ExamMode, b.ProtectContent,
         b.OwnerId == UserId, role.ToString(),
         b.Members?.Count(m => m.Role == MembershipRole.Student) ?? 0,
         b.Problems?.Count ?? 0);

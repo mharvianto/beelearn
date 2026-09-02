@@ -22,6 +22,7 @@ public class AppDbContext : DbContext
         b.Entity<User>().HasIndex(u => u.Email).IsUnique();
 
         b.Entity<Board>().HasIndex(x => x.JoinCode).IsUnique();
+        b.Entity<Board>().HasIndex(x => x.Slug).IsUnique();
         b.Entity<Board>()
             .HasOne(x => x.Owner).WithMany()
             .HasForeignKey(x => x.OwnerId).OnDelete(DeleteBehavior.Restrict);

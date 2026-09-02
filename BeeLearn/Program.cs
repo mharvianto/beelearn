@@ -58,6 +58,12 @@ using (var scope = app.Services.CreateScope())
     await db.Database.MigrateAsync();
     await DbSeeder.SeedAsync(db, scope.ServiceProvider.GetRequiredService<PasswordService>());
 
+    // Backfill public slugs for boards created before slugs existed.
+    var boardSvc = scope.ServiceProvider.GetRequiredService<BeeLearn.Services.BoardService>();
+    var slugless = await db.Boards.Where(b => b.Slug == null || b.Slug == "").ToListAsync();
+    foreach (var b in slugless) b.Slug = await boardSvc.GenerateSlugAsync();
+    if (slugless.Count > 0) await db.SaveChangesAsync();
+
     // Backfill wall posts for submissions made before the wall existed.
     var missing = await db.Submissions
         .Select(s => new { s.UserId, s.ProblemId })

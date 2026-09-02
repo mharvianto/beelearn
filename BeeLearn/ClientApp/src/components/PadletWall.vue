@@ -5,7 +5,7 @@ import { api } from '../lib/api';
 import VerdictBadge from './VerdictBadge.vue';
 
 const props = defineProps({
-  boardId: { type: [String, Number], required: true },
+  boardSlug: { type: String, required: true },
   currentUserId: Number,
   refreshSignal: { type: Number, default: 0 },
   drafts: { type: Object, default: () => ({}) },   // "problemId:userId" -> { code, updatedAt, authorName }
@@ -23,7 +23,7 @@ const EMOJIS = ['👍', '⭐', '🎉', '🔥', '👀'];
 
 async function load() {
   try {
-    wall.value = await api.get(`/api/boards/${props.boardId}/wall`);
+    wall.value = await api.get(`/api/boards/${props.boardSlug}/wall`);
     if (!activeProblem.value && wall.value.problems.length)
       activeProblem.value = wall.value.problems[0].id;
   } catch (e) { error.value = e.message; }
@@ -122,7 +122,7 @@ async function delComment(post, c) {
 }
 
 function openPost(post) {
-  router.push(`/boards/${props.boardId}/problems/${post.problemId}`);
+  router.push(`/boards/${props.boardSlug}/problems/${post.problemId}`);
 }
 
 async function toggleHiddenByStudent(post) {

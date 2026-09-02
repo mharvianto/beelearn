@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace BeeLearn.Controllers;
 
 [Authorize]
-[Route("api/boards/{boardId:int}/problems")]
+[Route("api/boards/{slug}/problems")]
 public class ProblemsController : ApiControllerBase
 {
     private readonly AppDbContext _db;
@@ -26,13 +26,15 @@ public class ProblemsController : ApiControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<object>> List(int boardId)
+    public async Task<ActionResult<object>> List(string slug)
     {
-        var me = await _boards.GetMembershipAsync(boardId, UserId);
+        var boardId = await _boards.ResolveBoardIdAsync(slug);
+        if (boardId is null) return NotFound();
+        var me = await _boards.GetMembershipAsync(boardId.Value, UserId);
         if (me is null) return Forbid();
 
         var problems = await _db.Problems
-            .Where(p => p.BoardId == boardId)
+            .Where(p => p.BoardId == boardId.Value)
             .Include(p => p.TestCases)
             .OrderBy(p => p.Position).ThenBy(p => p.Id)
             .ToListAsync();
@@ -43,43 +45,45 @@ public class ProblemsController : ApiControllerBase
     }
 
     [HttpGet("{problemId:int}")]
-    public async Task<ActionResult<object>> Get(int boardId, int problemId)
+    public async Task<ActionResult<object>> Get(string slug, int problemId)
     {
-        var me = await _boards.GetMembershipAsync(boardId, UserId);
+        var boardId = await _boards.ResolveBoardIdAsync(slug);
+        if (boardId is null) return NotFound();
+        var me = await _boards.GetMembershipAsync(boardId.Value, UserId);
         if (me is null) return Forbid();
 
         var p = await _db.Problems
             .Include(x => x.TestCases)
-            .FirstOrDefaultAsync(x => x.Id == problemId && x.BoardId == boardId);
+            .FirstOrDefaultAsync(x => x.Id == problemId && x.BoardId == boardId.Value);
         if (p is null) return NotFound();
 
         return _vis.IsStaff(me.Role) ? Mapping.ToOwnerDto(p) : Mapping.ToStudentDto(p);
     }
 
     [HttpPost]
-    public async Task<ActionResult<ProblemDto>> Create(int boardId, UpsertProblemDto dto)
+    public async Task<ActionResult<ProblemDto>> Create(string slug, UpsertProblemDto dto)
     {
-        var owned = await RequireOwnerAsync(boardId);
-        if (owned is not null) return owned;
+        var (boardId, err) = await RequireOwnerAsync(slug);
+        if (err is not null) return err;
 
-        var p = new Problem { BoardId = boardId };
+        var p = new Problem { BoardId = boardId!.Value };
         Apply(p, dto);
         _db.Problems.Add(p);
         await _db.SaveChangesAsync();
-        await _notifier.ProblemChangedAsync(boardId);
+        await _notifier.ProblemChangedAsync(boardId.Value);
 
         return Mapping.ToOwnerDto(p);
     }
 
     [HttpPut("{problemId:int}")]
-    public async Task<ActionResult<ProblemDto>> Update(int boardId, int problemId, UpsertProblemDto dto)
+    public async Task<ActionResult<ProblemDto>> Update(string slug, int problemId, UpsertProblemDto dto)
     {
-        var owned = await RequireOwnerAsync(boardId);
-        if (owned is not null) return owned;
+        var (boardId, err) = await RequireOwnerAsync(slug);
+        if (err is not null) return err;
 
         var p = await _db.Problems
             .Include(x => x.TestCases)
-            .FirstOrDefaultAsync(x => x.Id == problemId && x.BoardId == boardId);
+            .FirstOrDefaultAsync(x => x.Id == problemId && x.BoardId == boardId!.Value);
         if (p is null) return NotFound();
 
         Apply(p, dto);
@@ -88,24 +92,24 @@ public class ProblemsController : ApiControllerBase
         _db.TestCases.RemoveRange(p.TestCases.Where(t => !keepIds.Contains(t.Id)));
 
         await _db.SaveChangesAsync();
-        await _notifier.ProblemChangedAsync(boardId);
+        await _notifier.ProblemChangedAsync(boardId!.Value);
 
         var fresh = await _db.Problems.Include(x => x.TestCases).FirstAsync(x => x.Id == problemId);
         return Mapping.ToOwnerDto(fresh);
     }
 
     [HttpDelete("{problemId:int}")]
-    public async Task<IActionResult> Delete(int boardId, int problemId)
+    public async Task<IActionResult> Delete(string slug, int problemId)
     {
-        var owned = await RequireOwnerAsync(boardId);
-        if (owned is not null) return owned;
+        var (boardId, err) = await RequireOwnerAsync(slug);
+        if (err is not null) return err;
 
-        var p = await _db.Problems.FirstOrDefaultAsync(x => x.Id == problemId && x.BoardId == boardId);
+        var p = await _db.Problems.FirstOrDefaultAsync(x => x.Id == problemId && x.BoardId == boardId!.Value);
         if (p is null) return NotFound();
 
         _db.Problems.Remove(p);
         await _db.SaveChangesAsync();
-        await _notifier.ProblemChangedAsync(boardId);
+        await _notifier.ProblemChangedAsync(boardId!.Value);
         return NoContent();
     }
 
@@ -135,11 +139,11 @@ public class ProblemsController : ApiControllerBase
         }
     }
 
-    private async Task<ActionResult?> RequireOwnerAsync(int boardId)
+    private async Task<(int? boardId, ActionResult? error)> RequireOwnerAsync(string slug)
     {
-        var board = await _db.Boards.FindAsync(boardId);
-        if (board is null) return NotFound();
-        if (board.OwnerId != UserId) return Forbid();
-        return null;
+        var board = await _db.Boards.FirstOrDefaultAsync(b => b.Slug == slug);
+        if (board is null) return (null, NotFound());
+        if (board.OwnerId != UserId) return (null, Forbid());
+        return (board.Id, null);
     }
 }

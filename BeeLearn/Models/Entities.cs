@@ -45,8 +45,13 @@ public class Board
     [MaxLength(160)]
     public string Title { get; set; } = "";
 
+    /// <summary>Human-typed code to join the board (short, rotatable).</summary>
     [MaxLength(12)]
     public string JoinCode { get; set; } = "";
+
+    /// <summary>Unguessable public identifier used in URLs (the int Id stays internal).</summary>
+    [MaxLength(24)]
+    public string Slug { get; set; } = "";
 
     public int OwnerId { get; set; }
     public User? Owner { get; set; }

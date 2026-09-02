@@ -20,7 +20,7 @@ public static class DbSeeder
         db.Users.Add(teacher);
         await db.SaveChangesAsync();
 
-        var board = new Board { Title = "Demo Board", OwnerId = teacher.Id, JoinCode = "DEMO01" };
+        var board = new Board { Title = "Demo Board", OwnerId = teacher.Id, JoinCode = "DEMO01", Slug = "demo-board" };
         db.Boards.Add(board);
         db.BoardMemberships.Add(new BoardMembership
         {

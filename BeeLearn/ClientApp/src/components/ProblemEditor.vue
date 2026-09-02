@@ -3,7 +3,7 @@ import { ref, watch } from 'vue';
 import { api } from '../lib/api';
 import MonacoEditor from './MonacoEditor.vue';
 
-const props = defineProps({ boardId: [String, Number], problem: Object });
+const props = defineProps({ boardSlug: String, problem: Object });
 const emit = defineEmits(['saved', 'cancel', 'deleted']);
 
 const blank = () => ({
@@ -26,14 +26,14 @@ async function save() {
   error.value = '';
   try {
     const body = { ...form.value };
-    if (props.problem?.id) await api.put(`/api/boards/${props.boardId}/problems/${props.problem.id}`, body);
-    else await api.post(`/api/boards/${props.boardId}/problems`, body);
+    if (props.problem?.id) await api.put(`/api/boards/${props.boardSlug}/problems/${props.problem.id}`, body);
+    else await api.post(`/api/boards/${props.boardSlug}/problems`, body);
     emit('saved');
   } catch (e) { error.value = e.message; }
 }
 async function del() {
   if (!props.problem?.id || !confirm('Delete this problem?')) return;
-  await api.del(`/api/boards/${props.boardId}/problems/${props.problem.id}`);
+  await api.del(`/api/boards/${props.boardSlug}/problems/${props.problem.id}`);
   emit('deleted');
 }
 </script>

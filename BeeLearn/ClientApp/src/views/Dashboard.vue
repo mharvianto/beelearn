@@ -59,7 +59,7 @@ async function join() {
     <p v-if="error" class="text-sm text-red-600 dark:text-red-400 mb-4">{{ error }}</p>
 
     <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <RouterLink v-for="b in boards" :key="b.id" :to="`/boards/${b.id}`"
+      <RouterLink v-for="b in boards" :key="b.id" :to="`/boards/${b.slug}`"
                   class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:border-amber-400 dark:hover:border-amber-500 transition">
         <div class="flex items-center justify-between">
           <h3 class="font-semibold">{{ b.title }}</h3>

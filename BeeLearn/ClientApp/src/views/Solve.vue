@@ -9,7 +9,7 @@ import VerdictBadge from '../components/VerdictBadge.vue';
 import ContentGuard from '../components/ContentGuard.vue';
 import StatementImage from '../components/StatementImage.vue';
 
-const props = defineProps({ id: [String, Number], problemId: [String, Number] });
+const props = defineProps({ slug: { type: String, required: true }, problemId: [String, Number] });
 const auth = useAuth();
 
 const board = ref(null);
@@ -31,8 +31,8 @@ const mine = computed(() => submissions.value.filter((s) => s.mine));
 const latestMine = computed(() => mine.value[0]);
 
 async function load() {
-  board.value = await api.get(`/api/boards/${props.id}`);
-  problem.value = await api.get(`/api/boards/${props.id}/problems/${props.problemId}`);
+  board.value = await api.get(`/api/boards/${props.slug}`);
+  problem.value = await api.get(`/api/boards/${props.slug}/problems/${props.problemId}`);
   code.value = problem.value.starterCode || '';
   if (problem.value.sampleTests?.[0]) stdin.value = problem.value.sampleTests[0].stdin;
   await loadSubs();
@@ -72,7 +72,7 @@ function pushDraftSoon() {
   if (!conn || conn.state !== 'Connected' || !isStudent()) return;
   clearTimeout(draftTimer);
   draftTimer = setTimeout(() => {
-    conn.invoke('PushDraft', Number(props.id), Number(props.problemId), code.value).catch(() => {});
+    conn.invoke('PushDraft', board.value.id, Number(props.problemId), code.value).catch(() => {});
   }, 900);
 }
 watch(code, pushDraftSoon);
@@ -90,8 +90,8 @@ onMounted(async () => {
   });
   try {
     await conn.start();
-    await conn.invoke('JoinBoard', Number(props.id));
-    if (isStudent()) conn.invoke('PushDraft', Number(props.id), Number(props.problemId), code.value).catch(() => {});
+    await conn.invoke('JoinBoard', board.value.id);
+    if (isStudent()) conn.invoke('PushDraft', board.value.id, Number(props.problemId), code.value).catch(() => {});
   } catch {}
 });
 onBeforeUnmount(async () => {
@@ -104,7 +104,7 @@ onBeforeUnmount(async () => {
   <div v-if="problem" class="h-full grid lg:grid-cols-2 gap-0">
     <!-- Left: statement + submissions -->
     <div class="p-5 overflow-y-auto border-r border-slate-200 dark:border-slate-800">
-      <RouterLink :to="`/boards/${props.id}`" class="text-sm text-slate-400 dark:text-slate-500">&larr; back to board</RouterLink>
+      <RouterLink :to="`/boards/${props.slug}`" class="text-sm text-slate-400 dark:text-slate-500">&larr; back to board</RouterLink>
       <h1 class="text-lg font-bold mt-2 mb-3">{{ problem.title }}</h1>
       <div class="text-xs text-slate-400 dark:text-slate-500 mb-3">
         {{ problem.language.toUpperCase() }} · limit {{ problem.timeLimitMs }} ms · {{ problem.memoryLimitKb }} KB

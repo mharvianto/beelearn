@@ -17,19 +17,36 @@ public class BoardService
 
     private static readonly char[] CodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".ToCharArray();
 
+    private string RandomCode(int len) =>
+        string.Concat(Enumerable.Range(0, len).Select(_ => CodeAlphabet[Random.Shared.Next(CodeAlphabet.Length)]));
+
     public async Task<string> GenerateJoinCodeAsync()
     {
         for (var attempt = 0; attempt < 20; attempt++)
         {
-            var code = string.Concat(Enumerable.Range(0, 6)
-                .Select(_ => CodeAlphabet[Random.Shared.Next(CodeAlphabet.Length)]));
+            var code = RandomCode(6);
             if (!await _db.Boards.AnyAsync(b => b.JoinCode == code)) return code;
         }
         throw new InvalidOperationException("could not allocate a unique join code");
     }
 
+    /// <summary>Unguessable public id for URLs (~61 bits).</summary>
+    public async Task<string> GenerateSlugAsync()
+    {
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            var slug = RandomCode(12);
+            if (!await _db.Boards.AnyAsync(b => b.Slug == slug)) return slug;
+        }
+        throw new InvalidOperationException("could not allocate a unique slug");
+    }
+
     public Task<BoardMembership?> GetMembershipAsync(int boardId, int userId) =>
         _db.BoardMemberships.FirstOrDefaultAsync(m => m.BoardId == boardId && m.UserId == userId);
+
+    /// <summary>Resolve a public slug to the internal board id, or null if unknown.</summary>
+    public async Task<int?> ResolveBoardIdAsync(string slug) =>
+        await _db.Boards.Where(b => b.Slug == slug).Select(b => (int?)b.Id).FirstOrDefaultAsync();
 
     public async Task<ProgressBoardDto?> BuildProgressAsync(int boardId, int viewerUserId)
     {

@@ -16,19 +16,24 @@ public class WallController : ApiControllerBase
     private readonly WallService _wall;
     private readonly VisibilityService _vis;
     private readonly IBoardNotifier _notifier;
+    private readonly BoardService _boards;
 
-    public WallController(AppDbContext db, WallService wall, VisibilityService vis, IBoardNotifier notifier)
+    public WallController(AppDbContext db, WallService wall, VisibilityService vis,
+        IBoardNotifier notifier, BoardService boards)
     {
         _db = db;
         _wall = wall;
         _vis = vis;
         _notifier = notifier;
+        _boards = boards;
     }
 
-    [HttpGet("api/boards/{boardId:int}/wall")]
-    public async Task<ActionResult<WallDto>> Get(int boardId)
+    [HttpGet("api/boards/{slug}/wall")]
+    public async Task<ActionResult<WallDto>> Get(string slug)
     {
-        var wall = await _wall.BuildWallAsync(boardId, UserId);
+        var boardId = await _boards.ResolveBoardIdAsync(slug);
+        if (boardId is null) return NotFound();
+        var wall = await _wall.BuildWallAsync(boardId.Value, UserId);
         return wall is null ? Forbid() : wall;
     }
 
