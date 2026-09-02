@@ -141,17 +141,27 @@ public class StatementImageService
     private void StampWatermark(SKCanvas canvas, int w, int h, string text, bool dark)
     {
         if (string.IsNullOrWhiteSpace(text)) return;
-        using var font = new SKFont(_regular, 13);
+        using var font = new SKFont(_regular, 12.5f);
         using var paint = new SKPaint
         {
-            Color = (dark ? SKColors.White : SKColors.Black).WithAlpha(30),
+            Color = (dark ? SKColors.White : SKColors.Black).WithAlpha(24),
             IsAntialias = true,
         };
+
+        // Space the tiles by the real text width so instances never overlap into a smear.
+        float textW = font.MeasureText(text);
+        float stepX = textW + 100f;
+        float stepY = 116f;
+
         canvas.Save();
-        canvas.RotateDegrees(-24, w / 2f, h / 2f);
-        for (float y = -h; y < h * 2; y += 120)
-        for (float x = -w; x < w * 2; x += 300)
-            canvas.DrawText(text, x, y, font, paint);
+        canvas.RotateDegrees(-22, w / 2f, h / 2f);
+        int row = 0;
+        for (float y = -h; y < h * 2f; y += stepY, row++)
+        {
+            float brick = (row & 1) * (stepX / 2f);   // stagger alternate rows
+            for (float x = -w - stepX; x < w * 2f; x += stepX)
+                canvas.DrawText(text, x + brick, y, font, paint);
+        }
         canvas.Restore();
     }
 
