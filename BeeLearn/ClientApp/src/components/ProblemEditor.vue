@@ -1,9 +1,10 @@
 <script setup>
 import { ref, watch } from 'vue';
+import { api } from '../lib/api';
+import MonacoEditor from './MonacoEditor.vue';
 
 const props = defineProps({ boardId: [String, Number], problem: Object });
 const emit = defineEmits(['saved', 'cancel', 'deleted']);
-import { api } from '../lib/api';
 
 const blank = () => ({
   title: '', statementMarkdown: '', language: 'cpp', starterCode: '',
@@ -61,8 +62,12 @@ async function del() {
             <input v-model.number="form.position" type="number" class="w-16 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1" />
           </label>
         </div>
-        <textarea v-model="form.starterCode" placeholder="Starter code" rows="3"
-                  class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-2 font-mono text-sm"></textarea>
+        <div>
+          <label class="text-xs text-slate-400 dark:text-slate-500">Starter code</label>
+          <div class="h-52 border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden mt-1">
+            <MonacoEditor v-model="form.starterCode" :language="form.language === 'c' ? 'c' : 'cpp'" />
+          </div>
+        </div>
 
         <div>
           <div class="flex items-center justify-between mb-1">
