@@ -64,17 +64,47 @@ public class BoardHub : Hub
 
         var name = Context.User!.FindFirstValue(ClaimTypes.Name) ?? "user";
         var draft = _drafts.Set(boardId, problemId, UserId, name, code ?? "");
+
+        // Staff always see live code; peers see it too unless exam mode / teacher-hidden /
+        // the student hid this problem's work. (Staff are in BoardGroup, so in the visible
+        // case they just receive the event twice — the client handler is idempotent.)
         await Clients.Group(StaffGroup(boardId)).SendAsync("draftUpdated", draft);
+        if (await DraftVisibleToPeersAsync(boardId, problemId, membership))
+            await Clients.Group(BoardGroup(boardId)).SendAsync("draftUpdated", draft);
     }
 
-    /// <summary>Staff pulls the current draft snapshot for a board (e.g. on load).</summary>
+    private async Task<bool> DraftVisibleToPeersAsync(int boardId, int problemId, BoardMembership me)
+    {
+        var examMode = await _db.Boards.Where(b => b.Id == boardId).Select(b => b.ExamMode).FirstAsync();
+        var hiddenByStudent = await _db.Posts
+            .Where(p => p.ProblemId == problemId && p.UserId == UserId)
+            .Select(p => (bool?)p.HiddenByStudent).FirstOrDefaultAsync() ?? false;
+        return Services.WallService.PeerCanSee(examMode, me.HiddenByTeacher, hiddenByStudent);
+    }
+
+    /// <summary>Current draft snapshot: full for staff, peer-visible-only for students.</summary>
     public async Task<IEnumerable<Draft>> GetDrafts(int boardId)
     {
-        var membership = await _db.BoardMemberships
+        var me = await _db.BoardMemberships
+            .Include(m => m.Board)
             .FirstOrDefaultAsync(m => m.BoardId == boardId && m.UserId == UserId);
-        if (membership is null || membership.Role is MembershipRole.Student)
-            return Enumerable.Empty<Draft>();
-        return _drafts.ForBoard(boardId);
+        if (me is null) return Enumerable.Empty<Draft>();
+        if (me.Role is MembershipRole.Owner or MembershipRole.Teacher)
+            return _drafts.ForBoard(boardId);
+
+        if (me.Board!.ExamMode) return Enumerable.Empty<Draft>();
+        var hiddenUserIds = await _db.BoardMemberships
+            .Where(m => m.BoardId == boardId && m.HiddenByTeacher)
+            .Select(m => m.UserId).ToListAsync();
+        var hiddenPosts = await _db.Posts
+            .Where(p => p.BoardId == boardId && p.HiddenByStudent)
+            .Select(p => new { p.ProblemId, p.UserId }).ToListAsync();
+        var hiddenPostSet = hiddenPosts.Select(p => (p.ProblemId, p.UserId)).ToHashSet();
+
+        return _drafts.ForBoard(boardId)
+            .Where(d => d.UserId != UserId
+                        && !hiddenUserIds.Contains(d.UserId)
+                        && !hiddenPostSet.Contains((d.ProblemId, d.UserId)));
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)

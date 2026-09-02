@@ -58,14 +58,25 @@ async function toggleHide(student) {
 
 async function onEditorSaved() { editing.value = null; await loadAll(); }
 
+// Authoritative live-draft snapshot (server filters by visibility for students).
+async function refreshDrafts() {
+  if (!conn || conn.state !== 'Connected') return;
+  try {
+    const list = await conn.invoke('GetDrafts', Number(props.id));
+    for (const k of Object.keys(drafts)) delete drafts[k];
+    for (const d of list || [])
+      drafts[`${d.problemId}:${d.userId}`] = { code: d.code, updatedAt: d.updatedAt, authorName: d.authorName };
+  } catch { /* ignore */ }
+}
+
 onMounted(async () => {
   try { await loadAll(); } catch (e) { error.value = e.message; return; }
 
   conn = createBoardConnection();
   conn.on('progressChanged', scheduleRefresh);
-  conn.on('wallChanged', () => { wallSignal.value++; });
-  conn.on('memberVisibilityChanged', scheduleRefresh);
-  conn.on('examModeChanged', async () => { await loadAll(); });
+  conn.on('wallChanged', () => { wallSignal.value++; refreshDrafts(); });
+  conn.on('memberVisibilityChanged', () => { scheduleRefresh(); refreshDrafts(); });
+  conn.on('examModeChanged', async () => { await loadAll(); refreshDrafts(); });
   conn.on('problemChanged', async () => { problems.value = await api.get(`/api/boards/${props.id}/problems`); scheduleRefresh(); });
   conn.on('presence', (list) => { presence.value = list; });
   conn.on('draftUpdated', (d) => {
@@ -74,11 +85,7 @@ onMounted(async () => {
   try {
     await conn.start();
     await conn.invoke('JoinBoard', Number(props.id));
-    if (isStaff.value) {
-      const list = await conn.invoke('GetDrafts', Number(props.id));
-      for (const d of list || [])
-        drafts[`${d.problemId}:${d.userId}`] = { code: d.code, updatedAt: d.updatedAt, authorName: d.authorName };
-    }
+    await refreshDrafts();
   } catch (e) { /* realtime is best-effort */ }
 });
 

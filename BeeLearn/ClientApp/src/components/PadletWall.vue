@@ -50,7 +50,7 @@ const visiblePosts = computed(() => {
 
 function draftFor(post) {
   const d = props.drafts[`${post.problemId}:${post.userId}`];
-  if (!d || post.mine) return null;   // no need to show a student their own live buffer
+  if (!d || post.mine || post.redacted) return null;
   return d;
 }
 function truncate(code, n = 14) {
@@ -124,6 +124,13 @@ async function delComment(post, c) {
 function openPost(post) {
   router.push(`/boards/${props.boardId}/problems/${post.problemId}`);
 }
+
+async function toggleHiddenByStudent(post) {
+  try {
+    await api.patch(`/api/posts/${post.postId}/visibility`, { hiddenByStudent: !post.hiddenByStudent });
+    post.hiddenByStudent = !post.hiddenByStudent;
+  } catch (e) { error.value = e.message; }
+}
 </script>
 
 <template>
@@ -167,8 +174,16 @@ function openPost(post) {
               <span v-else>{{ ago(post.updatedAt) }} ago</span>
             </div>
           </div>
-          <VerdictBadge v-if="!post.redacted && post.verdict !== 'None'" :verdict="post.verdict" small class="ml-auto" />
-          <span v-else-if="draftFor(post)" class="ml-auto text-[10px] bg-amber-200 text-amber-800 dark:bg-amber-500/25 dark:text-amber-200 rounded px-1.5 py-0.5 font-semibold">LIVE</span>
+          <button v-if="post.mine && post.postId" @click="toggleHiddenByStudent(post)"
+                  class="ml-auto text-[10px] px-1.5 py-0.5 rounded border shrink-0"
+                  :class="post.hiddenByStudent
+                    ? 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-500/15 dark:text-purple-300 dark:border-purple-500/30'
+                    : 'text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 hover:border-slate-400'">
+            {{ post.hiddenByStudent ? '🔒 hidden from peers' : 'visible to peers' }}
+          </button>
+          <VerdictBadge v-if="!post.redacted && post.verdict !== 'None'" :verdict="post.verdict" small
+                        :class="post.mine && post.postId ? 'ml-1' : 'ml-auto'" />
+          <span v-else-if="draftFor(post)" class="ml-1 text-[10px] bg-amber-200 text-amber-800 dark:bg-amber-500/25 dark:text-amber-200 rounded px-1.5 py-0.5 font-semibold">LIVE</span>
         </div>
 
         <div v-if="post.redacted" class="px-4 py-4 text-sm text-slate-400 dark:text-slate-500">

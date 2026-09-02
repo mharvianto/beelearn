@@ -80,6 +80,7 @@ public record WallPostDto(
     string Note,
     bool Mine,
     bool Redacted,            // peer post hidden -> show only that it exists
+    bool HiddenByStudent,     // author's own "hide from peers" state (for the toggle)
     string Verdict,           // "None" if not yet judged / no submission
     double Score,
     int Attempts,

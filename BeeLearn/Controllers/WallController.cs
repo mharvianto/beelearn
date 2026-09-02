@@ -50,7 +50,7 @@ public class WallController : ApiControllerBase
             await _db.SaveChangesAsync();
             await _notifier.WallChangedAsync(problem.BoardId);
         }
-        return new { postId = post.Id };
+        return new { postId = post.Id, hiddenByStudent = post.HiddenByStudent };
     }
 
     [HttpPut("api/posts/{postId:int}/note")]
@@ -68,16 +68,35 @@ public class WallController : ApiControllerBase
         return NoContent();
     }
 
+    /// <summary>Author hides/shows this problem's work (live draft + card) from peers.</summary>
+    [HttpPatch("api/posts/{postId:int}/visibility")]
+    public async Task<IActionResult> SetVisibility(int postId, UpdateSubmissionDto dto)
+    {
+        var post = await _db.Posts.FirstOrDefaultAsync(p => p.Id == postId);
+        if (post is null) return NotFound();
+        if (post.UserId != UserId) return Forbid();
+
+        post.HiddenByStudent = dto.HiddenByStudent;
+        post.UpdatedAt = DateTime.UtcNow;
+        // keep submissions in sync so the submissions list & older checks agree
+        await _db.Submissions
+            .Where(s => s.ProblemId == post.ProblemId && s.UserId == post.UserId)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.HiddenByStudent, dto.HiddenByStudent));
+        await _db.SaveChangesAsync();
+        await _notifier.WallChangedAsync(post.BoardId);
+        return NoContent();
+    }
+
     [HttpPost("api/posts/{postId:int}/reactions")]
     public async Task<ActionResult<IEnumerable<ReactionDto>>> React(int postId, ReactDto dto)
     {
         var emoji = dto.Emoji ?? "";
         if (!WallService.AllowedEmojis.Contains(emoji)) return BadRequest("Unsupported reaction.");
 
-        var (post, board, viewer, author, latest) = await _wall.LoadPostContextAsync(postId, UserId);
+        var (post, board, viewer, author, _) = await _wall.LoadPostContextAsync(postId, UserId);
         if (post is null || board is null || viewer is null || author is null) return NotFound();
         bool staff = _vis.IsStaff(viewer.Role);
-        if (!_wall.CanViewPost(board, UserId, staff, author, latest)) return Forbid();
+        if (!_wall.CanViewPost(board, UserId, staff, author, post)) return Forbid();
 
         var existing = await _db.PostReactions
             .FirstOrDefaultAsync(r => r.PostId == postId && r.UserId == UserId && r.Emoji == emoji);
@@ -103,10 +122,10 @@ public class WallController : ApiControllerBase
         if (body.Length == 0) return BadRequest("Comment is empty.");
         if (body.Length > 2000) body = body[..2000];
 
-        var (post, board, viewer, author, latest) = await _wall.LoadPostContextAsync(postId, UserId);
+        var (post, board, viewer, author, _) = await _wall.LoadPostContextAsync(postId, UserId);
         if (post is null || board is null || viewer is null || author is null) return NotFound();
         bool staff = _vis.IsStaff(viewer.Role);
-        if (!_wall.CanViewPost(board, UserId, staff, author, latest)) return Forbid();
+        if (!_wall.CanViewPost(board, UserId, staff, author, post)) return Forbid();
 
         var c = new PostComment { PostId = postId, UserId = UserId, Body = body };
         _db.PostComments.Add(c);

@@ -46,12 +46,14 @@ public class WallService
         return (post, board, viewer, author, latest);
     }
 
-    public bool CanViewPost(Board board, int viewerUserId, bool viewerIsStaff, BoardMembership author, Submission? latest)
+    /// <summary>Whether a peer (non-staff, non-author) may see a student's work for a problem.</summary>
+    public static bool PeerCanSee(bool examMode, bool hiddenByTeacher, bool hiddenByStudent) =>
+        !examMode && !hiddenByTeacher && !hiddenByStudent;
+
+    public bool CanViewPost(Board board, int viewerUserId, bool viewerIsStaff, BoardMembership author, Post post)
     {
         if (viewerIsStaff || author.UserId == viewerUserId) return true;
-        if (!_vis.CanSeePeerRow(viewerUserId, viewerIsStaff, board, author)) return false;
-        if (latest is null) return true;
-        return _vis.CanSeePeerSubmission(viewerUserId, viewerIsStaff, board, author, latest);
+        return PeerCanSee(board.ExamMode, author.HiddenByTeacher, post.HiddenByStudent);
     }
 
     public async Task<WallDto?> BuildWallAsync(int boardId, int viewerUserId)
@@ -100,11 +102,12 @@ public class WallService
             latestByKey.TryGetValue((post.UserId, post.ProblemId), out var agg);
             var latest = agg?.Latest;
 
-            if (!_vis.CanSeePeerRow(viewerUserId, staff, board, author) && author.UserId != viewerUserId)
-                continue;
-
-            bool full = CanViewPost(board, viewerUserId, staff, author, latest);
             bool mine = post.UserId == viewerUserId;
+
+            // Exam mode removes peers' cards entirely for a student; other hides just redact.
+            if (!staff && !mine && board.ExamMode) continue;
+
+            bool full = CanViewPost(board, viewerUserId, staff, author, post);
 
             var reactions = post.Reactions
                 .GroupBy(r => r.Emoji)
@@ -127,6 +130,7 @@ public class WallService
                 post.Note,
                 mine,
                 Redacted: !full,
+                HiddenByStudent: post.HiddenByStudent,
                 Verdict: full ? (latest?.Verdict.ToString() ?? "None") : "Hidden",
                 Score: full ? (agg?.BestScore ?? 0) : 0,
                 Attempts: agg?.Attempts ?? 0,

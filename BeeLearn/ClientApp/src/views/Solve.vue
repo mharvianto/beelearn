@@ -24,6 +24,7 @@ const running = ref(false);
 const submitting = ref(false);
 const submissions = ref([]);
 const error = ref('');
+const myPost = ref({ postId: null, hiddenByStudent: false });
 let conn = null;
 
 const mine = computed(() => submissions.value.filter((s) => s.mine));
@@ -57,8 +58,10 @@ async function submit() {
   finally { submitting.value = false; }
 }
 
-async function toggleHidden(s) {
-  await api.patch(`/api/submissions/${s.id}`, { hiddenByStudent: !s.hiddenByStudent });
+async function toggleHiddenFromPeers() {
+  const next = !myPost.value.hiddenByStudent;
+  await api.patch(`/api/posts/${myPost.value.postId}/visibility`, { hiddenByStudent: next });
+  myPost.value.hiddenByStudent = next;
   await loadSubs();
 }
 
@@ -77,7 +80,9 @@ watch(code, pushDraftSoon);
 onMounted(async () => {
   try { await load(); } catch (e) { error.value = e.message; return; }
   // Make sure a wall card exists for this student even before they run/submit.
-  if (isStudent()) api.post(`/api/problems/${props.problemId}/post`).catch(() => {});
+  if (isStudent()) {
+    try { myPost.value = await api.post(`/api/problems/${props.problemId}/post`); } catch { /* ignore */ }
+  }
 
   conn = createBoardConnection();
   conn.on('submissionResult', (dto) => {
@@ -123,6 +128,16 @@ onBeforeUnmount(async () => {
         </div>
       </template>
 
+      <button v-if="isStudent() && myPost.postId" @click="toggleHiddenFromPeers"
+              class="mt-4 w-full text-sm px-3 py-2 rounded-lg border flex items-center justify-center gap-2"
+              :class="myPost.hiddenByStudent
+                ? 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-500/15 dark:text-purple-300 dark:border-purple-500/30'
+                : 'text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-400'">
+        {{ myPost.hiddenByStudent
+          ? '🔒 Live code & progres disembunyikan dari teman'
+          : '👥 Sembunyikan live code & progres dari teman' }}
+      </button>
+
       <h3 class="font-semibold text-sm mt-5 mb-2">Submissions</h3>
       <div class="space-y-1">
         <div v-for="s in submissions" :key="s.id"
@@ -132,13 +147,6 @@ onBeforeUnmount(async () => {
           <span v-if="s.status === 'Done'" class="text-xs text-slate-400 dark:text-slate-500">
             {{ s.runtimeMs }}ms · {{ s.memoryKb }}KB · {{ Math.round(s.score * 100) }}%
           </span>
-          <button v-if="s.mine" @click="toggleHidden(s)"
-                  class="ml-auto text-[11px] px-1.5 py-0.5 rounded border"
-                  :class="s.hiddenByStudent
-                    ? 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-500/15 dark:text-purple-300 dark:border-purple-500/30'
-                    : 'text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700'">
-            {{ s.hiddenByStudent ? 'hidden from peers' : 'visible to peers' }}
-          </button>
         </div>
         <p v-if="!submissions.length" class="text-slate-400 dark:text-slate-500 text-sm">No submissions yet.</p>
       </div>

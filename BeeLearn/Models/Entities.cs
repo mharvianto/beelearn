@@ -182,6 +182,9 @@ public class Post
     /// <summary>Free-text caption the author can add ("stuck on test 3").</summary>
     public string Note { get; set; } = "";
 
+    /// <summary>Student hides this problem's work (live draft + submitted card) from peers.</summary>
+    public bool HiddenByStudent { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
