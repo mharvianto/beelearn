@@ -5,7 +5,8 @@
 	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
 	"image": "mcr.microsoft.com/devcontainers/dotnet:2-10.0-noble",
 	"features": {
-		"ghcr.io/devcontainers/features/node:2": {}
+		"ghcr.io/devcontainers/features/node:2": {},
+		"ghcr.io/anthropics/devcontainer-features/claude-code:latest": {} 
 	},
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
@@ -26,7 +27,6 @@
 	"customizations": {
 		"vscode": {
 			"extensions": [
-				"Anthropic.claude-code",
 				"ms-dotnettools.csdevkit"
 			]
 		}
