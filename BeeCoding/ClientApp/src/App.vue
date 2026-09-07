@@ -1,6 +1,6 @@
 <script setup>
-import { watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { watch, computed } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { useAuth } from './stores/auth';
 import { useProgress } from './stores/progress';
 import ThemeToggle from './components/ThemeToggle.vue';
@@ -9,6 +9,12 @@ import AppFooter from './components/AppFooter.vue';
 const auth = useAuth();
 const progress = useProgress();
 const router = useRouter();
+const route = useRoute();
+
+// The footer flows at the end of the page content (not pinned). Skip it on the
+// full-height editor views where there is no natural page bottom.
+const showFooter = computed(() =>
+  !/\/problems\/\d+/.test(route.path) && !/^\/practice\/\d+/.test(route.path));
 
 // keep the header XP in sync with who's logged in
 watch(() => auth.user?.id, (id) => (id ? progress.refresh() : progress.reset()), { immediate: true });
@@ -62,7 +68,7 @@ async function logout() {
     </header>
     <main class="flex-1 min-h-0 overflow-y-auto">
       <RouterView />
+      <AppFooter v-if="showFooter" />
     </main>
-    <AppFooter />
   </div>
 </template>
