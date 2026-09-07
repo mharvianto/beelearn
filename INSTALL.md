@@ -458,6 +458,7 @@ Buka `https://<domain-atau-IP>/`. Uji API: `curl -k https://<host>/api/auth/me` 
 | certbot: `cannot load certificate ".../beelearn.crt"` saat `nginx -t` | Config sudah punya blok `listen 443 ssl` menunjuk file yang belum ada. Mulai dari config **HTTP-only** (langkah 3), baru jalankan `certbot --nginx`. |
 | certbot: `Timeout during connect (likely firewall problem)` | DNS benar, tapi port 80 dari internet tidak sampai ke server (ISP blokir / NAT ganda / CGNAT). Buka port 80+443 di router, atau pakai **Opsi C (Cloudflare Tunnel)**, atau **Opsi B (self-signed)** untuk LAN. |
 | certbot: challenge gagal / `NXDOMAIN` | Domain tidak resolve ke IP publik server ini. Perbaiki DNS/DDNS, atau Opsi B/C. |
+| certbot: `Could not automatically find a matching server block` | `server_name` di config nginx masih placeholder. Set `server_name <domain-asli>;`, `reload`, lalu `sudo certbot install --cert-name <domain>`. |
 
 ---
 
