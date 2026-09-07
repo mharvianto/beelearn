@@ -91,6 +91,10 @@ public record PracticeSummaryDto(
 public record PracticePageDto(
     int Total, int Solved, int Page, int PageSize, List<PracticeSummaryDto> Items);
 
+public record TopicProgressDto(string Tag, int Total, int Solved, int Attempted);
+public record RecommendationDto(int Id, string Title, string Language, string Level, string Tags, string Reason);
+public record PracticeGuideDto(List<TopicProgressDto> Topics, List<RecommendationDto> Recommended);
+
 public record PracticeProblemDto(
     int Id, string Title, string StatementMarkdown, string Language, string StarterCode,
     int TimeLimitMs, int MemoryLimitKb, string Level, string Tags,

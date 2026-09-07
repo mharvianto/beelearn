@@ -98,6 +98,103 @@ public class PracticeController : ApiControllerBase
         return new PracticePageDto(all.Count, all.Count(x => x.Solved), page, pageSize, pageItems);
     }
 
+    private static IEnumerable<string> TagsOf(string? t) =>
+        (t ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                 .Select(x => x.ToLowerInvariant()).Distinct();
+
+    /// <summary>
+    /// "What should I do next?" for Practice: per-topic progress + up to 3 recommended
+    /// unsolved problems, chosen to keep the difficulty ramp gentle (continue a topic
+    /// you've started, one step up in difficulty, avoid problems you've bounced off).
+    /// </summary>
+    [HttpGet("guide")]
+    public async Task<ActionResult<PracticeGuideDto>> Guide()
+    {
+        var problems = await Pool()
+            .Select(b => new { b.Id, b.Title, b.Language, b.Level, b.Tags })
+            .ToListAsync();
+        if (problems.Count == 0) return new PracticeGuideDto(new(), new());
+
+        var ids = problems.Select(p => p.Id).ToHashSet();
+        var subs = await _db.BankSubmissions
+            .Where(s => s.UserId == UserId && s.Status == SubmissionStatus.Done && ids.Contains(s.BankProblemId))
+            .GroupBy(s => s.BankProblemId)
+            .Select(g => new
+            {
+                Id = g.Key,
+                Solved = g.Any(x => x.Verdict == Verdict.Accepted && x.Score >= 1.0),
+                Fails = g.Count(x => !(x.Verdict == Verdict.Accepted && x.Score >= 1.0)),
+            })
+            .ToListAsync();
+        var solvedSet = subs.Where(s => s.Solved).Select(s => s.Id).ToHashSet();
+        var attemptedSet = subs.Select(s => s.Id).ToHashSet();
+        var fails = subs.ToDictionary(s => s.Id, s => s.Fails);
+
+        // ---- per-topic progress ----
+        var byTag = new Dictionary<string, (int Total, int Solved, int Attempted)>();
+        foreach (var p in problems)
+            foreach (var tag in TagsOf(p.Tags))
+            {
+                var c = byTag.GetValueOrDefault(tag);
+                byTag[tag] = (c.Total + 1,
+                    c.Solved + (solvedSet.Contains(p.Id) ? 1 : 0),
+                    c.Attempted + (attemptedSet.Contains(p.Id) ? 1 : 0));
+            }
+
+        var topics = byTag
+            .Select(kv => new TopicProgressDto(kv.Key, kv.Value.Total, kv.Value.Solved, kv.Value.Attempted))
+            .OrderByDescending(t => t.Attempted > 0)                          // topics you've started first
+            .ThenBy(t => t.Total == 0 ? 1.0 : (double)t.Solved / t.Total)     // least complete first
+            .ThenByDescending(t => t.Total)
+            .Take(16)
+            .ToList();
+
+        // ---- target difficulty per topic: ramp up once the lower tier is mostly cleared ----
+        var topicTarget = new Dictionary<string, int>();
+        foreach (var tag in byTag.Keys)
+        {
+            var inTag = problems.Where(p => TagsOf(p.Tags).Contains(tag)).ToList();
+            int solvedAt(int lvl) => inTag.Count(p => (int)p.Level == lvl && solvedSet.Contains(p.Id));
+            int totalAt(int lvl) => inTag.Count(p => (int)p.Level == lvl);
+            int target = 1;
+            if (totalAt(1) > 0 && solvedAt(1) >= Math.Ceiling(totalAt(1) * 0.6)) target = 2;
+            if (target == 2 && totalAt(2) > 0 && solvedAt(2) >= Math.Ceiling(totalAt(2) * 0.5)) target = 3;
+            topicTarget[tag] = target;
+        }
+
+        var startedTopics = byTag
+            .Where(kv => kv.Value.Attempted > 0 && kv.Value.Solved < kv.Value.Total)
+            .Select(kv => kv.Key).ToHashSet();
+
+        var recommended = problems
+            .Where(p => !solvedSet.Contains(p.Id))
+            .Select(p =>
+            {
+                var tags = TagsOf(p.Tags).ToList();
+                bool inStarted = tags.Any(startedTopics.Contains);
+                int target = tags.Where(topicTarget.ContainsKey).Select(t => topicTarget[t])
+                                 .DefaultIfEmpty(1).Min();
+                double score = (inStarted ? 100 : 0)
+                             - 25 * Math.Abs((int)p.Level - target)
+                             - 40 * Math.Max(0, fails.GetValueOrDefault(p.Id) - 1)
+                             - 3 * ((int)p.Level - 1);
+                var startedTag = tags.FirstOrDefault(startedTopics.Contains);
+                string reason = attemptedSet.Contains(p.Id) ? "Give this another go"
+                    : startedTag is not null ? $"Continue with {startedTag}"
+                    : (int)p.Level == 1 ? "A gentle place to start"
+                    : $"Try a {p.Level.ToString().ToLowerInvariant()} one";
+                return (p, score, reason);
+            })
+            .OrderByDescending(x => x.score)
+            .ThenBy(x => (int)x.p.Level).ThenBy(x => x.p.Title)
+            .Take(3)
+            .Select(x => new RecommendationDto(
+                x.p.Id, x.p.Title, x.p.Language, x.p.Level.ToString(), x.p.Tags, x.reason))
+            .ToList();
+
+        return new PracticeGuideDto(topics, recommended);
+    }
+
     [HttpGet("{id:int}")]
     public async Task<ActionResult<PracticeProblemDto>> Get(int id)
     {

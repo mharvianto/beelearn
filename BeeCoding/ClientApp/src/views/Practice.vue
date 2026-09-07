@@ -17,6 +17,15 @@ const pageSize = ref(25);
 const total = ref(0);
 const solvedTotal = ref(0);
 
+const guide = ref({ topics: [], recommended: [] });
+const showAllTopics = ref(false);
+const shownTopics = computed(() =>
+  showAllTopics.value ? guide.value.topics : guide.value.topics.slice(0, 6));
+
+async function loadGuide() {
+  try { guide.value = await api.get('/api/practice/guide'); } catch { /* non-critical */ }
+}
+
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)));
 
 async function load() {
@@ -43,7 +52,7 @@ function go(n) {
   if (t !== page.value) { page.value = t; load(); }
 }
 
-onMounted(() => { load(); progress.refresh(); });
+onMounted(() => { load(); loadGuide(); progress.refresh(); });
 </script>
 
 <template>
@@ -57,6 +66,43 @@ onMounted(() => { load(); progress.refresh(); });
     <p class="text-sm text-slate-400 dark:text-slate-500 mb-4">
       Solve anything. Your first full solve of a problem earns XP (Easy 10 · Medium 20 · Hard 40).
     </p>
+
+    <!-- what to do next -->
+    <div v-if="guide.recommended.length" class="mb-5">
+      <h2 class="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-2">Recommended for you</h2>
+      <div class="grid gap-2 sm:grid-cols-3">
+        <RouterLink v-for="r in guide.recommended" :key="r.id" :to="`/practice/${r.id}`"
+                    class="border border-amber-200 dark:border-amber-500/30 bg-amber-50/50 dark:bg-amber-500/5 rounded-xl p-3
+                           hover:border-amber-400 dark:hover:border-amber-500/60 flex flex-col gap-1">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-medium truncate flex-1">{{ r.title }}</span>
+            <LevelBadge :level="r.level" />
+          </div>
+          <span class="text-[11px] text-amber-700 dark:text-amber-400">{{ r.reason }}</span>
+          <span v-if="r.tags" class="text-[10px] text-slate-400 dark:text-slate-500 truncate">{{ r.tags }}</span>
+        </RouterLink>
+      </div>
+    </div>
+
+    <!-- topic progress -->
+    <div v-if="guide.topics.length" class="mb-5">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="text-sm font-semibold text-slate-500 dark:text-slate-400">Your topics</h2>
+        <button v-if="guide.topics.length > 6" @click="showAllTopics = !showAllTopics"
+                class="text-xs text-amber-600 dark:text-amber-400">
+          {{ showAllTopics ? 'Show less' : `Show all (${guide.topics.length})` }}
+        </button>
+      </div>
+      <div class="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+        <div v-for="t in shownTopics" :key="t.tag" class="flex items-center gap-2 text-xs">
+          <span class="w-24 shrink-0 truncate text-slate-500 dark:text-slate-400">{{ t.tag }}</span>
+          <span class="flex-1 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+            <span class="block h-full bg-amber-400" :style="{ width: (t.total ? t.solved / t.total * 100 : 0) + '%' }"></span>
+          </span>
+          <span class="w-12 shrink-0 text-right tabular-nums text-slate-400 dark:text-slate-500">{{ t.solved }}/{{ t.total }}</span>
+        </div>
+      </div>
+    </div>
 
     <div class="flex gap-2 mb-4 flex-wrap">
       <input v-model="q" @keyup.enter="search" placeholder="Search title or tag…"
