@@ -66,9 +66,11 @@ async function logout() {
         </div>
       </div>
     </header>
-    <main class="flex-1 min-h-0 overflow-y-auto">
-      <RouterView />
-      <AppFooter v-if="showFooter" />
+    <main class="flex-1 min-h-0 flex flex-col">
+      <div class="flex-1 min-h-0 overflow-y-auto">
+        <RouterView />
+      </div>
+      <AppFooter v-if="showFooter" class="shrink-0" />
     </main>
   </div>
 </template>
