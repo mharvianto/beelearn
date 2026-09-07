@@ -22,8 +22,7 @@
     static-web-assets glob in the SAME publish, then a post-publish copy
     guarantees it lands in the output even on the very first clean run.
   -->
-  <Target Name="BuildClientApp" BeforeTargets="BeforeBuild;BeforeRebuild"
-          Condition="'$(BuildClient)' != 'false'">
+  <Target Name="BuildClientApp" BeforeTargets="BeforeBuild;BeforeRebuild" Condition="'$(BuildClient)' != 'false'">
     <Exec Command="npm ci" WorkingDirectory="ClientApp" />
     <Exec Command="npm run build" WorkingDirectory="ClientApp" />
   </Target>
@@ -32,9 +31,7 @@
     <ItemGroup>
       <_ClientPublishFiles Include="wwwroot/**/*" />
     </ItemGroup>
-    <Copy SourceFiles="@(_ClientPublishFiles)"
-          DestinationFiles="@(_ClientPublishFiles->'$(PublishDir)wwwroot/%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_ClientPublishFiles)" DestinationFiles="@(_ClientPublishFiles->'$(PublishDir)wwwroot/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 
   <ItemGroup>
@@ -45,6 +42,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.11" />
     <PackageReference Include="SkiaSharp" Version="4.151.1" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.151.1" />
   </ItemGroup>

@@ -162,6 +162,94 @@ location / {
 
 ---
 
+## 4A. Jalankan sebagai service (systemd)
+
+Agar tetap hidup setelah SSH ditutup, otomatis mulai saat boot, dan restart bila crash.
+Asumsi: sudah di-publish ke `/srv/beelearn/BeeLearn/out`, dan .NET dipasang di
+`~/.dotnet` (lewat `dotnet-install.sh`) untuk user `harvianto`.
+
+**1) Siapkan folder data (di luar folder `out` supaya aman saat re-publish):**
+
+```bash
+sudo mkdir -p /srv/beelearn/data /srv/beelearn/.judge
+sudo chown -R harvianto:harvianto /srv/beelearn
+```
+
+**2) Buat unit file:**
+
+```bash
+sudo tee /etc/systemd/system/beelearn.service > /dev/null <<'EOF'
+[Unit]
+Description=BeeLearn (Padlet + C/C++ online judge)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify            # butuh build yang sudah memakai UseSystemd(); kalau belum, ganti: Type=simple
+User=harvianto
+Group=harvianto
+WorkingDirectory=/srv/beelearn/BeeLearn/out
+ExecStart=/srv/beelearn/BeeLearn/out/BeeLearn
+
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://0.0.0.0:8080
+Environment=DOTNET_ROOT=/home/harvianto/.dotnet
+Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
+Environment=ConnectionStrings__Default=Data Source=/srv/beelearn/data/beelearn.db
+Environment=Judge__WorkRoot=/srv/beelearn/.judge
+
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+> `DOTNET_ROOT` wajib karena .NET dipasang di home, bukan sistem. Kalau kamu memasang
+> **ASP.NET Core Runtime** sistem-wide (`sudo .../dotnet-install.sh --channel 10.0 --runtime aspnetcore --install-dir /usr/lib/dotnet`),
+> baris `DOTNET_ROOT` bisa dihapus dan `User=` boleh diganti user khusus berprivilege rendah.
+
+**3) Aktifkan & jalankan:**
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now beelearn
+systemctl status beelearn --no-pager
+journalctl -u beelearn -f            # ikuti log (Ctrl+C untuk keluar)
+```
+
+Buka `http://<ip-server>:8080`.
+
+**Perintah harian:**
+
+```bash
+sudo systemctl restart beelearn
+sudo systemctl stop beelearn
+sudo systemctl disable --now beelearn      # matikan permanen
+journalctl -u beelearn --since "10 min ago"
+```
+
+**Update ke versi baru:**
+
+```bash
+cd /srv/beelearn && git pull
+cd BeeLearn && ~/.dotnet/dotnet publish -c Release -o out
+sudo systemctl restart beelearn
+```
+
+**Catatan:**
+
+- DB pindah ke `/srv/beelearn/data/beelearn.db` (path absolut). Saat pertama start via
+  service, DB baru dibuat & di-seed ulang. Kalau mau bawa data lama:
+  `mv /srv/beelearn/BeeLearn/out/beelearn.db* /srv/beelearn/data/` sebelum `enable`.
+- `g++` ada di `/usr/bin` sehingga terjangkau PATH default systemd — tidak perlu setting tambahan.
+- Judge menjalankan kode C++ murid sebagai user service. Untuk produksi sungguhan,
+  pakai user khusus + pertimbangkan isolasi lebih kuat (lihat *Security note* di `README.md`).
+
+---
+
 ## 5. Konfigurasi
 
 Ubah lewat `BeeLearn/appsettings.json`, `appsettings.Production.json`, atau environment

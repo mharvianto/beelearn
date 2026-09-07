@@ -7,6 +7,9 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// journald integration + Type=notify readiness when run under systemd; no-op otherwise.
+builder.Host.UseSystemd();
+
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
 
