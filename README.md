@@ -1,4 +1,4 @@
-# BeeLearn
+# BeeCoding
 
 A Padlet-style board where a teacher posts C/C++ problems, students solve them in the
 browser (Monaco), run/submit code against a sandboxed judge, and a **live board** shows
@@ -75,11 +75,11 @@ All five visibility rules live in one place: `Services/VisibilityService.cs`.
 
 ```bash
 # terminal 1 — API on http://localhost:5080
-cd BeeLearn
+cd BeeCoding
 dotnet run
 
 # terminal 2 — Vite dev server on http://localhost:5173 (proxies /api and /hubs)
-cd BeeLearn/ClientApp
+cd BeeCoding/ClientApp
 npm install
 npm run build     # first time: also populates ../wwwroot for the fallback route
 npm run dev
@@ -91,9 +91,9 @@ code `DEMO01` (an "A + B" problem is seeded).
 ## Running (single process)
 
 ```bash
-cd BeeLearn
+cd BeeCoding
 dotnet publish -c Release -o out     # runs `npm ci && npm run build` into wwwroot
-./out/BeeLearn                       # serves SPA + API on one port
+./out/BeeCoding                       # serves SPA + API on one port
 ```
 
 ## Build prerequisites on the host
@@ -134,7 +134,7 @@ The judge is **classroom-grade**, not hardened multi-tenant isolation:
 ## Layout
 
 ```
-BeeLearn/
+BeeCoding/
   Controllers/        Auth, Boards, Members, Problems, Submissions, Run
   Services/
     VisibilityService.cs      who sees whose answers

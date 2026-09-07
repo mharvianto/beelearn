@@ -1,11 +1,11 @@
 bin/
 obj/
 *.user
-BeeLearn/wwwroot/
-BeeLearn/beelearn.db
-BeeLearn/beelearn.db-*
-BeeLearn/ClientApp/node_modules/
-BeeLearn/ClientApp/dist/
+BeeCoding/wwwroot/
+BeeCoding/beecoding.db
+BeeCoding/beecoding.db-*
+BeeCoding/ClientApp/node_modules/
+BeeCoding/ClientApp/dist/
 /tmp/
 
 # core dumps

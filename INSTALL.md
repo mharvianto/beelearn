@@ -1,4 +1,4 @@
-# BeeLearn — Panduan Instalasi
+# BeeCoding — Panduan Instalasi
 
 Papan gaya Padlet + online judge C/C++. Backend ASP.NET Core 10, frontend Vue 3
 (di-build ke `wwwroot/`), database SQLite, realtime SignalR.
@@ -18,7 +18,7 @@ Papan gaya Padlet + online judge C/C++. Backend ASP.NET Core 10, frontend Vue 3
 
 Yang **tidak perlu** dipasang:
 
-- Font — DejaVu TTF sudah disertakan di `BeeLearn/Assets/fonts/` (dipakai untuk render soal-terenkripsi).
+- Font — DejaVu TTF sudah disertakan di `BeeCoding/Assets/fonts/` (dipakai untuk render soal-terenkripsi).
 - Native SkiaSharp — paket `SkiaSharp.NativeAssets.Linux.NoDependencies` sudah membundel binari (jalan di Ubuntu 24.04 tanpa dependensi tambahan).
 
 ### Pasang prasyarat di Ubuntu/Debian
@@ -70,8 +70,8 @@ sudo apt-get install -y clangd
 ## 2. Ambil kode
 
 ```bash
-git clone <URL-repo> beelearn
-cd beelearn
+git clone <URL-repo> beecoding
+cd beecoding
 ```
 
 ---
@@ -81,19 +81,19 @@ cd beelearn
 ### Terminal 1 — backend
 
 ```bash
-cd BeeLearn
+cd BeeCoding
 dotnet run
 ```
 
 - Mendengarkan di **http://localhost:5048** (profil `http` di `Properties/launchSettings.json`).
-- Saat pertama kali: `beelearn.db` dibuat, migrasi dijalankan, lalu data demo + **bank 81 soal** di-seed otomatis.
+- Saat pertama kali: `beecoding.db` dibuat, migrasi dijalankan, lalu data demo + **bank 81 soal** di-seed otomatis.
 - Startup akan mencetak mode sandbox, mis.
   `Sandbox mode: rlimits only (bwrap ...)` atau `bubblewrap + rlimits`.
 
 ### Terminal 2 — frontend (Vite dev server)
 
 ```bash
-cd BeeLearn/ClientApp
+cd BeeCoding/ClientApp
 npm install
 npm run dev
 ```
@@ -116,7 +116,7 @@ Buka **http://localhost:5173**.
 ## 4. Build satu proses (produksi)
 
 ```bash
-cd BeeLearn
+cd BeeCoding
 dotnet publish -c Release -o out
 ```
 
@@ -144,7 +144,7 @@ Jalankan:
 cd out
 ASPNETCORE_URLS="http://0.0.0.0:8080" \
 ASPNETCORE_ENVIRONMENT=Production \
-./BeeLearn
+./BeeCoding
 ```
 
 - Satu port melayani SPA + REST API + SignalR (`app.MapFallbackToFile("index.html")` menangani route klien).
@@ -169,22 +169,22 @@ location / {
 ## 4A. Jalankan sebagai service (systemd)
 
 Agar tetap hidup setelah SSH ditutup, otomatis mulai saat boot, dan restart bila crash.
-Asumsi: sudah di-publish ke `/srv/beelearn/BeeLearn/out`, dan .NET dipasang di
+Asumsi: sudah di-publish ke `/srv/beecoding/BeeCoding/out`, dan .NET dipasang di
 `~/.dotnet` (lewat `dotnet-install.sh`) untuk user `harvianto`.
 
 **1) Siapkan folder data (di luar folder `out` supaya aman saat re-publish):**
 
 ```bash
-sudo mkdir -p /srv/beelearn/data /srv/beelearn/.judge
-sudo chown -R harvianto:harvianto /srv/beelearn
+sudo mkdir -p /srv/beecoding/data /srv/beecoding/.judge
+sudo chown -R harvianto:harvianto /srv/beecoding
 ```
 
 **2) Buat unit file:**
 
 ```bash
-sudo tee /etc/systemd/system/beelearn.service > /dev/null <<'EOF'
+sudo tee /etc/systemd/system/beecoding.service > /dev/null <<'EOF'
 [Unit]
-Description=BeeLearn (Padlet + C/C++ online judge)
+Description=BeeCoding (Padlet + C/C++ online judge)
 After=network-online.target
 Wants=network-online.target
 
@@ -192,16 +192,16 @@ Wants=network-online.target
 Type=notify            # butuh build yang sudah memakai UseSystemd(); kalau belum, ganti: Type=simple
 User=harvianto
 Group=harvianto
-WorkingDirectory=/srv/beelearn/BeeLearn/out
-ExecStart=/srv/beelearn/BeeLearn/out/BeeLearn
+WorkingDirectory=/srv/beecoding/BeeCoding/out
+ExecStart=/srv/beecoding/BeeCoding/out/BeeCoding
 
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=ASPNETCORE_URLS=http://0.0.0.0:8080
 Environment=DOTNET_ROOT=/home/harvianto/.dotnet
 Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
 # nilai mengandung spasi -> WAJIB dikutip penuh, kalau tidak systemd memecahnya
-Environment="ConnectionStrings__Default=Data Source=/srv/beelearn/data/beelearn.db"
-Environment=Judge__WorkRoot=/srv/beelearn/.judge
+Environment="ConnectionStrings__Default=Data Source=/srv/beecoding/data/beecoding.db"
+Environment=Judge__WorkRoot=/srv/beecoding/.judge
 
 Restart=on-failure
 RestartSec=5
@@ -220,9 +220,9 @@ EOF
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now beelearn
-systemctl status beelearn --no-pager
-journalctl -u beelearn -f            # ikuti log (Ctrl+C untuk keluar)
+sudo systemctl enable --now beecoding
+systemctl status beecoding --no-pager
+journalctl -u beecoding -f            # ikuti log (Ctrl+C untuk keluar)
 ```
 
 Buka `http://<ip-server>:8080`.
@@ -230,25 +230,25 @@ Buka `http://<ip-server>:8080`.
 **Perintah harian:**
 
 ```bash
-sudo systemctl restart beelearn
-sudo systemctl stop beelearn
-sudo systemctl disable --now beelearn      # matikan permanen
-journalctl -u beelearn --since "10 min ago"
+sudo systemctl restart beecoding
+sudo systemctl stop beecoding
+sudo systemctl disable --now beecoding      # matikan permanen
+journalctl -u beecoding --since "10 min ago"
 ```
 
 **Update ke versi baru:**
 
 ```bash
-cd /srv/beelearn && git pull
-cd BeeLearn && ~/.dotnet/dotnet publish -c Release -o out
-sudo systemctl restart beelearn
+cd /srv/beecoding && git pull
+cd BeeCoding && ~/.dotnet/dotnet publish -c Release -o out
+sudo systemctl restart beecoding
 ```
 
 **Catatan:**
 
-- DB pindah ke `/srv/beelearn/data/beelearn.db` (path absolut). Saat pertama start via
+- DB pindah ke `/srv/beecoding/data/beecoding.db` (path absolut). Saat pertama start via
   service, DB baru dibuat & di-seed ulang. Kalau mau bawa data lama:
-  `mv /srv/beelearn/BeeLearn/out/beelearn.db* /srv/beelearn/data/` sebelum `enable`.
+  `mv /srv/beecoding/BeeCoding/out/beecoding.db* /srv/beecoding/data/` sebelum `enable`.
 - `g++` ada di `/usr/bin` sehingga terjangkau PATH default systemd — tidak perlu setting tambahan.
 - Judge menjalankan kode C++ murid sebagai user service. Untuk produksi sungguhan,
   pakai user khusus + pertimbangkan isolasi lebih kuat (lihat *Security note* di `README.md`).
@@ -257,17 +257,17 @@ sudo systemctl restart beelearn
 
 ## 4B. nginx (reverse proxy) + SSL/HTTPS
 
-BeeLearn dijalankan di `127.0.0.1:8080`, nginx di depan menangani TLS + WebSocket.
+BeeCoding dijalankan di `127.0.0.1:8080`, nginx di depan menangani TLS + WebSocket.
 
 ### 1) Kunci app hanya ke localhost
 
-Di `/etc/systemd/system/beelearn.service` ubah:
+Di `/etc/systemd/system/beecoding.service` ubah:
 
 ```
 Environment=ASPNETCORE_URLS=http://127.0.0.1:8080
 ```
 
-lalu `sudo systemctl daemon-reload && sudo systemctl restart beelearn`.
+lalu `sudo systemctl daemon-reload && sudo systemctl restart beecoding`.
 (Dukungan `X-Forwarded-Proto` sudah ada di aplikasi — `UseForwardedHeaders`, jadi cookie
 dan `Request.Scheme` mengikuti HTTPS.)
 
@@ -284,21 +284,21 @@ Blok `map`/`upstream`/`proxy` di bawah dipakai oleh kedua opsi TLS. Jangan tulis
 sertifikat dibuat (Opsi B).
 
 ```bash
-sudo tee /etc/nginx/sites-available/beelearn > /dev/null <<'EOF'
+sudo tee /etc/nginx/sites-available/beecoding > /dev/null <<'EOF'
 # WebSocket upgrade (dipakai SignalR di /hubs)
 map $http_upgrade $connection_upgrade { default upgrade; '' close; }
 
-upstream beelearn { server 127.0.0.1:8080; keepalive 32; }
+upstream beecoding { server 127.0.0.1:8080; keepalive 32; }
 
 server {
     listen 80;
     listen [::]:80;
-    server_name beelearn.example.com;     # <-- DOMAIN ASLI (Opsi A) atau IP LAN (Opsi B)
+    server_name beecoding.example.com;     # <-- DOMAIN ASLI (Opsi A) atau IP LAN (Opsi B)
 
     client_max_body_size 4m;              # kiriman kode murid (<=200 KB) + margin
 
     location / {
-        proxy_pass http://beelearn;
+        proxy_pass http://beecoding;
         proxy_http_version 1.1;
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;
@@ -310,7 +310,7 @@ server {
 
     # SignalR (/hubs) + clangd LSP (/lsp): koneksi persisten -> timeout panjang
     location ~ ^/(hubs|lsp)/ {
-        proxy_pass http://beelearn;
+        proxy_pass http://beecoding;
         proxy_http_version 1.1;
         proxy_set_header Host              $host;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
@@ -324,7 +324,7 @@ server {
 }
 EOF
 
-sudo ln -sf /etc/nginx/sites-available/beelearn /etc/nginx/sites-enabled/beelearn
+sudo ln -sf /etc/nginx/sites-available/beecoding /etc/nginx/sites-enabled/beecoding
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
 ```
@@ -336,7 +336,7 @@ server ini dan **port 80 terbuka dari internet**:
 
 ```bash
 sudo apt-get install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d beelearn.example.com
+sudo certbot --nginx -d beecoding.example.com
 ```
 
 certbot mengubah `server` HTTP tadi menjadi HTTPS (menambah `listen 443 ssl`, path
@@ -351,17 +351,17 @@ perpanjangan (`systemctl list-timers 'certbot*'`). Selesai.
 ```bash
 # 1) buat sertifikat DULU
 sudo openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
-  -keyout /etc/ssl/private/beelearn.key \
-  -out /etc/ssl/certs/beelearn.crt \
+  -keyout /etc/ssl/private/beecoding.key \
+  -out /etc/ssl/certs/beecoding.crt \
   -subj "/CN=192.168.50.7" \
   -addext "subjectAltName=IP:192.168.50.7"        # samakan dengan alamat yang dipakai klien
 ```
 
 ```bash
 # 2) baru ganti config: 80 -> redirect, tambah server 443
-sudo tee /etc/nginx/sites-available/beelearn > /dev/null <<'EOF'
+sudo tee /etc/nginx/sites-available/beecoding > /dev/null <<'EOF'
 map $http_upgrade $connection_upgrade { default upgrade; '' close; }
-upstream beelearn { server 127.0.0.1:8080; keepalive 32; }
+upstream beecoding { server 127.0.0.1:8080; keepalive 32; }
 
 server {
     listen 80;
@@ -376,14 +376,14 @@ server {
     http2 on;
     server_name 192.168.50.7;
 
-    ssl_certificate     /etc/ssl/certs/beelearn.crt;
-    ssl_certificate_key /etc/ssl/private/beelearn.key;
+    ssl_certificate     /etc/ssl/certs/beecoding.crt;
+    ssl_certificate_key /etc/ssl/private/beecoding.key;
     ssl_protocols       TLSv1.2 TLSv1.3;
 
     client_max_body_size 4m;
 
     location / {
-        proxy_pass http://beelearn;
+        proxy_pass http://beecoding;
         proxy_http_version 1.1;
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;
@@ -394,7 +394,7 @@ server {
     }
     # SignalR (/hubs) + clangd LSP (/lsp)
     location ~ ^/(hubs|lsp)/ {
-        proxy_pass http://beelearn;
+        proxy_pass http://beecoding;
         proxy_http_version 1.1;
         proxy_set_header Host              $host;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
@@ -411,7 +411,7 @@ sudo nginx -t && sudo systemctl reload nginx
 ```
 
 Browser akan menandai "not trusted" (wajar untuk sertifikat sendiri) — lanjutkan saja,
-atau impor `beelearn.crt` ke *trust store* perangkat klien. Alternatif yang otomatis
+atau impor `beecoding.crt` ke *trust store* perangkat klien. Alternatif yang otomatis
 dipercaya di jaringan lokal: pakai **mkcert**.
 
 **Opsi C — di belakang CGNAT / ISP blokir port 80-443 (Cloudflare Tunnel):**
@@ -425,14 +425,14 @@ echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudf
 sudo apt-get update && sudo apt-get install -y cloudflared
 
 cloudflared tunnel login
-cloudflared tunnel create beelearn
-cloudflared tunnel route dns beelearn beelearn.domainmu.com
+cloudflared tunnel create beecoding
+cloudflared tunnel route dns beecoding beecoding.domainmu.com
 
 mkdir -p ~/.cloudflared && cat > ~/.cloudflared/config.yml <<EOF
-tunnel: beelearn
+tunnel: beecoding
 credentials-file: $HOME/.cloudflared/<TUNNEL-ID>.json
 ingress:
-  - hostname: beelearn.domainmu.com
+  - hostname: beecoding.domainmu.com
     service: http://127.0.0.1:8080
   - service: http_status:404
 EOF
@@ -459,8 +459,8 @@ Buka `https://<domain-atau-IP>/`. Uji API: `curl -k https://<host>/api/auth/me` 
 | SignalR putus-nyambung / "WebSocket closed" | Pastikan blok `map $http_upgrade` ada dan header `Upgrade`/`Connection` diteruskan. |
 | Login berhasil tapi langsung ter-logout | app harus di belakang HTTPS **dan** menerima `X-Forwarded-Proto` (sudah default). Jangan campur akses `http://` dan `https://`. |
 | 413 Request Entity Too Large saat submit | naikkan `client_max_body_size`. |
-| 502 Bad Gateway | `beelearn.service` mati / bukan di `127.0.0.1:8080`. Cek `systemctl status beelearn`. |
-| certbot: `cannot load certificate ".../beelearn.crt"` saat `nginx -t` | Config sudah punya blok `listen 443 ssl` menunjuk file yang belum ada. Mulai dari config **HTTP-only** (langkah 3), baru jalankan `certbot --nginx`. |
+| 502 Bad Gateway | `beecoding.service` mati / bukan di `127.0.0.1:8080`. Cek `systemctl status beecoding`. |
+| certbot: `cannot load certificate ".../beecoding.crt"` saat `nginx -t` | Config sudah punya blok `listen 443 ssl` menunjuk file yang belum ada. Mulai dari config **HTTP-only** (langkah 3), baru jalankan `certbot --nginx`. |
 | certbot: `Timeout during connect (likely firewall problem)` | DNS benar, tapi port 80 dari internet tidak sampai ke server (ISP blokir / NAT ganda / CGNAT). Buka port 80+443 di router, atau pakai **Opsi C (Cloudflare Tunnel)**, atau **Opsi B (self-signed)** untuk LAN. |
 | certbot: challenge gagal / `NXDOMAIN` | Domain tidak resolve ke IP publik server ini. Perbaiki DNS/DDNS, atau Opsi B/C. |
 | certbot: `Could not automatically find a matching server block` | `server_name` di config nginx masih placeholder. Set `server_name <domain-asli>;`, `reload`, lalu `sudo certbot install --cert-name <domain>`. |
@@ -469,13 +469,13 @@ Buka `https://<domain-atau-IP>/`. Uji API: `curl -k https://<host>/api/auth/me` 
 
 ## 5. Konfigurasi
 
-Ubah lewat `BeeLearn/appsettings.json`, `appsettings.Production.json`, atau environment
+Ubah lewat `BeeCoding/appsettings.json`, `appsettings.Production.json`, atau environment
 variable (nesting pakai `__`).
 
 | Kunci | Default | Keterangan |
 |---|---|---|
-| `ConnectionStrings:Default` | `Data Source=beelearn.db` | Path file SQLite. Produksi: `Data Source=/var/lib/beelearn/beelearn.db`. |
-| `Judge:WorkRoot` | `/tmp/beelearn-judge` | Direktori kerja compile/run. |
+| `ConnectionStrings:Default` | `Data Source=beecoding.db` | Path file SQLite. Produksi: `Data Source=/var/lib/beecoding/beecoding.db`. |
+| `Judge:WorkRoot` | `/tmp/beecoding-judge` | Direktori kerja compile/run. |
 | `Judge:MaxConcurrent` | `2` | Jumlah compile/run paralel. |
 | `Judge:CompileTimeoutMs` | `10000` | Batas waktu kompilasi. |
 | `Judge:QueueCapacity` | `200` | Kapasitas antrean judge. |
@@ -493,9 +493,9 @@ variable (nesting pakai `__`).
 Contoh override via env:
 
 ```bash
-export ConnectionStrings__Default="Data Source=/var/lib/beelearn/beelearn.db"
+export ConnectionStrings__Default="Data Source=/var/lib/beecoding/beecoding.db"
 export Judge__MaxConcurrent=4
-export Judge__WorkRoot=/var/tmp/beelearn-judge
+export Judge__WorkRoot=/var/tmp/beecoding-judge
 export Lsp__Enabled=true          # setelah `apt install clangd`
 ```
 
@@ -532,12 +532,12 @@ Aplikasi **otomatis menerapkan migrasi** saat startup. Untuk mengelolanya manual
 dotnet tool install --global dotnet-ef      # sekali saja
 export PATH="$PATH:$HOME/.dotnet/tools"
 
-cd BeeLearn
+cd BeeCoding
 dotnet ef migrations add NamaMigrasi
 dotnet ef database update
 ```
 
-**Reset data pengembangan:** hentikan aplikasi, `rm BeeLearn/beelearn.db*`, jalankan lagi →
+**Reset data pengembangan:** hentikan aplikasi, `rm BeeCoding/beecoding.db*`, jalankan lagi →
 seed ulang (demo + 81 soal).
 
 ---
