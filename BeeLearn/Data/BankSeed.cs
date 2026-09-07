@@ -520,5 +520,295 @@ public static class BankSeed
                 ("level\n", "Palindrom", false),
                 ("a\n", "Palindrom", false),
             }),
+
+        // ================= VARIAN TAMBAHAN (BATCH 2) =================
+
+        // ---------- Input / Output ----------
+        new("Cetak dengan Pemisah", "output", ProblemLevel.Easy,
+            "Baca tiga bilangan bulat `a`, `b`, `c`. Cetak ketiganya dipisah dengan ` | ` (spasi, garis tegak, spasi).",
+            new[]
+            {
+                ("1 2 3\n", "1 | 2 | 3", true),
+                ("10 20 30\n", "10 | 20 | 30", false),
+                ("-1 0 5\n", "-1 | 0 | 5", false),
+            }),
+
+        new("Kotak Teks", "output", ProblemLevel.Easy,
+            "Cetak gambar berikut persis:\n\n```\n+---+\n| X |\n+---+\n```",
+            new[]
+            {
+                ("", "+---+\n| X |\n+---+", true),
+                ("", "+---+\n| X |\n+---+", false),
+            }),
+
+        new("Jumlah Lima Bilangan", "input,loop", ProblemLevel.Easy,
+            "Baca lima bilangan bulat pada satu baris. Cetak jumlahnya.",
+            new[]
+            {
+                ("1 2 3 4 5\n", "15", true),
+                ("10 10 10 10 10\n", "50", false),
+                ("-1 -2 -3 -4 -5\n", "-15", false),
+            }),
+
+        // ---------- Operator ----------
+        new("Konversi Menit", "operator", ProblemLevel.Easy,
+            "Baca total menit `m`. Cetak `<jam> jam <menit> menit`, dengan jam = `m/60` dan menit = `m%60`.",
+            new[]
+            {
+                ("135\n", "2 jam 15 menit", true),
+                ("59\n", "0 jam 59 menit", false),
+                ("120\n", "2 jam 0 menit", false),
+            }),
+
+        new("Rata-Rata Dua Bilangan", "operator", ProblemLevel.Easy,
+            "Baca `a` dan `b`. Cetak rata-ratanya sebagai pembagian bulat `(a+b)/2`.",
+            new[]
+            {
+                ("4 6\n", "5", true),
+                ("3 4\n", "3", false),
+                ("10 20\n", "15", false),
+            }),
+
+        new("Sisa Bagi", "operator", ProblemLevel.Easy,
+            "Baca `a` dan `b` (dijamin `b > 0`). Cetak sisa pembagian `a % b`.",
+            new[]
+            {
+                ("17 5\n", "2", true),
+                ("10 10\n", "0", false),
+                ("3 7\n", "3", false),
+            }),
+
+        new("Volume Balok", "operator", ProblemLevel.Easy,
+            "Baca panjang `p`, lebar `l`, dan tinggi `t`. Cetak volume balok `p*l*t`.",
+            new[]
+            {
+                ("2 3 4\n", "24", true),
+                ("1 1 1\n", "1", false),
+                ("5 5 2\n", "50", false),
+            }),
+
+        // ---------- Selection ----------
+        new("Genap dan Positif", "selection", ProblemLevel.Easy,
+            "Baca `n`. Cetak `Ya` bila `n` genap **dan** lebih besar dari 0, selain itu `Tidak`.",
+            new[]
+            {
+                ("4\n", "Ya", true),
+                ("-4\n", "Tidak", false),
+                ("3\n", "Tidak", false),
+                ("0\n", "Tidak", false),
+            }),
+
+        new("Rentang Nilai", "selection", ProblemLevel.Easy,
+            "Baca `n`. Cetak `Rendah` bila `n < 40`, `Sedang` bila `40 <= n < 75`, `Tinggi` bila `n >= 75`.",
+            new[]
+            {
+                ("30\n", "Rendah", true),
+                ("40\n", "Sedang", false),
+                ("74\n", "Sedang", false),
+                ("75\n", "Tinggi", false),
+            }),
+
+        new("Harga Tiket Bioskop", "selection", ProblemLevel.Easy,
+            "Baca `umur`. Cetak harga tiket: `0` bila umur `< 5`, `25000` bila umur `< 17`, `50000` selain itu.",
+            new[]
+            {
+                ("3\n", "0", true),
+                ("10\n", "25000", false),
+                ("17\n", "50000", false),
+                ("40\n", "50000", false),
+            }),
+
+        new("Bilangan Kelipatan", "selection", ProblemLevel.Easy,
+            "Baca `n` dan `k` (dijamin `k > 0`). Cetak `Ya` bila `n` kelipatan `k`, selain itu `Tidak`.",
+            new[]
+            {
+                ("12 4\n", "Ya", true),
+                ("13 4\n", "Tidak", false),
+                ("0 5\n", "Ya", false),
+            }),
+
+        // ---------- Loop ----------
+        new("Jumlah Kuadrat", "loop", ProblemLevel.Easy,
+            "Baca `n`. Cetak `1^2 + 2^2 + ... + n^2`.",
+            new[]
+            {
+                ("3\n", "14", true),
+                ("1\n", "1", false),
+                ("5\n", "55", false),
+                ("10\n", "385", false),
+            }),
+
+        new("Cetak Kelipatan", "loop", ProblemLevel.Easy,
+            "Baca `k` dan `n`. Cetak `n` kelipatan pertama dari `k`, dipisah spasi.",
+            new[]
+            {
+                ("3 5\n", "3 6 9 12 15", true),
+                ("1 3\n", "1 2 3", false),
+                ("10 4\n", "10 20 30 40", false),
+            }),
+
+        new("Hitung Banyak Faktor", "loop", ProblemLevel.Easy,
+            "Baca bilangan bulat positif `n` (1 ≤ n ≤ 100000). Cetak banyaknya pembagi positif dari `n`.",
+            new[]
+            {
+                ("12\n", "6", true),
+                ("1\n", "1", false),
+                ("7\n", "2", false),
+                ("36\n", "9", false),
+            }),
+
+        new("Cetak Karakter Berulang", "loop", ProblemLevel.Easy,
+            "Baca sebuah karakter `c` dan bilangan `n`. Cetak `c` sebanyak `n` kali pada satu baris.",
+            new[]
+            {
+                ("* 5\n", "*****", true),
+                ("# 1\n", "#", false),
+                ("a 3\n", "aaa", false),
+            }),
+
+        new("Bilangan Sempurna", "loop", ProblemLevel.Medium,
+            "Baca bilangan bulat positif `n`. Cetak `Sempurna` bila jumlah seluruh pembagi `n` yang lebih kecil dari `n` " +
+            "sama dengan `n` sendiri, selain itu `Bukan`.",
+            new[]
+            {
+                ("6\n", "Sempurna", true),
+                ("28\n", "Sempurna", false),
+                ("12\n", "Bukan", false),
+                ("1\n", "Bukan", false),
+            }),
+
+        new("Segitiga Bintang", "loop", ProblemLevel.Easy,
+            "Baca `n` (1 ≤ n ≤ 50). Cetak segitiga siku-siku dari `*`: baris ke-`i` berisi `i` buah `*`.",
+            new[]
+            {
+                ("3\n", "*\n**\n***", true),
+                ("1\n", "*", false),
+                ("5\n", "*\n**\n***\n****\n*****", false),
+            }),
+
+        new("Persegi Bintang", "loop", ProblemLevel.Easy,
+            "Baca `n` (1 ≤ n ≤ 50). Cetak persegi `n x n` yang seluruhnya berisi `*`.",
+            new[]
+            {
+                ("3\n", "***\n***\n***", true),
+                ("1\n", "*", false),
+                ("2\n", "**\n**", false),
+            }),
+
+        new("Segitiga Angka", "loop", ProblemLevel.Easy,
+            "Baca `n` (1 ≤ n ≤ 50). Baris ke-`i` berisi angka `1 2 ... i` dipisah spasi.",
+            new[]
+            {
+                ("3\n", "1\n1 2\n1 2 3", true),
+                ("1\n", "1", false),
+                ("4\n", "1\n1 2\n1 2 3\n1 2 3 4", false),
+            }),
+
+        new("Segitiga Bintang Terbalik", "loop", ProblemLevel.Easy,
+            "Baca `n` (1 ≤ n ≤ 50). Cetak segitiga `*` menurun: baris pertama `n` buah `*`, lalu berkurang satu tiap baris hingga 1.",
+            new[]
+            {
+                ("3\n", "***\n**\n*", true),
+                ("1\n", "*", false),
+                ("4\n", "****\n***\n**\n*", false),
+            }),
+
+        // ---------- Array ----------
+        new("Jumlah Elemen Positif Array", "array,loop,selection", ProblemLevel.Easy,
+            "Baris pertama berisi `n`. Baris kedua berisi `n` bilangan bulat. Cetak jumlah elemen yang bernilai positif saja.",
+            new[]
+            {
+                ("5\n1 -2 3 -4 5\n", "9", true),
+                ("3\n-1 -2 -3\n", "0", false),
+                ("4\n1 2 3 4\n", "10", false),
+            }),
+
+        new("Elemen Kedua Terbesar", "array", ProblemLevel.Medium,
+            "Baris pertama berisi `n` (n ≥ 2, semua elemen berbeda). Baris kedua berisi `n` bilangan bulat. " +
+            "Cetak elemen terbesar kedua.",
+            new[]
+            {
+                ("4\n3 1 4 5\n", "4", true),
+                ("2\n10 20\n", "10", false),
+                ("5\n9 7 5 3 1\n", "7", false),
+            }),
+
+        new("Cek Array Terurut Menaik", "array,selection", ProblemLevel.Easy,
+            "Baris pertama berisi `n`. Baris kedua berisi `n` bilangan bulat. " +
+            "Cetak `Ya` bila array sudah terurut menaik (tidak menurun), selain itu `Tidak`.",
+            new[]
+            {
+                ("4\n1 2 2 3\n", "Ya", true),
+                ("3\n1 3 2\n", "Tidak", false),
+                ("1\n5\n", "Ya", false),
+            }),
+
+        new("Gabung Dua Array", "array,loop", ProblemLevel.Medium,
+            "Baris 1: `n`. Baris 2: array `A` (`n` bilangan). Baris 3: `m`. Baris 4: array `B` (`m` bilangan). " +
+            "Cetak seluruh elemen `A` diikuti seluruh elemen `B`, dipisah spasi.",
+            new[]
+            {
+                ("3\n1 2 3\n2\n4 5\n", "1 2 3 4 5", true),
+                ("1\n9\n1\n8\n", "9 8", false),
+                ("2\n1 1\n3\n2 2 2\n", "1 1 2 2 2", false),
+            }),
+
+        // ---------- String ----------
+        new("Hitung Kemunculan Karakter", "string,loop", ProblemLevel.Easy,
+            "Baris pertama berisi sebuah kata `s`. Baris kedua berisi sebuah karakter `c`. " +
+            "Cetak berapa kali `c` muncul di dalam `s`.",
+            new[]
+            {
+                ("mississippi\ns\n", "4", true),
+                ("halo\nz\n", "0", false),
+                ("aaaa\na\n", "4", false),
+            }),
+
+        new("Ganti Spasi jadi Strip", "string,loop", ProblemLevel.Easy,
+            "Baca satu baris teks (boleh mengandung spasi). Cetak baris itu dengan setiap spasi diganti tanda `-`.",
+            new[]
+            {
+                ("saya suka kopi\n", "saya-suka-kopi", true),
+                ("halo\n", "halo", false),
+                ("a b c d\n", "a-b-c-d", false),
+            }),
+
+        new("Huruf Pertama dan Terakhir", "string", ProblemLevel.Easy,
+            "Baca sebuah kata. Cetak huruf pertama, sebuah spasi, lalu huruf terakhirnya.",
+            new[]
+            {
+                ("pemrograman\n", "p n", true),
+                ("a\n", "a a", false),
+                ("bee\n", "b e", false),
+            }),
+
+        new("Hitung Jumlah Kata", "string,loop", ProblemLevel.Medium,
+            "Baca satu baris teks. Cetak banyaknya kata (dipisah oleh satu atau lebih spasi).",
+            new[]
+            {
+                ("saya suka kopi\n", "3", true),
+                ("halo\n", "1", false),
+                ("satu dua tiga empat\n", "4", false),
+            }),
+
+        // ---------- Matriks (array 2 dimensi) ----------
+        new("Jumlah Tiap Baris Matriks", "array,loop", ProblemLevel.Medium,
+            "Baris pertama berisi `r` dan `c` (jumlah baris dan kolom). Lalu `r` baris berisi `c` bilangan. " +
+            "Cetak jumlah tiap baris, masing-masing pada baris tersendiri.",
+            new[]
+            {
+                ("2 3\n1 2 3\n4 5 6\n", "6\n15", true),
+                ("1 1\n7\n", "7", false),
+                ("3 2\n1 1\n2 2\n3 3\n", "2\n4\n6", false),
+            }),
+
+        new("Total Elemen Matriks", "array,loop", ProblemLevel.Easy,
+            "Baris pertama berisi `r` dan `c`. Lalu `r` baris berisi `c` bilangan. Cetak jumlah seluruh elemen.",
+            new[]
+            {
+                ("2 2\n1 2\n3 4\n", "10", true),
+                ("1 3\n5 5 5\n", "15", false),
+                ("3 1\n1\n2\n3\n", "6", false),
+            }),
     };
 }
