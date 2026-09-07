@@ -119,7 +119,7 @@ onBeforeUnmount(async () => {
         {{ problem.language.toUpperCase() }} · limit {{ problem.timeLimitMs }} ms · {{ problem.memoryLimitKb }} KB
       </div>
       <p v-if="protectOn" class="text-[11px] text-amber-600 dark:text-amber-400 mb-2">
-        🔒 Soal dilindungi — dikirim sebagai gambar terenkripsi dengan watermark identitasmu.
+        🔒 Protected problem — served as an encrypted image watermarked with your identity.
       </p>
 
       <ContentGuard v-if="protectOn" :active="true" :watermark="''">
@@ -143,8 +143,8 @@ onBeforeUnmount(async () => {
                 ? 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-500/15 dark:text-purple-300 dark:border-purple-500/30'
                 : 'text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-400'">
         {{ myPost.hiddenByStudent
-          ? '🔒 Live code & progres disembunyikan dari teman'
-          : '👥 Sembunyikan live code & progres dari teman' }}
+          ? "🔒 Live code & progress hidden from classmates"
+          : "👥 Hide live code & progress from classmates" }}
       </button>
 
       <h3 class="font-semibold text-sm mt-5 mb-2">Submissions</h3>

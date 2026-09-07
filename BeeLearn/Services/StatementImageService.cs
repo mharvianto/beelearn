@@ -76,7 +76,7 @@ public class StatementImageService
             g.Y += 12;
             g.HLine();
             g.Y += 16;
-            g.Heading("Contoh", 2);
+            g.Heading("Examples", 2);
             for (int i = 0; i < samples.Count; i++)
             {
                 g.Label($"Input {i + 1}");

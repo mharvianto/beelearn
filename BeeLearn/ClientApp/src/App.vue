@@ -27,20 +27,20 @@ async function logout() {
           <RouterLink to="/boards" class="font-bold text-lg text-amber-600 dark:text-amber-400 shrink-0">🐝 BeeLearn</RouterLink>
           <RouterLink to="/practice"
                       class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
-            Latihan
+            Practice
           </RouterLink>
           <RouterLink to="/leaderboard"
                       class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
-            Papan Peringkat
+            Leaderboard
           </RouterLink>
           <RouterLink v-if="auth.isTeacher" to="/bank"
                       class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
-            Bank soal
+            Problem bank
           </RouterLink>
         </div>
         <div class="flex items-center gap-3 text-sm shrink-0">
           <RouterLink to="/leaderboard" v-if="progress.ready"
-                      class="hidden sm:flex items-center gap-2" title="XP kamu">
+                      class="hidden sm:flex items-center gap-2" title="Your XP">
             <span class="text-xs font-semibold text-amber-600 dark:text-amber-400">Lv {{ progress.level }}</span>
             <span class="w-20 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
               <span class="block h-full bg-amber-400" :style="{ width: (progress.pct * 100) + '%' }"></span>

@@ -78,11 +78,11 @@ onBeforeUnmount(async () => { try { await conn?.stop(); } catch {} });
 <template>
   <div v-if="problem" class="h-full grid lg:grid-cols-2 gap-0">
     <div class="p-5 overflow-y-auto border-r border-slate-200 dark:border-slate-800">
-      <RouterLink to="/practice" class="text-sm text-slate-400 dark:text-slate-500">&larr; kembali ke Latihan</RouterLink>
+      <RouterLink to="/practice" class="text-sm text-slate-400 dark:text-slate-500">&larr; back to Practice</RouterLink>
       <div class="flex items-center gap-2 mt-2 mb-1 flex-wrap">
         <h1 class="text-lg font-bold">{{ problem.title }}</h1>
         <LevelBadge :level="problem.level" />
-        <span v-if="problem.solved" class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">✓ selesai</span>
+        <span v-if="problem.solved" class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">✓ solved</span>
         <span v-for="t in (problem.tags ? problem.tags.split(',') : [])" :key="t"
               class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{{ t }}</span>
       </div>
@@ -91,20 +91,20 @@ onBeforeUnmount(async () => { try { await conn?.stop(); } catch {} });
       </div>
 
       <div v-if="gained" class="mb-3 text-sm bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200 rounded-lg px-3 py-2">
-        🎉 +{{ gained }} XP! Sekarang Lv {{ progress.level }} · {{ progress.xp }} XP
+        🎉 +{{ gained }} XP! Now Lv {{ progress.level }} · {{ progress.xp }} XP
       </div>
 
       <MarkdownBlock :text="problem.statementMarkdown" />
 
       <div v-if="problem.sampleTests?.length" class="mt-4">
-        <h3 class="font-semibold text-sm mb-1">Contoh</h3>
+        <h3 class="font-semibold text-sm mb-1">Examples</h3>
         <div v-for="(t, i) in problem.sampleTests" :key="i" class="grid grid-cols-2 gap-2 mb-2 text-xs">
           <pre class="bg-slate-100 dark:bg-slate-800 rounded p-2 overflow-x-auto">{{ t.stdin }}</pre>
           <pre class="bg-slate-100 dark:bg-slate-800 rounded p-2 overflow-x-auto">{{ t.expectedStdout }}</pre>
         </div>
       </div>
 
-      <h3 class="font-semibold text-sm mt-5 mb-2">Riwayat</h3>
+      <h3 class="font-semibold text-sm mt-5 mb-2">History</h3>
       <div class="space-y-1">
         <div v-for="s in submissions" :key="s.id"
              class="flex items-center gap-2 text-sm border border-slate-100 dark:border-slate-800 rounded-lg px-2 py-1.5">
@@ -114,7 +114,7 @@ onBeforeUnmount(async () => { try { await conn?.stop(); } catch {} });
           </span>
           <span class="text-xs text-slate-400 dark:text-slate-500 ml-auto">{{ new Date(s.createdAt + 'Z').toLocaleTimeString() }}</span>
         </div>
-        <p v-if="!submissions.length" class="text-slate-400 dark:text-slate-500 text-sm">Belum ada kiriman.</p>
+        <p v-if="!submissions.length" class="text-slate-400 dark:text-slate-500 text-sm">No submissions yet.</p>
       </div>
     </div>
 

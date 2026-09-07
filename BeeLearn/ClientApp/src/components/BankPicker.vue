@@ -36,20 +36,20 @@ async function add(item) {
   <div class="fixed inset-0 bg-black/50 flex items-start justify-center p-4 overflow-y-auto z-50">
     <div class="bg-white dark:bg-slate-900 border border-transparent dark:border-slate-800 rounded-xl w-full max-w-2xl p-5 my-8">
       <div class="flex items-center justify-between mb-3">
-        <h2 class="font-bold text-lg">Ambil dari bank soal</h2>
+        <h2 class="font-bold text-lg">Add from problem bank</h2>
         <button @click="emit('cancel')" class="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">✕</button>
       </div>
 
       <div class="flex gap-2 mb-3">
-        <input v-model="q" @keyup.enter="load" placeholder="Cari judul atau tag…"
+        <input v-model="q" @keyup.enter="load" placeholder="Search title or tag…"
                class="flex-1 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-1.5 text-sm" />
         <select v-model="scope" @change="load"
                 class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 text-sm">
-          <option value="all">Semua</option>
-          <option value="mine">Milik saya</option>
-          <option value="public">Dibagikan</option>
+          <option value="all">All</option>
+          <option value="mine">Mine</option>
+          <option value="public">Shared</option>
         </select>
-        <button @click="load" class="text-sm bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-3">Cari</button>
+        <button @click="load" class="text-sm bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-3">Search</button>
       </div>
 
       <p v-if="error" class="text-sm text-red-600 dark:text-red-400 mb-2">{{ error }}</p>
@@ -63,17 +63,17 @@ async function add(item) {
               <LevelBadge :level="b.level" />
             </div>
             <div class="text-[11px] text-slate-400 dark:text-slate-500">
-              {{ b.language.toUpperCase() }} · {{ b.testCount }} test ({{ b.sampleCount }} sample)
-              <span v-if="!b.mine"> · oleh {{ b.ownerName }}</span>
+              {{ b.language.toUpperCase() }} · {{ b.testCount }} tests ({{ b.sampleCount }} sample)
+              <span v-if="!b.mine"> · by {{ b.ownerName }}</span>
               <span v-if="b.tags"> · {{ b.tags }}</span>
             </div>
           </div>
           <button @click="add(b)" :disabled="busyId === b.id"
                   class="text-sm bg-amber-500 text-white rounded-lg px-3 py-1 disabled:opacity-50 shrink-0">
-            {{ busyId === b.id ? '…' : 'Tambah' }}
+            {{ busyId === b.id ? "…" : "Add" }}
           </button>
         </div>
-        <p v-if="!items.length" class="text-sm text-slate-400 dark:text-slate-500">Bank soal kosong.</p>
+        <p v-if="!items.length" class="text-sm text-slate-400 dark:text-slate-500">Problem bank is empty.</p>
       </div>
     </div>
   </div>

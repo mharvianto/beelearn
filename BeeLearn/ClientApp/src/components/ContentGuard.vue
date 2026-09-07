@@ -76,7 +76,7 @@ const watermarkStyle = computed(() => {
 
     <div v-if="active && hidden"
          class="absolute inset-0 grid place-items-center rounded-lg bg-slate-100/85 dark:bg-slate-900/85 text-sm text-slate-500 dark:text-slate-400">
-      👁️ Kembali ke tab ini untuk melihat soal
+      👁️ Return to this tab to view the problem
     </div>
   </div>
 </template>

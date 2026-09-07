@@ -87,7 +87,7 @@ async function saveToBank(p) {
   try {
     await api.post(`/api/boards/${props.slug}/problems/${p.id}/to-bank`);
     error.value = '';
-    alert(`"${p.title}" disimpan ke bank soal.`);
+    alert(`"${p.title}" saved to the problem bank.`);
   } catch (e) { error.value = e.message; }
 }
 
@@ -163,7 +163,7 @@ onBeforeUnmount(async () => {
       </button>
       <button @click="picking = true"
               class="px-3 py-1.5 rounded-lg text-sm font-medium border bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700">
-        📚 Dari bank
+        📚 From bank
       </button>
     </div>
 
@@ -200,7 +200,7 @@ onBeforeUnmount(async () => {
         <div class="flex items-center gap-2">
           <button v-if="isStaff" @click="saveToBank(p)"
                   class="text-sm text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100"
-                  title="Simpan ke bank soal">📚</button>
+                  title="Save to problem bank">📚</button>
           <button v-if="isStaff" @click="editing = p" class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">edit</button>
           <RouterLink :to="`/boards/${board.slug}/problems/${p.id}`"
                       class="text-sm bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-3 py-1.5">

@@ -68,7 +68,7 @@ function removeTest(i) { form.value.testCases.splice(i, 1); }
           </label>
           <label v-if="showBankFields" class="flex items-center gap-2">
             <input type="checkbox" v-model="form.isPublic" />
-            Bagikan ke guru lain
+            Share with other teachers
           </label>
         </div>
 

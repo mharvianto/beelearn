@@ -43,7 +43,7 @@ async function save(form) {
 }
 
 async function remove() {
-  if (!editing.value?.id || !confirm('Hapus soal ini dari bank?')) return;
+  if (!editing.value?.id || !confirm("Delete this problem from the bank?")) return;
   try {
     await api.del(`/api/bank/${editing.value.id}`);
     editing.value = null;
@@ -55,27 +55,27 @@ async function remove() {
 <template>
   <div class="max-w-5xl mx-auto px-4 py-8">
     <div class="flex items-center justify-between mb-4">
-      <h1 class="text-xl font-bold">Bank soal</h1>
+      <h1 class="text-xl font-bold">Problem bank</h1>
       <button @click="editing = {}" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500 text-white">
-        + Soal baru
+        + New problem
       </button>
     </div>
 
     <div class="flex gap-2 mb-4">
-      <input v-model="q" @keyup.enter="load" placeholder="Cari judul atau tag…"
+      <input v-model="q" @keyup.enter="load" placeholder="Search title or tag…"
              class="flex-1 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-2 text-sm" />
       <select v-model="scope" @change="load"
               class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 text-sm">
-        <option value="mine">Milik saya</option>
-        <option value="public">Dibagikan guru lain</option>
-        <option value="all">Semua</option>
+        <option value="mine">Mine</option>
+        <option value="public">Shared by others</option>
+        <option value="all">All</option>
       </select>
       <select v-model="level" @change="load"
               class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 text-sm">
-        <option value="">Semua level</option>
+        <option value="">All levels</option>
         <option>Easy</option><option>Medium</option><option>Hard</option>
       </select>
-      <button @click="load" class="text-sm bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4">Cari</button>
+      <button @click="load" class="text-sm bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4">Search</button>
     </div>
 
     <p v-if="error" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ error }}</p>
@@ -86,13 +86,13 @@ async function remove() {
         <div class="flex items-start justify-between gap-2">
           <h3 class="font-semibold text-sm">{{ b.title }}</h3>
           <span v-if="b.isPublic" class="text-[10px] shrink-0 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-            dibagikan
+            shared
           </span>
         </div>
         <div class="mt-1"><LevelBadge :level="b.level" /></div>
         <div class="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-          {{ b.language.toUpperCase() }} · {{ b.testCount }} test ({{ b.sampleCount }} sample)
-          <span v-if="!b.mine"> · oleh {{ b.ownerName }}</span>
+          {{ b.language.toUpperCase() }} · {{ b.testCount }} tests ({{ b.sampleCount }} sample)
+          <span v-if="!b.mine"> · by {{ b.ownerName }}</span>
         </div>
         <div v-if="b.tags" class="flex flex-wrap gap-1 mt-2">
           <span v-for="t in b.tags.split(',')" :key="t"
@@ -106,7 +106,7 @@ async function remove() {
         </button>
       </div>
     </div>
-    <p v-if="!items.length" class="text-slate-400 dark:text-slate-500 text-sm">Belum ada soal di sini.</p>
+    <p v-if="!items.length" class="text-slate-400 dark:text-slate-500 text-sm">Nothing here yet.</p>
 
     <ProblemEditor v-if="editing !== null"
       :problem="editing.id ? editing : null"
