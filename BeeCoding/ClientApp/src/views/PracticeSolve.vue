@@ -171,12 +171,12 @@ onBeforeUnmount(async () => { try { await conn?.stop(); } catch {} });
         <div class="grid grid-cols-2 gap-2">
           <div>
             <label class="text-xs text-slate-400 dark:text-slate-500">stdin</label>
-            <textarea v-model="stdin" rows="3"
-                      class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1 font-mono text-xs"></textarea>
+            <textarea v-model="stdin"
+                      class="w-full h-20 resize-y border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1 font-mono text-xs"></textarea>
           </div>
           <div>
             <label class="text-xs text-slate-400 dark:text-slate-500">output</label>
-            <pre class="w-full h-[76px] bg-slate-900 text-slate-100 dark:bg-black dark:border dark:border-slate-800 rounded-lg px-2 py-1 font-mono text-xs overflow-auto whitespace-pre-wrap">{{
+            <pre class="w-full h-20 bg-slate-900 text-slate-100 dark:bg-black dark:border dark:border-slate-800 rounded-lg px-2 py-1 font-mono text-xs overflow-auto whitespace-pre-wrap">{{
               runOut
                 ? (runOut.compileOk
                     ? (runOut.stdout || '') + (runOut.stderr ? '\n[stderr] ' + runOut.stderr : '') +
