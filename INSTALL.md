@@ -409,6 +409,36 @@ Browser akan menandai "not trusted" (wajar untuk sertifikat sendiri) — lanjutk
 atau impor `beelearn.crt` ke *trust store* perangkat klien. Alternatif yang otomatis
 dipercaya di jaringan lokal: pakai **mkcert**.
 
+**Opsi C — di belakang CGNAT / ISP blokir port 80-443 (Cloudflare Tunnel):**
+
+Sertifikat valid tanpa membuka port apa pun. Butuh **domain sendiri** yang dikelola
+Cloudflare (`*.synology.me` / DDNS gratis tidak bisa).
+
+```bash
+curl -L https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" | sudo tee /etc/apt/sources.list.d/cloudflared.list
+sudo apt-get update && sudo apt-get install -y cloudflared
+
+cloudflared tunnel login
+cloudflared tunnel create beelearn
+cloudflared tunnel route dns beelearn beelearn.domainmu.com
+
+mkdir -p ~/.cloudflared && cat > ~/.cloudflared/config.yml <<EOF
+tunnel: beelearn
+credentials-file: $HOME/.cloudflared/<TUNNEL-ID>.json
+ingress:
+  - hostname: beelearn.domainmu.com
+    service: http://127.0.0.1:8080
+  - service: http_status:404
+EOF
+
+sudo cloudflared service install
+sudo systemctl enable --now cloudflared
+```
+
+nginx tidak wajib di jalur ini (tunnel langsung ke `127.0.0.1:8080`); WebSocket SignalR
+didukung Cloudflare. TLS ditangani di edge Cloudflare.
+
 ### 5) Firewall & uji
 
 ```bash
@@ -426,7 +456,8 @@ Buka `https://<domain-atau-IP>/`. Uji API: `curl -k https://<host>/api/auth/me` 
 | 413 Request Entity Too Large saat submit | naikkan `client_max_body_size`. |
 | 502 Bad Gateway | `beelearn.service` mati / bukan di `127.0.0.1:8080`. Cek `systemctl status beelearn`. |
 | certbot: `cannot load certificate ".../beelearn.crt"` saat `nginx -t` | Config sudah punya blok `listen 443 ssl` menunjuk file yang belum ada. Mulai dari config **HTTP-only** (langkah 3), baru jalankan `certbot --nginx`. |
-| certbot: challenge gagal / `NXDOMAIN` / timeout | Domain tidak mengarah ke IP publik server ini, atau port 80 tertutup. Untuk LAN pakai Opsi B. |
+| certbot: `Timeout during connect (likely firewall problem)` | DNS benar, tapi port 80 dari internet tidak sampai ke server (ISP blokir / NAT ganda / CGNAT). Buka port 80+443 di router, atau pakai **Opsi C (Cloudflare Tunnel)**, atau **Opsi B (self-signed)** untuk LAN. |
+| certbot: challenge gagal / `NXDOMAIN` | Domain tidak resolve ke IP publik server ini. Perbaiki DNS/DDNS, atau Opsi B/C. |
 
 ---
 
