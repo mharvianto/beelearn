@@ -28,17 +28,35 @@ public class NativeCompiler
         var exePath = Path.Combine(workDir, "prog");
         await File.WriteAllTextAsync(srcPath, code, ct);
 
-        var (exe, args) = lang == "c"
+        var (compilerPath, compilerArgs) = lang == "c"
             ? (_tc.GccPath, $"-O2 -std=gnu11 -pipe -o \"{exePath}\" \"{srcPath}\" -lm")
             : (_tc.GppPath, $"-O2 -std=gnu++17 -pipe -o \"{exePath}\" \"{srcPath}\"");
 
-        var psi = new ProcessStartInfo(exe, args)
+        // The compiler processes fully untrusted source. Jail it the same way runs are
+        // jailed when bwrap is usable, so `#include "/etc/passwd"` (or #embed) can't read
+        // host files and leak them back in the compile-error output.
+        ProcessStartInfo psi;
+        if (_tc.BwrapUsable)
         {
-            WorkingDirectory = workDir,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
+            var b = new StringBuilder();
+            b.Append("--unshare-all --die-with-parent --new-session --clearenv ");
+            b.Append("--setenv PATH /usr/bin:/bin --setenv TMPDIR /tmp ");
+            b.Append("--ro-bind /usr /usr --tmpfs /tmp --proc /proc --dev /dev ");
+            b.Append("--symlink usr/lib /lib --symlink usr/lib64 /lib64 ");
+            b.Append("--symlink usr/bin /bin --symlink usr/sbin /sbin ");
+            b.Append($"--bind \"{workDir}\" \"{workDir}\" --chdir \"{workDir}\" ");
+            b.Append($"-- \"{compilerPath}\" {compilerArgs}");
+            psi = new ProcessStartInfo(_tc.BwrapPath, b.ToString());
+        }
+        else
+        {
+            psi = new ProcessStartInfo(compilerPath, compilerArgs);
+        }
+
+        psi.WorkingDirectory = workDir;
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError = true;
+        psi.UseShellExecute = false;
 
         using var p = new Process { StartInfo = psi };
         var sb = new StringBuilder();

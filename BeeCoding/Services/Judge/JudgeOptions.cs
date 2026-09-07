@@ -12,6 +12,13 @@ public class JudgeOptions
 
     public int QueueCapacity { get; set; } = 200;
 
+    /// <summary>
+    /// Fail startup if bubblewrap can't create namespaces. Set true in production so the
+    /// judge never silently degrades to "rlimits only" (no filesystem/network isolation —
+    /// student code could read the app's files or open outbound sockets).
+    /// </summary>
+    public bool RequireSandbox { get; set; }
+
     /// <summary>Extra wall-clock grace on top of a problem's time limit before the parent force-kills.</summary>
     public int HardWallBufferMs { get; set; } = 800;
 

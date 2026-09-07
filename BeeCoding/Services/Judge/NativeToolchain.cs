@@ -57,6 +57,16 @@ public class NativeToolchain
             "Sandbox mode: {Mode} (bwrap {State}). Time/memory limits are always enforced via rlimits.",
             BwrapUsable ? "bubblewrap + rlimits" : "rlimits only",
             bw is null ? "not installed" : BwrapUsable ? "usable" : "present but namespaces are blocked");
+
+        if (Options.RequireSandbox && !BwrapUsable)
+            throw new InvalidOperationException(
+                "Judge:RequireSandbox is set but bubblewrap cannot create namespaces on this host. " +
+                "Enable unprivileged user namespaces (see INSTALL.md) or set Judge:RequireSandbox=false to allow rlimits-only mode.");
+
+        if (!BwrapUsable)
+            _log.LogWarning(
+                "JUDGE IS RUNNING WITHOUT FILESYSTEM/NETWORK ISOLATION. Untrusted code can read this " +
+                "process's files and open outbound connections. Set Judge:RequireSandbox=true for production.");
     }
 
     private bool TryCompileRunner(string src, string outPath, bool staticLink)

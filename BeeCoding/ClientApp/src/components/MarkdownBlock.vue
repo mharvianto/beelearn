@@ -1,9 +1,30 @@
 <script setup>
 import { computed } from 'vue';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 
 const props = defineProps({ text: String });
-const html = computed(() => marked.parse(props.text || '', { breaks: true }));
+
+// Problem statements are authored by teachers (and the admin ingest endpoint), i.e.
+// not fully trusted. marked emits raw HTML as-is, so sanitise before v-html.
+const html = computed(() =>
+  DOMPurify.sanitize(marked.parse(props.text || '', { breaks: true }), {
+    ALLOWED_TAGS: [
+      'p', 'br', 'hr', 'span', 'div',
+      'strong', 'b', 'em', 'i', 'del', 's', 'mark', 'sub', 'sup',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'ul', 'ol', 'li', 'blockquote',
+      'code', 'pre', 'kbd', 'samp',
+      'table', 'thead', 'tbody', 'tr', 'th', 'td',
+      'a', 'img',
+    ],
+    ALLOWED_ATTR: ['href', 'title', 'alt', 'src', 'colspan', 'rowspan', 'align'],
+    ALLOW_DATA_ATTR: false,
+    // block javascript:, data: (except images), etc.
+    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|#|\/(?!\/))/i,
+    ADD_ATTR: ['target', 'rel'],
+  }),
+);
 </script>
 
 <template>

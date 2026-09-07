@@ -14,3 +14,11 @@ core.*
 
 # stray dotnet runfile cache
 dotnet/
+
+# local secrets / overrides — never commit real tokens or connection strings
+BeeCoding/appsettings.Production.json
+BeeCoding/appsettings.*.local.json
+**/appsettings.Local.json
+*.secrets.json
+.env
+.env.*

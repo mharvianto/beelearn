@@ -28,6 +28,7 @@ public class RunController : ApiControllerBase
     {
         if (string.IsNullOrWhiteSpace(dto.Code)) return BadRequest("Code is empty.");
         if (dto.Code.Length > 200_000) return BadRequest("Code is too large.");
+        if ((dto.Stdin?.Length ?? 0) > 256_000) return BadRequest("Stdin is too large.");
         if (!_rate.TryAcquire(UserId)) return StatusCode(429, "Slow down a moment and try again.");
 
         var job = new RunJob(

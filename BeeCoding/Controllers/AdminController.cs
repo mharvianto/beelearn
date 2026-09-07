@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using BeeCoding.Data;
@@ -12,9 +13,10 @@ namespace BeeCoding.Controllers;
 
 /// <summary>
 /// Token-authed bulk maintenance of the public problem bank — meant for scripting, not the UI.
-/// Disabled (404) unless <c>Admin:Token</c> is configured. Send it as header
-/// <c>X-Admin-Token</c> (or <c>?token=</c>). Problems are upserted by (owner, title) so a
-/// script can be re-run idempotently.
+/// Every response is <c>404</c> unless <c>Admin:Token</c> is configured AND the request carries
+/// the right token (header <c>X-Admin-Token</c>, or <c>?token=</c>) — a wrong token is
+/// indistinguishable from the feature being off. Brute force is throttled per client IP.
+/// Problems are upserted by (owner, title) so a script can be re-run idempotently.
 /// </summary>
 [ApiController]
 [AllowAnonymous]
@@ -23,6 +25,11 @@ public class AdminController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly IConfiguration _cfg;
+
+    // per-IP failed-attempt throttle: max 8 misses per 10-minute rolling window.
+    private static readonly ConcurrentDictionary<string, (int Count, long WindowTicks)> _fails = new();
+    private const int MaxFails = 8;
+    private static readonly long WindowTicks = TimeSpan.FromMinutes(10).Ticks;
 
     public AdminController(AppDbContext db, IConfiguration cfg)
     {
@@ -33,15 +40,27 @@ public class AdminController : ControllerBase
     private ActionResult? Gate()
     {
         var expected = _cfg["Admin:Token"];
-        if (string.IsNullOrWhiteSpace(expected))
-            return NotFound();   // feature off
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "?";
+        var now = DateTime.UtcNow.Ticks;
+
+        var st = _fails.GetValueOrDefault(ip);
+        if (now - st.WindowTicks > WindowTicks) st = (0, now);   // window expired -> reset
+        if (st.Count >= MaxFails) return NotFound();             // locked out (still looks "off")
+
+        if (string.IsNullOrWhiteSpace(expected)) return NotFound();   // feature off
 
         var got = Request.Headers["X-Admin-Token"].ToString();
         if (string.IsNullOrEmpty(got)) got = Request.Query["token"].ToString();
 
         var ok = CryptographicOperations.FixedTimeEquals(
             Encoding.UTF8.GetBytes(got), Encoding.UTF8.GetBytes(expected));
-        return ok ? null : Unauthorized();
+        if (ok)
+        {
+            _fails.TryRemove(ip, out _);
+            return null;
+        }
+        _fails[ip] = (st.Count + 1, st.WindowTicks == 0 ? now : st.WindowTicks);
+        return NotFound();   // never reveal "wrong token" vs "disabled"
     }
 
     private async Task<User?> ResolveOwnerAsync(string? email)

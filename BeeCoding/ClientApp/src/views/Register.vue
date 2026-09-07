@@ -6,7 +6,7 @@ import ThemeToggle from '../components/ThemeToggle.vue';
 
 const auth = useAuth();
 const router = useRouter();
-const form = ref({ displayName: '', email: '', password: '', role: 'Student' });
+const form = ref({ displayName: '', email: '', password: '', role: 'Student', teacherCode: '' });
 const error = ref('');
 const busy = ref(false);
 
@@ -49,6 +49,8 @@ async function submit() {
           <input type="radio" value="Teacher" v-model="form.role" class="mr-2" />Teacher
         </label>
       </div>
+      <input v-if="form.role === 'Teacher'" v-model="form.teacherCode" placeholder="Teacher invite code"
+             class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-2" />
       <p v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
       <button :disabled="busy"
               class="w-full bg-amber-500 hover:bg-amber-600 text-white rounded-lg py-2 font-medium disabled:opacity-50">

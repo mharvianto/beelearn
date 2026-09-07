@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
 using BeeCoding.Data;
 using BeeCoding.Models;
 using BeeCoding.Services;
@@ -15,11 +16,13 @@ public class AuthController : ApiControllerBase
 {
     private readonly AppDbContext _db;
     private readonly PasswordService _pw;
+    private readonly IConfiguration _cfg;
 
-    public AuthController(AppDbContext db, PasswordService pw)
+    public AuthController(AppDbContext db, PasswordService pw, IConfiguration cfg)
     {
         _db = db;
         _pw = pw;
+        _cfg = cfg;
     }
 
     [HttpPost("register")]
@@ -31,8 +34,22 @@ public class AuthController : ApiControllerBase
         if ((dto.Password ?? "").Length < 6) return BadRequest("Password must be at least 6 characters.");
         if (string.IsNullOrWhiteSpace(dto.DisplayName)) return BadRequest("Display name is required.");
 
-        var role = dto.Role?.Equals("Teacher", StringComparison.OrdinalIgnoreCase) == true
-            ? UserRole.Teacher : UserRole.Student;
+        // Self-service registration only creates Students. A Teacher account requires the
+        // shared invite code (Auth:TeacherSignupCode); when that config is unset, teacher
+        // self-signup is disabled entirely (make teachers via the DB / an existing teacher).
+        var wantsTeacher = dto.Role?.Equals("Teacher", StringComparison.OrdinalIgnoreCase) == true;
+        var role = UserRole.Student;
+        if (wantsTeacher)
+        {
+            var code = _cfg["Auth:TeacherSignupCode"];
+            if (string.IsNullOrEmpty(code))
+                return BadRequest("Teacher self-registration is disabled on this server.");
+            if (!CryptographicOperations.FixedTimeEquals(
+                    System.Text.Encoding.UTF8.GetBytes(dto.TeacherCode ?? ""),
+                    System.Text.Encoding.UTF8.GetBytes(code)))
+                return BadRequest("Invalid teacher code.");
+            role = UserRole.Teacher;
+        }
 
         if (await _db.Users.AnyAsync(u => u.Email == email))
             return Conflict("An account with that email already exists.");

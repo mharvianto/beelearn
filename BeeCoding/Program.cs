@@ -12,6 +12,11 @@ var builder = WebApplication.CreateBuilder(args);
 // journald integration + Type=notify readiness when run under systemd; no-op otherwise.
 builder.Host.UseSystemd();
 
+// Cap request bodies. Code/stdin are validated per-endpoint; this is the backstop for
+// the admin ingest route and anything else. nginx should keep its own (smaller) limit
+// on /api/run and friends.
+builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 16 * 1024 * 1024);
+
 // Trust X-Forwarded-* from a reverse proxy (nginx) so Request.Scheme is "https"
 // behind TLS termination. Only the proxy should be able to reach the app port.
 builder.Services.Configure<ForwardedHeadersOptions>(o =>
@@ -101,6 +106,31 @@ using (var scope = app.Services.CreateScope())
 app.Services.GetRequiredService<NativeToolchain>().Initialize();
 
 app.UseForwardedHeaders();
+
+// Security headers on every response. Override CSP with Security:ContentSecurityPolicy
+// (a custom string), or set it to "off" to send no CSP header (e.g. if Monaco breaks).
+var cspCfg = builder.Configuration["Security:ContentSecurityPolicy"];
+var csp = string.Equals(cspCfg, "off", StringComparison.OrdinalIgnoreCase) ? ""
+    : !string.IsNullOrWhiteSpace(cspCfg) ? cspCfg!
+    : "default-src 'self'; " +
+      "img-src 'self' data: blob:; " +
+      "style-src 'self' 'unsafe-inline'; " +
+      "script-src 'self'; " +
+      "worker-src 'self' blob:; " +
+      "connect-src 'self'; " +
+      "font-src 'self' data:; " +
+      "object-src 'none'; base-uri 'self'; frame-ancestors 'none'";
+app.Use(async (ctx, next) =>
+{
+    var h = ctx.Response.Headers;
+    h["X-Content-Type-Options"] = "nosniff";
+    h["X-Frame-Options"] = "DENY";
+    h["Referrer-Policy"] = "no-referrer";
+    h["Cross-Origin-Opener-Policy"] = "same-origin";
+    if (csp.Length > 0) h["Content-Security-Policy"] = csp;
+    if (ctx.Request.IsHttps) h["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+    await next();
+});
 
 if (app.Environment.IsDevelopment())
     app.UseCors(DevCors);

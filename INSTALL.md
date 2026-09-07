@@ -483,6 +483,10 @@ variable (nesting pakai `__`).
 | `Judge:RunTimeLimitMs` | `1000` | Batas waktu default tombol **Run** ad-hoc. |
 | `Judge:RunMemoryLimitKb` | `32768` | Batas memori default tombol **Run**. |
 | `Judge:RateLimitMs` | `1500` | Jarak minimum antar Run/Submit per user. |
+| `Judge:RequireSandbox` | `false` | **Set `true` di produksi.** Bila `true` dan bwrap tak bisa bikin namespace, app **gagal start** (daripada diam-diam jalan tanpa isolasi filesystem/jaringan). |
+| `Auth:TeacherSignupCode` | `""` (kosong) | Kosong ⇒ pendaftaran mandiri **hanya bisa jadi Student**. Diisi ⇒ user boleh memilih peran Teacher jika memasukkan kode ini. Buat guru pertama lewat seeder / DB. |
+| `Admin:Token` | `""` (kosong) | Token endpoint `/api/admin/*`. Kosong ⇒ semua respons `404`. Token salah juga `404` (tak bisa dibedakan dari "mati"); brute force di-throttle per-IP (8 gagal / 10 menit). Pakai `openssl rand -hex 32`, set via env, jangan commit. |
+| `Security:ContentSecurityPolicy` | *(bawaan)* | Override CSP dengan string sendiri, atau `"off"` untuk tidak mengirim header CSP (mis. jika Monaco bermasalah). |
 | `Lsp:Enabled` | `false` | Aktifkan IntelliSense C/C++ (butuh `clangd` di PATH). |
 | `Lsp:ClangdPath` | `clangd` | Path biner clangd. |
 | `Lsp:MaxConcurrent` | `4` | Maksimum sesi clangd bersamaan (1 per editor yang terbuka). |
@@ -498,8 +502,18 @@ export ConnectionStrings__Default="Data Source=/var/lib/beecoding/beecoding.db"
 export Judge__MaxConcurrent=4
 export Judge__WorkRoot=/var/tmp/beecoding-judge
 export Lsp__Enabled=true          # setelah `apt install clangd`
-export Admin__Token="$(openssl rand -hex 24)"   # aktifkan endpoint admin bank soal
+export Admin__Token="$(openssl rand -hex 32)"   # aktifkan endpoint admin bank soal
 ```
+
+### Checklist keamanan produksi
+
+- `Environment=Judge__RequireSandbox=true` — pastikan log startup berbunyi `Sandbox mode: bubblewrap + rlimits` (kalau `rlimits only`, aktifkan *unprivileged user namespaces*, lihat §6).
+- Ikat Kestrel ke localhost: `Environment=ASPNETCORE_URLS=http://127.0.0.1:8080` (nginx yang menghadap publik).
+- `Auth__TeacherSignupCode` diisi (atau biarkan kosong → tak ada guru baru dari form). Peran Teacher = bisa menulis soal → jangan biarkan siapa pun mengambilnya.
+- `Admin__Token` panjang & acak, hanya via `Environment=` di unit systemd — **jangan** taruh di `appsettings.json` yang ter-commit.
+- Di nginx, batasi body untuk route judge: `location /api/run { client_max_body_size 1m; proxy_pass http://beecoding; ... }` — biarkan `100m` hanya untuk `/api/admin/`.
+- Header keamanan (CSP, `X-Frame-Options`, `X-Content-Type-Options`, HSTS saat HTTPS) sudah dikirim aplikasi otomatis.
+- Statement soal disanitasi (DOMPurify) sebelum dirender — aman dari HTML/script sisipan.
 
 ### Endpoint admin — mengisi bank soal via skrip
 
@@ -571,6 +585,10 @@ Tanpa clangd atau dengan `Lsp:Enabled=false`, editor tetap jalan memakai complet
   - Ubuntu 24.04 (dibatasi AppArmor): `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`
   - Kontainer Docker: jalankan dengan `--security-opt seccomp=unconfined --security-opt apparmor=unconfined`
     (dev container bawaan repo **memblokir** userns → judge berjalan *rlimits-only*).
+  - Bila bwrap aktif, **proses kompilasi `g++` juga dijalankan di dalam jail yang sama** —
+    jadi kode seperti `#include "/etc/passwd"` tidak bisa membaca file host. Tanpa bwrap
+    (*rlimits-only*), kompilasi tidak terisolasi → pakai `Judge:RequireSandbox=true` untuk
+    menolak jalan dalam mode itu.
 - Untuk produksi: jalankan aplikasi sebagai **user berprivilege rendah** khusus, dan idealnya
   pisahkan eksekusi kode ke VM/host sekali-pakai. Lihat bagian *Security note* di `README.md`.
 
