@@ -195,7 +195,8 @@ Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=ASPNETCORE_URLS=http://0.0.0.0:8080
 Environment=DOTNET_ROOT=/home/harvianto/.dotnet
 Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
-Environment=ConnectionStrings__Default=Data Source=/srv/beelearn/data/beelearn.db
+# nilai mengandung spasi -> WAJIB dikutip penuh, kalau tidak systemd memecahnya
+Environment="ConnectionStrings__Default=Data Source=/srv/beelearn/data/beelearn.db"
 Environment=Judge__WorkRoot=/srv/beelearn/.judge
 
 Restart=on-failure
@@ -343,4 +344,5 @@ Repo menyertakan `.devcontainer/devcontainer.json` (image .NET 10 + fitur Node).
 | Verdict selalu `MemoryLimit` untuk program sederhana | Naikkan `MemoryLimitKb` pada soal (mis. 65536) — `RLIMIT_AS` membatasi *virtual address space*, bukan RSS. |
 | Gambar soal terlindungi kosong / error | Pada image minimal, `sudo apt-get install -y libfontconfig1`. Di Ubuntu 24.04 biasanya sudah cukup. |
 | `Address already in use` | Ubah `applicationUrl` di `launchSettings.json` atau set `ASPNETCORE_URLS`, dan sesuaikan `BACKEND_URL` untuk Vite. |
+| Service: `Format of the initialization string does not conform...` | Baris `Environment=` dengan nilai berspasi tidak dikutip. Bungkus penuh: `Environment="ConnectionStrings__Default=Data Source=/path/db"`. |
 | Judge lambat / antre | Naikkan `Judge__MaxConcurrent` sesuai jumlah core. |
