@@ -160,7 +160,7 @@ public class StatementImageService
         {
             float brick = (row & 1) * (stepX / 2f);   // stagger alternate rows
             for (float x = -w - stepX; x < w * 2f; x += stepX)
-                canvas.DrawText(text, x + brick, y, font, paint);
+                canvas.DrawText(text, x + brick, y, SKTextAlign.Left, font, paint);
         }
         canvas.Restore();
     }
@@ -192,7 +192,7 @@ public class StatementImageService
             float size = level <= 1 ? 24 : level == 2 ? 19 : 16;
             using var f = new SKFont(_bold.Typeface, size);
             Y += size;
-            Canvas.DrawText(s, Margin, Y, f, _text);
+            Canvas.DrawText(s, Margin, Y, SKTextAlign.Left, f, _text);
             Y += size * 0.35f;
         }
 
@@ -200,7 +200,7 @@ public class StatementImageService
         {
             using var f = new SKFont(_reg.Typeface, 11.5f);
             Y += 13;
-            Canvas.DrawText(s, Margin, Y, f, _muted);
+            Canvas.DrawText(s, Margin, Y, SKTextAlign.Left, f, _muted);
             Y += 3;
         }
 
@@ -215,7 +215,7 @@ public class StatementImageService
             float y = top + 6 + size;
             foreach (var ln in lines)
             {
-                Canvas.DrawText(ln, Margin + 8, y, _monoSmall, _text);
+                Canvas.DrawText(ln, Margin + 8, y, SKTextAlign.Left, _monoSmall, _text);
                 y += lineH;
             }
             Y = top + boxH + 4;
@@ -229,7 +229,7 @@ public class StatementImageService
             Y += lineH;
 
             if (bullet is not null)
-                Canvas.DrawText(bullet, x - 14, Y, _reg, _text);
+                Canvas.DrawText(bullet, x - 14, Y, SKTextAlign.Left, _reg, _text);
 
             foreach (var run in runs)
             {
@@ -246,7 +246,7 @@ public class StatementImageService
                     }
                     if (run.Kind == RunKind.Code)
                         Canvas.DrawRoundRect(new SKRect(cursorX - 1, Y - bodySize + 3, cursorX + w + 1, Y + 4), 3, 3, _codeBg);
-                    Canvas.DrawText(token, cursorX, Y, font, _text);
+                    Canvas.DrawText(token, cursorX, Y, SKTextAlign.Left, font, _text);
                     cursorX += w;
                 }
             }
