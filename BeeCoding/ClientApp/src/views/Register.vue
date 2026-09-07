@@ -57,6 +57,11 @@ async function submit() {
         {{ busy ? '…' : 'Register' }}
       </button>
     </form>
+    <p class="text-xs text-slate-400 dark:text-slate-500 mt-3">
+      By creating an account you agree to the
+      <RouterLink to="/terms" class="text-amber-600 dark:text-amber-400">Terms &amp; Agreement</RouterLink>
+      and <RouterLink to="/privacy" class="text-amber-600 dark:text-amber-400">Privacy Policy</RouterLink>.
+    </p>
     <p class="text-sm text-slate-500 dark:text-slate-400 mt-4">
       Have an account? <RouterLink to="/login" class="text-amber-600 dark:text-amber-400">Sign in</RouterLink>
     </p>

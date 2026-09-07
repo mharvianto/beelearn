@@ -2,9 +2,11 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { useAuth } from './stores/auth';
 
 const routes = [
-  { path: '/', redirect: '/boards' },
+  { path: '/', component: () => import('./views/Landing.vue'), meta: { anon: true } },
   { path: '/login', component: () => import('./views/Login.vue'), meta: { anon: true } },
   { path: '/register', component: () => import('./views/Register.vue'), meta: { anon: true } },
+  { path: '/privacy', component: () => import('./views/Privacy.vue'), meta: { public: true } },
+  { path: '/terms', component: () => import('./views/Terms.vue'), meta: { public: true } },
   { path: '/boards', component: () => import('./views/Dashboard.vue') },
   { path: '/bank', component: () => import('./views/Bank.vue') },
   { path: '/practice', component: () => import('./views/Practice.vue') },
@@ -23,6 +25,7 @@ export const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuth();
   if (!auth.ready) await auth.fetchMe();
+  if (to.meta.public) return true;                       // privacy / terms — anyone
   if (!to.meta.anon && !auth.user) return { path: '/login', query: { r: to.fullPath } };
   if (to.meta.anon && auth.user) return { path: '/boards' };
   return true;

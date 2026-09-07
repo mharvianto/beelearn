@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { useAuth } from './stores/auth';
 import { useProgress } from './stores/progress';
 import ThemeToggle from './components/ThemeToggle.vue';
+import AppFooter from './components/AppFooter.vue';
 
 const auth = useAuth();
 const progress = useProgress();
@@ -64,5 +65,6 @@ async function logout() {
     <main class="flex-1 min-h-0 overflow-y-auto">
       <RouterView />
     </main>
+    <AppFooter />
   </div>
 </template>
