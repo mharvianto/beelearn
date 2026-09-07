@@ -498,6 +498,7 @@ variable (nesting pakai `__`).
 | `Ai:BaseUrl` | NVIDIA NIM | URL chat-completions. |
 | `Ai:Model` | `deepseek-ai/deepseek-v4-flash-0731` | Nama model. |
 | `Ai:Thinking` | `false` | Kirim `chat_template_kwargs.thinking` (lebih teliti, lebih lambat). |
+| `Ai:DefaultReplyLanguage` | `id` | Bahasa balasan default (`id`/`en`); murid bisa memilih sendiri per pertanyaan. |
 | `Ai:TimeoutSeconds` | `60` | Batas tunggu 1 permintaan; lewat ⇒ `502` ramah. |
 | `Ai:MaxTokens` / `Ai:Temperature` / `Ai:RateLimitSeconds` | `700` / `0.3` / `8` | Batas panjang jawaban, kreativitas, dan jarak antar-permintaan per user. |
 | `ASPNETCORE_URLS` | — | mis. `http://0.0.0.0:8080`. |
@@ -516,8 +517,13 @@ export Ai__Enabled=true; export Ai__ApiKey="nvapi-…"   # tutor AI
 ### Tutor AI (hint, bukan jawaban)
 
 Dengan `Ai:Enabled=true` + `Ai:ApiKey` terisi, muncul panel **🤖 AI tutor** di halaman
-Solve & Practice. Endpoint: `GET /api/ai/enabled`, `POST /api/ai/hint`
-(`{ problemId | bankProblemId, language, code, verdict?, compilerOutput?, stderr?, question? }`).
+Solve & Practice. Endpoint: `GET /api/ai/enabled`, `POST /api/ai/hint` (sekali balas) dan
+`POST /api/ai/hint/stream` (**SSE**, token-per-token — inilah yang dipakai UI). Body:
+`{ problemId | bankProblemId, language, code, verdict?, compilerOutput?, stderr?, question?, lang }`
+— `lang` = `id`/`en` (dipilih murid, disimpan di localStorage).
+
+Respons stream memakai header `X-Accel-Buffering: no`, jadi nginx tidak perlu blok
+`location` khusus — cukup jangan meng-`proxy_buffering on` paksa untuk `/api/`.
 
 Server mengirim statement + sample test + kode & error murid ke model dengan *system prompt*
 yang **melarang** memberi solusi lengkap / badan fungsi / algoritma sebagai kode; balasannya

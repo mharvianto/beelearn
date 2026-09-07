@@ -21,25 +21,71 @@ const reply = ref('');
 const busy = ref(false);
 const error = ref('');
 
+const LANGS = { id: 'Bahasa Indonesia', en: 'English' };
+const lang = ref('id');
+try { lang.value = localStorage.getItem('beecoding.aiLang') || 'id'; } catch { /* ignore */ }
+function setLang(l) {
+  lang.value = l;
+  try { localStorage.setItem('beecoding.aiLang', l); } catch { /* ignore */ }
+}
+
 onMounted(async () => {
-  try { enabled.value = (await api.get('/api/ai/enabled'))?.enabled === true; } catch { enabled.value = false; }
+  try {
+    const r = await api.get('/api/ai/enabled');
+    enabled.value = r?.enabled === true;
+    if (r?.defaultLang && !localStorage.getItem('beecoding.aiLang')) lang.value = r.defaultLang;
+  } catch { enabled.value = false; }
 });
 
+function payload() {
+  return {
+    problemId: props.problemId ? Number(props.problemId) : null,
+    bankProblemId: props.bankProblemId ? Number(props.bankProblemId) : null,
+    language: props.language,
+    code: props.code,
+    stdin: props.stdin,
+    verdict: props.verdict,
+    compilerOutput: props.compilerOutput,
+    stderr: props.stderr,
+    question: question.value.trim() || null,
+    lang: lang.value,
+  };
+}
+
 async function ask() {
-  error.value = ''; busy.value = true; reply.value = '';
+  error.value = ''; reply.value = ''; busy.value = true;
   try {
-    const res = await api.post('/api/ai/hint', {
-      problemId: props.problemId ? Number(props.problemId) : null,
-      bankProblemId: props.bankProblemId ? Number(props.bankProblemId) : null,
-      language: props.language,
-      code: props.code,
-      stdin: props.stdin,
-      verdict: props.verdict,
-      compilerOutput: props.compilerOutput,
-      stderr: props.stderr,
-      question: question.value.trim() || null,
+    const res = await fetch('/api/ai/hint/stream', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload()),
     });
-    reply.value = res.reply || '';
+    if (!res.ok) {
+      if (res.status === 429) throw new Error('Give the AI tutor a few seconds between questions.');
+      if (res.status === 404) { enabled.value = false; throw new Error('AI tutor is off.'); }
+      throw new Error((await res.text()) || `HTTP ${res.status}`);
+    }
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n\n')) >= 0) {
+        const frame = buf.slice(0, i);
+        buf = buf.slice(i + 2);
+        const dataLine = frame.split('\n').find((l) => l.startsWith('data:'));
+        if (!dataLine) continue;
+        let msg;
+        try { msg = JSON.parse(dataLine.slice(5).trim()); } catch { continue; }
+        if (msg.error) throw new Error(msg.error);
+        if (msg.delta) reply.value += msg.delta;
+        else if (msg.final != null && msg.final !== reply.value) reply.value = msg.final;
+      }
+    }
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -61,6 +107,18 @@ async function ask() {
         It looks at your current code and errors, points out bugs, and suggests an approach — it
         will <b>not</b> write the solution for you.
       </p>
+
+      <div class="flex items-center gap-1 text-xs">
+        <span class="text-slate-400 dark:text-slate-500 mr-1">Reply in:</span>
+        <button v-for="(label, lc) in LANGS" :key="lc" @click="setLang(lc)" type="button"
+                class="px-2 py-0.5 rounded-lg border"
+                :class="lang === lc
+                  ? 'border-violet-400 bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-200'
+                  : 'border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400'">
+          {{ label }}
+        </button>
+      </div>
+
       <textarea v-model="question" rows="2" placeholder="Optional: ask something specific (e.g. “why does test 3 fail?”)"
                 class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5 text-xs"></textarea>
       <button @click="ask" :disabled="busy || !code"
@@ -71,6 +129,7 @@ async function ask() {
       <p v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
       <div v-if="reply" class="text-sm bg-slate-50 dark:bg-slate-800/60 rounded-lg p-3">
         <MarkdownBlock :text="reply" />
+        <span v-if="busy" class="inline-block w-1.5 h-4 bg-violet-400 animate-pulse align-middle ml-0.5"></span>
       </div>
     </div>
   </div>

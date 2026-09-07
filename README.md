@@ -81,8 +81,11 @@ All five visibility rules live in one place: `Services/VisibilityService.cs`.
    endpoint (`Ai:BaseUrl`/`Ai:Model`, defaults to NVIDIA NIM `deepseek-v4-flash`) behind a
    system prompt that forbids handing over a solution — it points at the bug, suggests an
    approach, and asks a guiding question. Replies with a code fence over ~12 lines are
-   trimmed server-side. Per-user throttle (`Ai:RateLimitSeconds`); a slow/failed upstream
-   returns a friendly `502`. `AiController` + `AiTutorService`.
+   trimmed server-side. The reply **streams token-by-token over SSE**
+   (`POST /api/ai/hint/stream`), and the student picks the **reply language** (Indonesian /
+   English, remembered per browser). Per-user throttle (`Ai:RateLimitSeconds`); a
+   slow/failed upstream surfaces as a friendly error (`502` on the one-shot endpoint, an
+   SSE `error` frame on the stream). `AiController` + `AiTutorService`.
 
 ## Running (dev)
 

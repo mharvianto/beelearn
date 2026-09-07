@@ -18,6 +18,9 @@ public class AiOptions
     /// <summary>Pass <c>chat_template_kwargs.thinking</c> to the model (slower, more thorough).</summary>
     public bool Thinking { get; set; }
 
+    /// <summary>Reply language when the request doesn't specify one: "id" or "en".</summary>
+    public string DefaultReplyLanguage { get; set; } = "id";
+
     /// <summary>Minimum seconds between a user's hint requests.</summary>
     public int RateLimitSeconds { get; set; } = 8;
 
