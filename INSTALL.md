@@ -9,7 +9,7 @@ Papan gaya Padlet + online judge C/C++. Backend ASP.NET Core 10, frontend Vue 3
 
 | Komponen | Versi | Catatan |
 |---|---|---|
-| **.NET SDK** | **10.0** | `dotnet --version` → `10.0.x` |
+| **.NET SDK** | **10.0** | `dotnet --version` → `10.0.x`. Belum di repo semua distro — lihat cara pasang di bawah. |
 | **Node.js + npm** | **20+** (diuji dengan 24) | untuk membangun SPA Vue |
 | **gcc & g++** | 11+ (diuji 13) | **wajib di PATH** — judge meng-compile kode C/C++ murid |
 | **OS** | **Linux** | Judge memakai `fork` + `setrlimit` (helper C khusus POSIX). Di Windows/macOS backend tetap jalan, tapi *Run/Submit* tidak. |
@@ -22,10 +22,35 @@ Yang **tidak perlu** dipasang:
 
 ### Pasang prasyarat di Ubuntu/Debian
 
-```bash
-# .NET 10 SDK
-sudo apt-get update && sudo apt-get install -y dotnet-sdk-10.0    # atau lewat https://dot.net
+**.NET 10 SDK** — paket `dotnet-sdk-10.0` belum tentu ada di repo distro
+(mis. Debian 13/trixie belum). Cara paling andal adalah script resmi Microsoft:
 
+```bash
+sudo apt-get update && sudo apt-get install -y libicu-dev ca-certificates
+curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+chmod +x /tmp/dotnet-install.sh
+/tmp/dotnet-install.sh --channel 10.0            # → $HOME/.dotnet
+
+# tambahkan ke ~/.bashrc agar permanen:
+export DOTNET_ROOT="$HOME/.dotnet"
+export PATH="$PATH:$HOME/.dotnet:$HOME/.dotnet/tools"
+dotnet --version                                 # → 10.0.x
+```
+
+Alternatif via apt (feed Microsoft, hanya kalau config distro-mu tersedia):
+
+```bash
+wget https://packages.microsoft.com/config/debian/13/packages-microsoft-prod.deb
+sudo dpkg -i packages-microsoft-prod.deb && rm packages-microsoft-prod.deb
+sudo apt-get update && sudo apt-get install -y dotnet-sdk-10.0
+# untuk Ubuntu ganti "debian/13" → mis. "ubuntu/24.04"
+```
+
+> Jika `dotnet` mengeluh soal ICU/globalization: `export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`.
+
+**Sisanya:**
+
+```bash
 # Node.js 20+ (contoh via nodesource)
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs
 
