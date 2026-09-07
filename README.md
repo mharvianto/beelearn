@@ -59,7 +59,7 @@ All five visibility rules live in one place: `Services/VisibilityService.cs`.
    `SolveRecord` with a unique `(user, problemKey)` — a bank problem and its board copies
    share one key, so the same problem can't be farmed. XP rolls up to a level
    (`ProgressService`, `25·L·(L-1)` cumulative); header shows `Lv N` + bar, and a
-   leaderboard ranks by total XP. `GET /api/me/progress`, `GET /api/leaderboard`.
+   leaderboard ranks by total XP. Practice statements are ALWAYS content-protected (encrypted watermarked image, `/api/practice/{id}/statement`). `GET /api/me/progress`, `GET /api/leaderboard`.
 
 ## Running (dev)
 

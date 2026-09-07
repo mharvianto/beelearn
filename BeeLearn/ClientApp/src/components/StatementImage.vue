@@ -2,7 +2,14 @@
 import { ref, watch, onBeforeUnmount } from 'vue';
 import { theme as appTheme } from '../lib/theme';
 
-const props = defineProps({ problemId: { type: [String, Number], required: true } });
+const props = defineProps({
+  problemId: { type: [String, Number], default: null },   // board problem
+  bankId: { type: [String, Number], default: null },      // practice (bank) problem
+});
+const endpoint = () =>
+  props.bankId != null
+    ? `/api/practice/${props.bankId}/statement`
+    : `/api/problems/${props.problemId}/statement`;
 
 const src = ref('');
 const err = ref('');
@@ -22,7 +29,7 @@ async function load() {
   err.value = '';
   try {
     const dark = document.documentElement.classList.contains('dark');
-    const res = await fetch(`/api/problems/${props.problemId}/statement?theme=${dark ? 'dark' : 'light'}`,
+    const res = await fetch(`${endpoint()}?theme=${dark ? 'dark' : 'light'}`,
       { credentials: 'include' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const j = await res.json();
@@ -36,7 +43,7 @@ async function load() {
   }
 }
 
-watch(() => [props.problemId, appTheme.value], load, { immediate: true });
+watch(() => [props.problemId, props.bankId, appTheme.value], load, { immediate: true });
 onBeforeUnmount(revoke);
 </script>
 

@@ -4,9 +4,10 @@ import { api } from '../lib/api';
 import { useProgress } from '../stores/progress';
 import { createBoardConnection } from '../lib/signalr';
 import MonacoEditor from '../components/MonacoEditor.vue';
-import MarkdownBlock from '../components/MarkdownBlock.vue';
 import VerdictBadge from '../components/VerdictBadge.vue';
 import LevelBadge from '../components/LevelBadge.vue';
+import ContentGuard from '../components/ContentGuard.vue';
+import StatementImage from '../components/StatementImage.vue';
 
 const props = defineProps({ id: { type: [String, Number], required: true } });
 const progress = useProgress();
@@ -94,15 +95,12 @@ onBeforeUnmount(async () => { try { await conn?.stop(); } catch {} });
         🎉 +{{ gained }} XP! Now Lv {{ progress.level }} · {{ progress.xp }} XP
       </div>
 
-      <MarkdownBlock :text="problem.statementMarkdown" />
-
-      <div v-if="problem.sampleTests?.length" class="mt-4">
-        <h3 class="font-semibold text-sm mb-1">Examples</h3>
-        <div v-for="(t, i) in problem.sampleTests" :key="i" class="grid grid-cols-2 gap-2 mb-2 text-xs">
-          <pre class="bg-slate-100 dark:bg-slate-800 rounded p-2 overflow-x-auto">{{ t.stdin }}</pre>
-          <pre class="bg-slate-100 dark:bg-slate-800 rounded p-2 overflow-x-auto">{{ t.expectedStdout }}</pre>
-        </div>
-      </div>
+      <p class="text-[11px] text-amber-600 dark:text-amber-400 mb-2">
+        🔒 Protected problem — served as an encrypted image watermarked with your identity.
+      </p>
+      <ContentGuard :active="true" :watermark="''">
+        <StatementImage :bank-id="props.id" />
+      </ContentGuard>
 
       <h3 class="font-semibold text-sm mt-5 mb-2">History</h3>
       <div class="space-y-1">
