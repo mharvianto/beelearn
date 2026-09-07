@@ -16,10 +16,25 @@
     <Content Include="Assets/fonts/*.ttf" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <!-- Build the Vue SPA into wwwroot when publishing (skip with -p:BuildClient=false). -->
-  <Target Name="BuildClientApp" BeforeTargets="Publish" Condition="'$(BuildClient)' != 'false'">
+  <!--
+    Build the Vue SPA into wwwroot for publish (skip with -p:BuildClient=false).
+    Runs before Build so the freshly written wwwroot/** is picked up by the
+    static-web-assets glob in the SAME publish, then a post-publish copy
+    guarantees it lands in the output even on the very first clean run.
+  -->
+  <Target Name="BuildClientApp" BeforeTargets="BeforeBuild;BeforeRebuild"
+          Condition="'$(BuildClient)' != 'false'">
     <Exec Command="npm ci" WorkingDirectory="ClientApp" />
     <Exec Command="npm run build" WorkingDirectory="ClientApp" />
+  </Target>
+
+  <Target Name="CopyClientToPublish" AfterTargets="Publish">
+    <ItemGroup>
+      <_ClientPublishFiles Include="wwwroot/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_ClientPublishFiles)"
+          DestinationFiles="@(_ClientPublishFiles->'$(PublishDir)wwwroot/%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
   </Target>
 
   <ItemGroup>

@@ -116,8 +116,23 @@ cd BeeLearn
 dotnet publish -c Release -o out
 ```
 
-- Target MSBuild `BuildClientApp` otomatis menjalankan `npm ci && npm run build` ke `wwwroot/`.
-  Lewati dengan `-p:BuildClient=false` bila SPA sudah kamu build sendiri.
+- Target MSBuild `BuildClientApp` otomatis menjalankan `npm ci && npm run build` ke `wwwroot/`,
+  lalu menyalinnya ke `out/wwwroot/`. Lewati build SPA dengan `-p:BuildClient=false` bila
+  sudah kamu build sendiri.
+
+Verifikasi setelah publish — folder ini **harus ada**:
+
+```bash
+ls out/wwwroot/index.html          # kalau tidak ada → SPA tidak ikut ter-publish
+```
+
+> **Jika `/` memberi HTTP 404** dan log menampilkan `The WebRootPath was not found: .../out/wwwroot`,
+> berarti `out/wwwroot` kosong. Perbaiki cepat: `cp -r wwwroot out/` lalu jalankan ulang,
+> atau bangun SPA lebih dulu sebagai langkah terpisah:
+> ```bash
+> (cd ClientApp && npm ci && npm run build)      # menulis ../wwwroot
+> dotnet publish -c Release -o out -p:BuildClient=false
+> ```
 
 Jalankan:
 
@@ -235,6 +250,7 @@ Repo menyertakan `.devcontainer/devcontainer.json` (image .NET 10 + fitur Node).
 |---|---|
 | Startup gagal: `gcc not found on PATH` / `g++ not found` | `sudo apt-get install -y build-essential` |
 | Buka `:5048` langsung → halaman kosong / 404 | Jalankan `npm run build` di `ClientApp` (mengisi `wwwroot/`), atau pakai Vite di `:5173`. |
+| Publish → `/` HTTP 404, log: `WebRootPath was not found: .../out/wwwroot` | `out/wwwroot` kosong. `cp -r wwwroot out/` lalu jalankan ulang, atau build SPA lebih dulu lalu `dotnet publish ... -p:BuildClient=false`. |
 | SignalR tidak connect di belakang proxy | Teruskan header `Upgrade`/`Connection` untuk WebSocket; pastikan path `/hubs` ikut ter-proxy. |
 | Verdict selalu `MemoryLimit` untuk program sederhana | Naikkan `MemoryLimitKb` pada soal (mis. 65536) — `RLIMIT_AS` membatasi *virtual address space*, bukan RSS. |
 | Gambar soal terlindungi kosong / error | Pada image minimal, `sudo apt-get install -y libfontconfig1`. Di Ubuntu 24.04 biasanya sudah cukup. |
