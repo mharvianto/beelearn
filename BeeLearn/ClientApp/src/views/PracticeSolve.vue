@@ -126,7 +126,7 @@ onBeforeUnmount(async () => { try { await conn?.stop(); } catch {} });
 
     <div class="flex flex-col h-full min-h-0">
       <div class="flex-1 min-h-0">
-        <MonacoEditor v-model="code" :language="problem.language === 'c' ? 'c' : 'cpp'" />
+        <MonacoEditor v-model="code" :language="problem.language === 'c' ? 'c' : 'cpp'" :lsp="problem.language === 'c' ? 'c' : 'cpp'" />
       </div>
       <div class="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 space-y-2">
         <div class="flex gap-2">

@@ -17,6 +17,7 @@ export default defineConfig({
     proxy: {
       '/api': { target: backend, changeOrigin: true },
       '/hubs': { target: backend, changeOrigin: true, ws: true },
+      '/lsp': { target: backend, changeOrigin: true, ws: true },
     },
   },
 });

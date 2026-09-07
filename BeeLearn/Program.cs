@@ -2,6 +2,7 @@ using BeeLearn.Data;
 using BeeLearn.Hubs;
 using BeeLearn.Services;
 using BeeLearn.Services.Judge;
+using BeeLearn.Services.Lsp;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
@@ -42,6 +43,8 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.AddAuthorization();
 
 builder.Services.Configure<JudgeOptions>(builder.Configuration.GetSection("Judge"));
+builder.Services.Configure<LspOptions>(builder.Configuration.GetSection("Lsp"));
+builder.Services.AddSingleton<LspEndpoint>();
 
 builder.Services.AddSingleton<PasswordService>();
 builder.Services.AddSingleton<NativeToolchain>();
@@ -105,12 +108,17 @@ if (app.Environment.IsDevelopment())
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
+app.UseWebSockets();
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<BoardHub>("/hubs/board");
+
+// C/C++ language server bridge (clangd). No-op unless Lsp:Enabled + clangd on PATH.
+app.MapGet("/lsp/cpp", (HttpContext c, LspEndpoint ep) => ep.HandleAsync(c)).RequireAuthorization();
+
 app.MapFallbackToFile("index.html");
 
 app.Run();

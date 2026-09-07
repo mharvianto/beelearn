@@ -14,6 +14,7 @@ everyone's progress — with layered controls over who can see whose answers.
 | Auth       | cookie auth (self-register, PBKDF2) |
 | Frontend   | Vue 3 + Vite + Pinia + Tailwind v4 + Monaco, built into `wwwroot/` |
 | Judge      | native `gcc`/`g++` + a small `setrlimit` runner, optional bubblewrap |
+| IntelliSense | optional `clangd` over LSP/WebSocket (`/lsp/cpp`), off by default |
 
 ## Features
 
@@ -60,6 +61,15 @@ All five visibility rules live in one place: `Services/VisibilityService.cs`.
    share one key, so the same problem can't be farmed. XP rolls up to a level
    (`ProgressService`, `25·L·(L-1)` cumulative); header shows `Lv N` + bar, and a
    leaderboard ranks by total XP. Practice statements are ALWAYS content-protected (encrypted watermarked image, `/api/practice/{id}/statement`). `GET /api/me/progress`, `GET /api/leaderboard`.
+
+8. **C/C++ IntelliSense** (optional, off by default) — with `Lsp:Enabled=true` and `clangd`
+   on `PATH`, the Monaco editor on **Solve** and **Practice** talks to clangd as a language
+   server over a WebSocket (`/lsp/cpp`, `LspEndpoint` ⇄ `ClangdSession`): autocomplete,
+   hover docs, signature help, and inline diagnostics. Each open editor gets its own
+   short-lived clangd process on a throwaway single-file workspace, reaped on close or after
+   `Lsp:IdleTimeoutSeconds`; concurrency capped by `Lsp:MaxConcurrent`. A thin hand-rolled
+   LSP client (`lib/cpplsp.js`) feeds Monaco providers directly. Without clangd the editor
+   still works with word-based completion.
 
 ## Running (dev)
 

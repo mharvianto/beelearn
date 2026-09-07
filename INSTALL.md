@@ -14,6 +14,7 @@ Papan gaya Padlet + online judge C/C++. Backend ASP.NET Core 10, frontend Vue 3
 | **gcc & g++** | 11+ (diuji 13) | **wajib di PATH** — judge meng-compile kode C/C++ murid |
 | **OS** | **Linux** | Judge memakai `fork` + `setrlimit` (helper C khusus POSIX). Di Windows/macOS backend tetap jalan, tapi *Run/Submit* tidak. |
 | bubblewrap (`bwrap`) | opsional | isolasi filesystem/jaringan. Tanpa ini → mode *rlimits-only* (limit waktu & memori tetap dipaksakan). |
+| **clangd** | opsional (14+, diuji 18) | IntelliSense C/C++ di editor (autocomplete, hover, diagnostik). Non-aktif secara default (`Lsp:Enabled=false`); tanpa clangd editor jatuh ke completion berbasis kata. |
 
 Yang **tidak perlu** dipasang:
 
@@ -59,6 +60,9 @@ sudo apt-get install -y build-essential
 
 # opsional: sandbox filesystem
 sudo apt-get install -y bubblewrap
+
+# opsional: IntelliSense C/C++ di editor (lihat §5 untuk mengaktifkan)
+sudo apt-get install -y clangd
 ```
 
 ---
@@ -304,8 +308,8 @@ server {
         proxy_set_header Connection        $connection_upgrade;
     }
 
-    # SignalR: koneksi persisten -> timeout panjang
-    location /hubs/ {
+    # SignalR (/hubs) + clangd LSP (/lsp): koneksi persisten -> timeout panjang
+    location ~ ^/(hubs|lsp)/ {
         proxy_pass http://beelearn;
         proxy_http_version 1.1;
         proxy_set_header Host              $host;
@@ -388,7 +392,8 @@ server {
         proxy_set_header Upgrade           $http_upgrade;
         proxy_set_header Connection        $connection_upgrade;
     }
-    location /hubs/ {
+    # SignalR (/hubs) + clangd LSP (/lsp)
+    location ~ ^/(hubs|lsp)/ {
         proxy_pass http://beelearn;
         proxy_http_version 1.1;
         proxy_set_header Host              $host;
@@ -478,6 +483,11 @@ variable (nesting pakai `__`).
 | `Judge:RunTimeLimitMs` | `1000` | Batas waktu default tombol **Run** ad-hoc. |
 | `Judge:RunMemoryLimitKb` | `32768` | Batas memori default tombol **Run**. |
 | `Judge:RateLimitMs` | `1500` | Jarak minimum antar Run/Submit per user. |
+| `Lsp:Enabled` | `false` | Aktifkan IntelliSense C/C++ (butuh `clangd` di PATH). |
+| `Lsp:ClangdPath` | `clangd` | Path biner clangd. |
+| `Lsp:MaxConcurrent` | `4` | Maksimum sesi clangd bersamaan (1 per editor yang terbuka). |
+| `Lsp:IdleTimeoutSeconds` | `300` | Sesi clangd dimatikan setelah sekian detik tanpa lalu-lintas. |
+| `Lsp:MemoryLimitMb` | `0` | *Runaway guard* opsional (RLIMIT_DATA via `prlimit`). `0` = nonaktif. Isi longgar (≥2048); nilai terlalu kecil membuat clangd *abort* saat meng-index header standar. |
 | `ASPNETCORE_URLS` | — | mis. `http://0.0.0.0:8080`. |
 
 Contoh override via env:
@@ -486,7 +496,16 @@ Contoh override via env:
 export ConnectionStrings__Default="Data Source=/var/lib/beelearn/beelearn.db"
 export Judge__MaxConcurrent=4
 export Judge__WorkRoot=/var/tmp/beelearn-judge
+export Lsp__Enabled=true          # setelah `apt install clangd`
 ```
+
+**IntelliSense C/C++ (clangd).** Bila `Lsp:Enabled=true` dan `clangd` ada di PATH, editor
+Monaco di halaman **Solve** dan **Practice** memakai clangd sebagai *language server* lewat
+WebSocket `/lsp/cpp`: autocomplete, hover, *signature help*, dan diagnostik sebaris. Setiap
+editor yang terbuka memakai satu proses clangd berumur pendek dengan *workspace* satu file
+sementara; proses dimatikan saat editor ditutup atau `Lsp:IdleTimeoutSeconds` terlewati.
+Di belakang nginx, blok `location ~ ^/(hubs|lsp)/` di §4B sudah menangani *upgrade* WebSocket-nya.
+Tanpa clangd atau dengan `Lsp:Enabled=false`, editor tetap jalan memakai completion berbasis kata.
 
 ---
 
