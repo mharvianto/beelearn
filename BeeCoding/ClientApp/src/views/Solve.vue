@@ -23,6 +23,11 @@ const watermark = computed(() =>
   `${auth.user?.email || auth.user?.displayName || ''} · ${new Date().toLocaleString()}`);
 const code = ref('');
 const stdin = ref('');
+const solveLang = ref('cpp');   // 'c' | 'cpp' — student's choice of compiler
+function setLang(l) {
+  solveLang.value = l;
+  try { localStorage.setItem('beecoding.lang', l); } catch { /* ignore */ }
+}
 const runOut = ref(null);
 const running = ref(false);
 const submitting = ref(false);
@@ -37,6 +42,9 @@ const latestMine = computed(() => mine.value[0]);
 async function load() {
   board.value = await api.get(`/api/boards/${props.slug}`);
   problem.value = await api.get(`/api/boards/${props.slug}/problems/${props.problemId}`);
+  let pref = null;
+  try { pref = localStorage.getItem('beecoding.lang'); } catch { /* ignore */ }
+  solveLang.value = pref === 'c' || pref === 'cpp' ? pref : (problem.value.language === 'c' ? 'c' : 'cpp');
   code.value = problem.value.starterCode || '';
   if (problem.value.sampleTests?.[0]) stdin.value = problem.value.sampleTests[0].stdin;
   await loadSubs();
@@ -48,7 +56,7 @@ async function loadSubs() {
 async function run() {
   error.value = ''; running.value = true; runOut.value = null;
   try {
-    runOut.value = await api.post('/api/run', { language: problem.value.language, code: code.value, stdin: stdin.value });
+    runOut.value = await api.post('/api/run', { language: solveLang.value, code: code.value, stdin: stdin.value });
   } catch (e) { error.value = e.message; }
   finally { running.value = false; }
 }
@@ -56,7 +64,7 @@ async function run() {
 async function submit() {
   error.value = ''; submitting.value = true;
   try {
-    await api.post(`/api/problems/${props.problemId}/submit`, { code: code.value });
+    await api.post(`/api/problems/${props.problemId}/submit`, { code: code.value, language: solveLang.value });
     await loadSubs();
   } catch (e) { error.value = e.message; }
   finally { submitting.value = false; }
@@ -117,7 +125,7 @@ onBeforeUnmount(async () => {
               class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{{ t }}</span>
       </div>
       <div class="text-xs text-slate-400 dark:text-slate-500 mb-3">
-        {{ problem.language.toUpperCase() }} · limit {{ problem.timeLimitMs }} ms · {{ problem.memoryLimitKb }} KB
+        {{ solveLang === 'c' ? 'C' : 'C++' }} · limit {{ problem.timeLimitMs }} ms · {{ problem.memoryLimitKb }} KB
       </div>
       <p v-if="protectOn" class="text-[11px] text-amber-600 dark:text-amber-400 mb-2">
         🔒 Protected problem — served as an encrypted image watermarked with your identity.
@@ -148,7 +156,7 @@ onBeforeUnmount(async () => {
           : "👥 Hide live code & progress from classmates" }}
       </button>
 
-      <AiHint :problem-id="props.problemId" :language="problem.language" :code="code" :stdin="stdin"
+      <AiHint :problem-id="props.problemId" :language="solveLang" :code="code" :stdin="stdin"
               :verdict="latestMine?.status === 'Done' ? latestMine?.verdict : ''"
               :compiler-output="runOut && !runOut.compileOk ? runOut.compilerOutput : (latestMine?.compilerOutput || '')"
               :stderr="runOut?.stderr || ''" />
@@ -170,10 +178,10 @@ onBeforeUnmount(async () => {
     <!-- Right: editor + console -->
     <div class="flex flex-col h-full min-h-0">
       <div class="flex-1 min-h-0">
-        <MonacoEditor v-model="code" :language="problem.language === 'c' ? 'c' : 'cpp'" :lsp="problem.language === 'c' ? 'c' : 'cpp'" />
+        <MonacoEditor v-model="code" :language="solveLang" :lsp="solveLang" />
       </div>
       <div class="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 space-y-2">
-        <div class="flex gap-2">
+        <div class="flex gap-2 items-center">
           <button @click="run" :disabled="running"
                   class="bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
             {{ running ? 'Running…' : 'Run' }}
@@ -182,6 +190,15 @@ onBeforeUnmount(async () => {
                   class="bg-amber-500 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
             {{ submitting ? 'Submitting…' : 'Submit' }}
           </button>
+          <span class="ml-auto inline-flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden text-xs">
+            <button v-for="l in ['c', 'cpp']" :key="l" @click="setLang(l)"
+                    class="px-2.5 py-1"
+                    :class="solveLang === l
+                      ? 'bg-slate-800 text-white dark:bg-slate-600'
+                      : 'text-slate-500 dark:text-slate-400'">
+              {{ l === 'c' ? 'C' : 'C++' }}
+            </button>
+          </span>
         </div>
         <div class="grid grid-cols-2 gap-2">
           <div>

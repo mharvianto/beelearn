@@ -47,6 +47,7 @@ public class SubmissionsController : ApiControllerBase
             ProblemId = problemId,
             UserId = UserId,
             Code = dto.Code,
+            Language = dto.Language is "c" or "cpp" ? dto.Language : problem.Language,
             Status = SubmissionStatus.Queued,
         };
         _db.Submissions.Add(sub);

@@ -214,6 +214,10 @@ public class Submission
 
     public string Code { get; set; } = "";
 
+    /// <summary>"c" or "cpp" the student chose to compile with; null = the problem's language.</summary>
+    [MaxLength(8)]
+    public string? Language { get; set; }
+
     public SubmissionStatus Status { get; set; } = SubmissionStatus.Queued;
 
     public Verdict Verdict { get; set; } = Verdict.None;
@@ -325,6 +329,10 @@ public class BankSubmission
     public User? User { get; set; }
 
     public string Code { get; set; } = "";
+
+    /// <summary>"c" or "cpp" the student chose to compile with; null = the problem's language.</summary>
+    [MaxLength(8)]
+    public string? Language { get; set; }
 
     public SubmissionStatus Status { get; set; } = SubmissionStatus.Queued;
     public Verdict Verdict { get; set; } = Verdict.None;

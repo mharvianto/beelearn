@@ -111,12 +111,19 @@ public class PracticeController : ApiControllerBase
     [HttpPost("{id:int}/submit")]
     public async Task<ActionResult<object>> Submit(int id, SubmitDto dto)
     {
-        if (!await Pool().AnyAsync(b => b.Id == id)) return NotFound();
+        var problemLang = await Pool().Where(b => b.Id == id).Select(b => b.Language).FirstOrDefaultAsync();
+        if (problemLang is null) return NotFound();
         if (string.IsNullOrWhiteSpace(dto.Code)) return BadRequest("Code is empty.");
         if (dto.Code.Length > 200_000) return BadRequest("Code is too large.");
         if (!_rate.TryAcquire(UserId)) return StatusCode(429, "Slow down a moment and try again.");
 
-        var sub = new BankSubmission { BankProblemId = id, UserId = UserId, Code = dto.Code };
+        var sub = new BankSubmission
+        {
+            BankProblemId = id,
+            UserId = UserId,
+            Code = dto.Code,
+            Language = dto.Language is "c" or "cpp" ? dto.Language : problemLang,
+        };
         _db.BankSubmissions.Add(sub);
         await _db.SaveChangesAsync();
 

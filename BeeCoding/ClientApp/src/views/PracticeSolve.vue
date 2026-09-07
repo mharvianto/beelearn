@@ -16,6 +16,11 @@ const progress = useProgress();
 const problem = ref(null);
 const code = ref('');
 const stdin = ref('');
+const solveLang = ref('cpp');   // 'c' | 'cpp'
+function setLang(l) {
+  solveLang.value = l;
+  try { localStorage.setItem('beecoding.lang', l); } catch { /* ignore */ }
+}
 const runOut = ref(null);
 const running = ref(false);
 const submitting = ref(false);
@@ -26,6 +31,9 @@ let conn = null;
 
 async function load() {
   problem.value = await api.get(`/api/practice/${props.id}`);
+  let pref = null;
+  try { pref = localStorage.getItem('beecoding.lang'); } catch { /* ignore */ }
+  solveLang.value = pref === 'c' || pref === 'cpp' ? pref : (problem.value.language === 'c' ? 'c' : 'cpp');
   code.value = problem.value.starterCode || '';
   if (problem.value.sampleTests?.[0]) stdin.value = problem.value.sampleTests[0].stdin;
   await loadSubs();
@@ -38,7 +46,7 @@ async function loadSubs() {
 async function run() {
   error.value = ''; running.value = true; runOut.value = null;
   try {
-    runOut.value = await api.post('/api/run', { language: problem.value.language, code: code.value, stdin: stdin.value });
+    runOut.value = await api.post('/api/run', { language: solveLang.value, code: code.value, stdin: stdin.value });
   } catch (e) { error.value = e.message; }
   finally { running.value = false; }
 }
@@ -48,7 +56,7 @@ async function submit() {
   try {
     const before = progress.xp;
     const alreadySolved = problem.value.solved;
-    await api.post(`/api/practice/${props.id}/submit`, { code: code.value });
+    await api.post(`/api/practice/${props.id}/submit`, { code: code.value, language: solveLang.value });
     await loadSubs();
     // give the judge a moment, then reconcile XP
     setTimeout(async () => {
@@ -89,7 +97,7 @@ onBeforeUnmount(async () => { try { await conn?.stop(); } catch {} });
               class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{{ t }}</span>
       </div>
       <div class="text-xs text-slate-400 dark:text-slate-500 mb-3">
-        {{ problem.language.toUpperCase() }} · limit {{ problem.timeLimitMs }} ms · {{ problem.memoryLimitKb }} KB
+        {{ solveLang === 'c' ? 'C' : 'C++' }} · limit {{ problem.timeLimitMs }} ms · {{ problem.memoryLimitKb }} KB
       </div>
 
       <div v-if="gained" class="mb-3 text-sm bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200 rounded-lg px-3 py-2">
@@ -111,7 +119,7 @@ onBeforeUnmount(async () => { try { await conn?.stop(); } catch {} });
         </button>
       </div>
 
-      <AiHint :bank-problem-id="props.id" :language="problem.language" :code="code" :stdin="stdin"
+      <AiHint :bank-problem-id="props.id" :language="solveLang" :code="code" :stdin="stdin"
               :verdict="submissions[0]?.status === 'Done' ? submissions[0]?.verdict : ''"
               :compiler-output="runOut && !runOut.compileOk ? runOut.compilerOutput : (submissions[0]?.compilerOutput || '')"
               :stderr="runOut?.stderr || ''" />
@@ -132,10 +140,10 @@ onBeforeUnmount(async () => { try { await conn?.stop(); } catch {} });
 
     <div class="flex flex-col h-full min-h-0">
       <div class="flex-1 min-h-0">
-        <MonacoEditor v-model="code" :language="problem.language === 'c' ? 'c' : 'cpp'" :lsp="problem.language === 'c' ? 'c' : 'cpp'" />
+        <MonacoEditor v-model="code" :language="solveLang" :lsp="solveLang" />
       </div>
       <div class="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 space-y-2">
-        <div class="flex gap-2">
+        <div class="flex gap-2 items-center">
           <button @click="run" :disabled="running"
                   class="bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
             {{ running ? 'Running…' : 'Run' }}
@@ -144,6 +152,13 @@ onBeforeUnmount(async () => { try { await conn?.stop(); } catch {} });
                   class="bg-amber-500 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
             {{ submitting ? 'Submitting…' : 'Submit' }}
           </button>
+          <span class="ml-auto inline-flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden text-xs">
+            <button v-for="l in ['c', 'cpp']" :key="l" @click="setLang(l)"
+                    class="px-2.5 py-1"
+                    :class="solveLang === l ? 'bg-slate-800 text-white dark:bg-slate-600' : 'text-slate-500 dark:text-slate-400'">
+              {{ l === 'c' ? 'C' : 'C++' }}
+            </button>
+          </span>
         </div>
         <div class="grid grid-cols-2 gap-2">
           <div>

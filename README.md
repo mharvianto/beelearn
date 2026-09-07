@@ -37,6 +37,9 @@ everyone's progress — with layered controls over who can see whose answers.
 3. **Run code** — `POST /api/run`, default limits **1 s CPU / 32 MB** (per-problem limits on
    submit). Enforced with `RLIMIT_CPU`, `RLIMIT_AS`, `RLIMIT_STACK`, `RLIMIT_NPROC`,
    `RLIMIT_FSIZE` + a wall-clock backstop. Verdicts: AC / WA / TLE / MLE / RE / CE.
+   The student picks **C or C++** in the editor (a `C / C++` toggle, remembered per browser);
+   Run and Submit both carry that choice — the judge compiles with `gcc` or `g++` accordingly
+   (`Submission.Language` / `BankSubmission.Language`, null = the problem's authored language).
 4. **Student hides own answer** — `PATCH /api/submissions/{id} { hiddenByStudent }`.
 5. **Teacher hides answers from peers** — per student
    (`PATCH /api/boards/{id}/members/{userId} { hiddenByTeacher }`) **and** board-wide exam

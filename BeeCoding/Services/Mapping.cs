@@ -24,7 +24,7 @@ public static class Mapping
             s.HiddenByStudent, mine,
             (mine || canSeeCode) ? s.Code : null,
             (mine || canSeeCode) ? s.CompilerOutput : "",
-            s.CreatedAt, s.JudgedAt);
+            s.CreatedAt, s.JudgedAt, s.Language ?? "");
     }
 
     public static TestCaseDto ToDto(TestCase t) =>
@@ -68,7 +68,7 @@ public static class Mapping
     public static BankSubmissionDto ToDto(BankSubmission s, bool withCode = true) => new(
         s.Id, s.BankProblemId, s.Status.ToString(), s.Verdict.ToString(),
         s.RuntimeMs, s.MemoryKb, s.Score, s.CompilerOutput,
-        s.CreatedAt, s.JudgedAt, withCode ? s.Code : null);
+        s.CreatedAt, s.JudgedAt, withCode ? s.Code : null, s.Language ?? "");
 
     // Practice statements are always served as an encrypted image, so the statement text
     // and expected outputs are never sent as JSON (see StatementController.PracticeProblem).

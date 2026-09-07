@@ -99,16 +99,16 @@ public record PracticeProblemDto(
 public record BankSubmissionDto(
     int Id, int BankProblemId, string Status, string Verdict,
     int RuntimeMs, int MemoryKb, double Score, string CompilerOutput,
-    DateTime CreatedAt, DateTime? JudgedAt, string? Code);
+    DateTime CreatedAt, DateTime? JudgedAt, string? Code, string Language);
 
 // ---- Submissions ----
-public record SubmitDto(string Code);
+public record SubmitDto(string Code, string? Language = null);   // Language: "c" | "cpp" override
 public record UpdateSubmissionDto(bool HiddenByStudent);
 public record SubmissionDto(
     int Id, int ProblemId, int UserId, string AuthorName,
     string Status, string Verdict, int RuntimeMs, int MemoryKb, double Score,
     bool HiddenByStudent, bool Mine, string? Code, string CompilerOutput,
-    DateTime CreatedAt, DateTime? JudgedAt);
+    DateTime CreatedAt, DateTime? JudgedAt, string Language);
 
 // ---- Live board / progress grid ----
 public record ProgressCellDto(

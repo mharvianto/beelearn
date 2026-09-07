@@ -162,7 +162,8 @@ public class JudgeWorker : BackgroundService
                 .Select(t => (t.Stdin, t.ExpectedStdout, t.Points))
                 .ToList();
             var (compiled, compilerOut, o) = await JudgeAsync(
-                dir, problem.Language, sub.Code, tests, problem.TimeLimitMs, problem.MemoryLimitKb, ct);
+                dir, string.IsNullOrEmpty(sub.Language) ? problem.Language : sub.Language!, sub.Code,
+                tests, problem.TimeLimitMs, problem.MemoryLimitKb, ct);
             Finish(sub, o.Verdict, o.Score, o.MaxMs, o.MaxKb, compiled ? "" : compilerOut);
             await db.SaveChangesAsync(ct);
         }
@@ -208,7 +209,8 @@ public class JudgeWorker : BackgroundService
                 .Select(t => (t.Stdin, t.ExpectedStdout, t.Points))
                 .ToList();
             var (compiled, compilerOut, o) = await JudgeAsync(
-                dir, problem.Language, sub.Code, tests, problem.TimeLimitMs, problem.MemoryLimitKb, ct);
+                dir, string.IsNullOrEmpty(sub.Language) ? problem.Language : sub.Language!, sub.Code,
+                tests, problem.TimeLimitMs, problem.MemoryLimitKb, ct);
 
             sub.Status = SubmissionStatus.Done;
             sub.Verdict = o.Verdict;
