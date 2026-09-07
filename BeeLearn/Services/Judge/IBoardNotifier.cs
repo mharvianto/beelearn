@@ -1,4 +1,5 @@
 using BeeLearn.Models;
+using BeeLearn.Services;
 
 namespace BeeLearn.Services.Judge;
 
@@ -25,4 +26,10 @@ public interface IBoardNotifier
 
     /// <summary>A wall post changed: note edited, reaction toggled, comment added.</summary>
     Task WallChangedAsync(int boardId);
+
+    /// <summary>A practice (bank) submission finished judging.</summary>
+    Task PracticeResultAsync(int userId, BankSubmissionDto submission);
+
+    /// <summary>The user's XP total / level changed.</summary>
+    Task ProgressBumpedAsync(int userId, ProgressDto progress);
 }

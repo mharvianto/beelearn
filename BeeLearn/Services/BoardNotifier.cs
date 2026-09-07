@@ -31,4 +31,10 @@ public class BoardNotifier : IBoardNotifier
 
     public Task WallChangedAsync(int boardId) =>
         _hub.Clients.Group(BoardHub.BoardGroup(boardId)).SendAsync("wallChanged", new { boardId });
+
+    public Task PracticeResultAsync(int userId, BankSubmissionDto submission) =>
+        _hub.Clients.User(userId.ToString()).SendAsync("practiceResult", submission);
+
+    public Task ProgressBumpedAsync(int userId, ProgressDto progress) =>
+        _hub.Clients.User(userId.ToString()).SendAsync("progressBumped", progress);
 }

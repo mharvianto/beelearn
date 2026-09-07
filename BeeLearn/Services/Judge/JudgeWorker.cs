@@ -58,8 +58,41 @@ public class JudgeWorker : BackgroundService
     {
         RunJob r => ProcessRunAsync(r, ct),
         SubmissionJob s => ProcessSubmissionAsync(s.SubmissionId, ct),
+        BankSubmissionJob b => ProcessBankSubmissionAsync(b.BankSubmissionId, ct),
         _ => Task.CompletedTask,
     };
+
+    private readonly record struct TestOutcome(Verdict Verdict, double Score, int MaxMs, int MaxKb);
+
+    /// <summary>Compile-then-run all test cases against a source; shared by board + practice.</summary>
+    private async Task<(bool compiled, string compilerOutput, TestOutcome outcome)> JudgeAsync(
+        string dir, string language, string code,
+        IReadOnlyList<(string Stdin, string Expected, int Points)> tests,
+        int timeLimitMs, int memoryLimitKb, CancellationToken ct)
+    {
+        var compile = await _compiler.CompileAsync(dir, language, code, ct);
+        if (!compile.Ok)
+            return (false, compile.Output, new TestOutcome(Verdict.CompileError, 0, 0, 0));
+
+        int totalPoints = Math.Max(1, tests.Sum(t => Math.Max(0, t.Points)));
+        int passedPoints = 0, maxMs = 0, maxKb = 0;
+        Verdict verdict = Verdict.Accepted;
+
+        foreach (var t in tests)
+        {
+            var exec = await _sandbox.ExecuteAsync(dir, compile.ExePath!, t.Stdin ?? "", timeLimitMs, memoryLimitKb, ct);
+            maxMs = Math.Max(maxMs, exec.WallMs);
+            maxKb = Math.Max(maxKb, exec.PeakKb);
+
+            var cls = VerdictEvaluator.ClassifyRun(exec, timeLimitMs, memoryLimitKb);
+            if (cls != Verdict.Accepted) { verdict = cls; break; }
+            if (!VerdictEvaluator.OutputMatches(exec.Stdout, t.Expected)) { verdict = Verdict.WrongAnswer; break; }
+            passedPoints += Math.Max(0, t.Points);
+        }
+
+        double score = verdict == Verdict.Accepted ? 1.0 : (double)passedPoints / totalPoints;
+        return (true, "", new TestOutcome(verdict, score, maxMs, maxKb));
+    }
 
     private string NewWorkDir()
     {
@@ -124,43 +157,82 @@ public class JudgeWorker : BackgroundService
         var dir = NewWorkDir();
         try
         {
-            var compile = await _compiler.CompileAsync(dir, problem.Language, sub.Code, ct);
-            if (!compile.Ok)
-            {
-                Finish(sub, Verdict.CompileError, 0, 0, 0, compile.Output);
-            }
-            else
-            {
-                var tests = problem.TestCases.OrderBy(t => t.Position).ThenBy(t => t.Id).ToList();
-                int totalPoints = Math.Max(1, tests.Sum(t => Math.Max(0, t.Points)));
-                int passedPoints = 0, maxMs = 0, maxKb = 0;
-                Verdict verdict = Verdict.Accepted;
-
-                foreach (var t in tests)
-                {
-                    var exec = await _sandbox.ExecuteAsync(
-                        dir, compile.ExePath!, t.Stdin ?? "", problem.TimeLimitMs, problem.MemoryLimitKb, ct);
-                    maxMs = Math.Max(maxMs, exec.WallMs);
-                    maxKb = Math.Max(maxKb, exec.PeakKb);
-
-                    var cls = VerdictEvaluator.ClassifyRun(exec, problem.TimeLimitMs, problem.MemoryLimitKb);
-                    if (cls != Verdict.Accepted) { verdict = cls; break; }
-                    if (!VerdictEvaluator.OutputMatches(exec.Stdout, t.ExpectedStdout)) { verdict = Verdict.WrongAnswer; break; }
-                    passedPoints += Math.Max(0, t.Points);
-                }
-
-                double score = verdict == Verdict.Accepted ? 1.0 : (double)passedPoints / totalPoints;
-                Finish(sub, verdict, score, maxMs, maxKb, "");
-            }
-
+            var tests = problem.TestCases
+                .OrderBy(t => t.Position).ThenBy(t => t.Id)
+                .Select(t => (t.Stdin, t.ExpectedStdout, t.Points))
+                .ToList();
+            var (compiled, compilerOut, o) = await JudgeAsync(
+                dir, problem.Language, sub.Code, tests, problem.TimeLimitMs, problem.MemoryLimitKb, ct);
+            Finish(sub, o.Verdict, o.Score, o.MaxMs, o.MaxKb, compiled ? "" : compilerOut);
             await db.SaveChangesAsync(ct);
         }
         finally { CleanUp(dir); }
+
+        int xpGained = 0;
+        if (sub.Verdict == Verdict.Accepted && sub.Score >= 1.0)
+        {
+            var progress = scope.ServiceProvider.GetRequiredService<ProgressService>();
+            xpGained = await progress.AwardSolveAsync(
+                sub.UserId, ProgressService.KeyForBoardProblem(problem), problem.Level, ct);
+        }
 
         await _notifier.ProgressChangedAsync(boardId, problem.Id, sub.UserId);
         await _notifier.WallChangedAsync(boardId);
         await _notifier.SubmissionResultAsync(sub.UserId,
             Mapping.ToDto(sub, sub.UserId, canSeeCode: true, authorName));
+        if (xpGained > 0)
+            await _notifier.ProgressBumpedAsync(sub.UserId,
+                await scope.ServiceProvider.GetRequiredService<ProgressService>().GetAsync(sub.UserId, ct));
+    }
+
+    // ---------- practice (bank) submission judging ----------
+    private async Task ProcessBankSubmissionAsync(int id, CancellationToken ct)
+    {
+        using var scope = _scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var sub = await db.BankSubmissions
+            .Include(s => s.BankProblem!).ThenInclude(p => p.TestCases)
+            .FirstOrDefaultAsync(s => s.Id == id, ct);
+        if (sub is null || sub.BankProblem is null) return;
+
+        var problem = sub.BankProblem;
+        sub.Status = SubmissionStatus.Running;
+        await db.SaveChangesAsync(ct);
+
+        var dir = NewWorkDir();
+        try
+        {
+            var tests = problem.TestCases
+                .OrderBy(t => t.Position).ThenBy(t => t.Id)
+                .Select(t => (t.Stdin, t.ExpectedStdout, t.Points))
+                .ToList();
+            var (compiled, compilerOut, o) = await JudgeAsync(
+                dir, problem.Language, sub.Code, tests, problem.TimeLimitMs, problem.MemoryLimitKb, ct);
+
+            sub.Status = SubmissionStatus.Done;
+            sub.Verdict = o.Verdict;
+            sub.Score = o.Score;
+            sub.RuntimeMs = o.MaxMs;
+            sub.MemoryKb = o.MaxKb;
+            sub.CompilerOutput = compiled ? "" : compilerOut;
+            sub.JudgedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+        }
+        finally { CleanUp(dir); }
+
+        int xpGained = 0;
+        if (sub.Verdict == Verdict.Accepted && sub.Score >= 1.0)
+        {
+            var progress = scope.ServiceProvider.GetRequiredService<ProgressService>();
+            xpGained = await progress.AwardSolveAsync(
+                sub.UserId, ProgressService.BankKey(problem.Id), problem.Level, ct);
+        }
+
+        await _notifier.PracticeResultAsync(sub.UserId, Mapping.ToDto(sub));
+        if (xpGained > 0)
+            await _notifier.ProgressBumpedAsync(sub.UserId,
+                await scope.ServiceProvider.GetRequiredService<ProgressService>().GetAsync(sub.UserId, ct));
     }
 
     private static void Finish(Submission sub, Verdict v, double score, int ms, int kb, string compilerOut)

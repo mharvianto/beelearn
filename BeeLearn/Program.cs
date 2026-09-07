@@ -58,6 +58,7 @@ builder.Services.AddHostedService<JudgeWorker>();
 builder.Services.AddScoped<VisibilityService>();
 builder.Services.AddScoped<BoardService>();
 builder.Services.AddScoped<WallService>();
+builder.Services.AddScoped<ProgressService>();
 
 const string DevCors = "dev-spa";
 builder.Services.AddCors(o => o.AddPolicy(DevCors, p => p

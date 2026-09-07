@@ -1,25 +1,17 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { api } from '../lib/api';
-import { useAuth } from '../stores/auth';
 import { useProgress } from '../stores/progress';
 import { createBoardConnection } from '../lib/signalr';
 import MonacoEditor from '../components/MonacoEditor.vue';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
 import VerdictBadge from '../components/VerdictBadge.vue';
 import LevelBadge from '../components/LevelBadge.vue';
-import ContentGuard from '../components/ContentGuard.vue';
-import StatementImage from '../components/StatementImage.vue';
 
-const props = defineProps({ slug: { type: String, required: true }, problemId: [String, Number] });
-const auth = useAuth();
+const props = defineProps({ id: { type: [String, Number], required: true } });
 const progress = useProgress();
 
-const board = ref(null);
 const problem = ref(null);
-const protectOn = computed(() => !!board.value?.protectContent && auth.user?.role === 'Student');
-const watermark = computed(() =>
-  `${auth.user?.email || auth.user?.displayName || ''} · ${new Date().toLocaleString()}`);
 const code = ref('');
 const stdin = ref('');
 const runOut = ref(null);
@@ -27,21 +19,18 @@ const running = ref(false);
 const submitting = ref(false);
 const submissions = ref([]);
 const error = ref('');
-const myPost = ref({ postId: null, hiddenByStudent: false });
+const gained = ref(0);
 let conn = null;
 
-const mine = computed(() => submissions.value.filter((s) => s.mine));
-const latestMine = computed(() => mine.value[0]);
-
 async function load() {
-  board.value = await api.get(`/api/boards/${props.slug}`);
-  problem.value = await api.get(`/api/boards/${props.slug}/problems/${props.problemId}`);
+  problem.value = await api.get(`/api/practice/${props.id}`);
   code.value = problem.value.starterCode || '';
   if (problem.value.sampleTests?.[0]) stdin.value = problem.value.sampleTests[0].stdin;
   await loadSubs();
 }
 async function loadSubs() {
-  submissions.value = await api.get(`/api/problems/${props.problemId}/submissions`);
+  submissions.value = await api.get(`/api/practice/${props.id}/submissions`);
+  problem.value.solved = submissions.value.some((s) => s.verdict === 'Accepted' && s.score >= 1);
 }
 
 async function run() {
@@ -53,115 +42,82 @@ async function run() {
 }
 
 async function submit() {
-  error.value = ''; submitting.value = true;
+  error.value = ''; submitting.value = true; gained.value = 0;
   try {
-    await api.post(`/api/problems/${props.problemId}/submit`, { code: code.value });
+    const before = progress.xp;
+    const alreadySolved = problem.value.solved;
+    await api.post(`/api/practice/${props.id}/submit`, { code: code.value });
     await loadSubs();
+    // give the judge a moment, then reconcile XP
+    setTimeout(async () => {
+      await loadSubs();
+      await progress.refresh();
+      if (!alreadySolved && progress.xp > before) gained.value = progress.xp - before;
+    }, 1500);
   } catch (e) { error.value = e.message; }
   finally { submitting.value = false; }
 }
 
-async function toggleHiddenFromPeers() {
-  const next = !myPost.value.hiddenByStudent;
-  await api.patch(`/api/posts/${myPost.value.postId}/visibility`, { hiddenByStudent: next });
-  myPost.value.hiddenByStudent = next;
-  await loadSubs();
-}
-
-let draftTimer = null;
-const isStudent = () => auth.user?.role === 'Student';
-
-function pushDraftSoon() {
-  if (!conn || conn.state !== 'Connected' || !isStudent()) return;
-  clearTimeout(draftTimer);
-  draftTimer = setTimeout(() => {
-    conn.invoke('PushDraft', board.value.id, Number(props.problemId), code.value).catch(() => {});
-  }, 900);
-}
-watch(code, pushDraftSoon);
-
 onMounted(async () => {
   try { await load(); } catch (e) { error.value = e.message; return; }
-  // Make sure a wall card exists for this student even before they run/submit.
-  if (isStudent()) {
-    try { myPost.value = await api.post(`/api/problems/${props.problemId}/post`); } catch { /* ignore */ }
-  }
-
+  progress.refresh();
   conn = createBoardConnection();
-  conn.on('submissionResult', (dto) => {
-    if (dto.problemId === Number(props.problemId)) { loadSubs(); progress.refresh(); }
+  conn.on('practiceResult', (dto) => {
+    if (dto.bankProblemId === Number(props.id)) loadSubs();
   });
-  conn.on('progressBumped', (p) => progress.$patch({ ...p, ready: true }));
-  try {
-    await conn.start();
-    await conn.invoke('JoinBoard', board.value.id);
-    if (isStudent()) conn.invoke('PushDraft', board.value.id, Number(props.problemId), code.value).catch(() => {});
-  } catch {}
+  conn.on('progressBumped', (p) => {
+    const before = progress.xp;
+    progress.$patch({ ...p, ready: true });
+    if (p.xp > before) gained.value = p.xp - before;
+  });
+  try { await conn.start(); } catch { /* realtime best-effort */ }
 });
-onBeforeUnmount(async () => {
-  clearTimeout(draftTimer);
-  try { await conn?.stop(); } catch {}
-});
+onBeforeUnmount(async () => { try { await conn?.stop(); } catch {} });
 </script>
 
 <template>
   <div v-if="problem" class="h-full grid lg:grid-cols-2 gap-0">
-    <!-- Left: statement + submissions -->
     <div class="p-5 overflow-y-auto border-r border-slate-200 dark:border-slate-800">
-      <RouterLink :to="`/boards/${props.slug}`" class="text-sm text-slate-400 dark:text-slate-500">&larr; back to board</RouterLink>
+      <RouterLink to="/practice" class="text-sm text-slate-400 dark:text-slate-500">&larr; kembali ke Latihan</RouterLink>
       <div class="flex items-center gap-2 mt-2 mb-1 flex-wrap">
         <h1 class="text-lg font-bold">{{ problem.title }}</h1>
         <LevelBadge :level="problem.level" />
+        <span v-if="problem.solved" class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">✓ selesai</span>
         <span v-for="t in (problem.tags ? problem.tags.split(',') : [])" :key="t"
               class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{{ t }}</span>
       </div>
       <div class="text-xs text-slate-400 dark:text-slate-500 mb-3">
         {{ problem.language.toUpperCase() }} · limit {{ problem.timeLimitMs }} ms · {{ problem.memoryLimitKb }} KB
       </div>
-      <p v-if="protectOn" class="text-[11px] text-amber-600 dark:text-amber-400 mb-2">
-        🔒 Soal dilindungi — dikirim sebagai gambar terenkripsi dengan watermark identitasmu.
-      </p>
 
-      <ContentGuard v-if="protectOn" :active="true" :watermark="''">
-        <StatementImage :problem-id="props.problemId" />
-      </ContentGuard>
+      <div v-if="gained" class="mb-3 text-sm bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200 rounded-lg px-3 py-2">
+        🎉 +{{ gained }} XP! Sekarang Lv {{ progress.level }} · {{ progress.xp }} XP
+      </div>
 
-      <template v-else>
-        <MarkdownBlock :text="problem.statementMarkdown" />
-        <div v-if="problem.sampleTests?.length" class="mt-4">
-          <h3 class="font-semibold text-sm mb-1">Samples</h3>
-          <div v-for="(t, i) in problem.sampleTests" :key="i" class="grid grid-cols-2 gap-2 mb-2 text-xs">
-            <pre class="bg-slate-100 dark:bg-slate-800 rounded p-2 overflow-x-auto">{{ t.stdin }}</pre>
-            <pre class="bg-slate-100 dark:bg-slate-800 rounded p-2 overflow-x-auto">{{ t.expectedStdout }}</pre>
-          </div>
+      <MarkdownBlock :text="problem.statementMarkdown" />
+
+      <div v-if="problem.sampleTests?.length" class="mt-4">
+        <h3 class="font-semibold text-sm mb-1">Contoh</h3>
+        <div v-for="(t, i) in problem.sampleTests" :key="i" class="grid grid-cols-2 gap-2 mb-2 text-xs">
+          <pre class="bg-slate-100 dark:bg-slate-800 rounded p-2 overflow-x-auto">{{ t.stdin }}</pre>
+          <pre class="bg-slate-100 dark:bg-slate-800 rounded p-2 overflow-x-auto">{{ t.expectedStdout }}</pre>
         </div>
-      </template>
+      </div>
 
-      <button v-if="isStudent() && myPost.postId" @click="toggleHiddenFromPeers"
-              class="mt-4 w-full text-sm px-3 py-2 rounded-lg border flex items-center justify-center gap-2"
-              :class="myPost.hiddenByStudent
-                ? 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-500/15 dark:text-purple-300 dark:border-purple-500/30'
-                : 'text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-slate-400'">
-        {{ myPost.hiddenByStudent
-          ? '🔒 Live code & progres disembunyikan dari teman'
-          : '👥 Sembunyikan live code & progres dari teman' }}
-      </button>
-
-      <h3 class="font-semibold text-sm mt-5 mb-2">Submissions</h3>
+      <h3 class="font-semibold text-sm mt-5 mb-2">Riwayat</h3>
       <div class="space-y-1">
         <div v-for="s in submissions" :key="s.id"
              class="flex items-center gap-2 text-sm border border-slate-100 dark:border-slate-800 rounded-lg px-2 py-1.5">
           <VerdictBadge :verdict="s.status === 'Done' ? s.verdict : s.status" small />
-          <span class="text-slate-500 dark:text-slate-400">{{ s.authorName }}</span>
           <span v-if="s.status === 'Done'" class="text-xs text-slate-400 dark:text-slate-500">
             {{ s.runtimeMs }}ms · {{ s.memoryKb }}KB · {{ Math.round(s.score * 100) }}%
           </span>
+          <span class="text-xs text-slate-400 dark:text-slate-500 ml-auto">{{ new Date(s.createdAt + 'Z').toLocaleTimeString() }}</span>
         </div>
-        <p v-if="!submissions.length" class="text-slate-400 dark:text-slate-500 text-sm">No submissions yet.</p>
+        <p v-if="!submissions.length" class="text-slate-400 dark:text-slate-500 text-sm">Belum ada kiriman.</p>
       </div>
     </div>
 
-    <!-- Right: editor + console -->
     <div class="flex flex-col h-full min-h-0">
       <div class="flex-1 min-h-0">
         <MonacoEditor v-model="code" :language="problem.language === 'c' ? 'c' : 'cpp'" />

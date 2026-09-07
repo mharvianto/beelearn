@@ -35,6 +35,9 @@ public class User
 
     public UserRole Role { get; set; }
 
+    /// <summary>Total experience points earned by solving problems (see <see cref="SolveRecord"/>).</summary>
+    public int Xp { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public List<BoardMembership> Memberships { get; set; } = new();
@@ -288,4 +291,48 @@ public class PostComment
     public string Body { get; set; } = "";
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>One row per distinct problem a user has fully solved (first Accepted).
+/// De-dupes XP: a bank problem and its board copies share the same <see cref="ProblemKey"/>.</summary>
+public class SolveRecord
+{
+    public int Id { get; set; }
+
+    public int UserId { get; set; }
+    public User? User { get; set; }
+
+    /// <summary>"bank:{bankProblemId}" for bank/board-copied problems, "board:{problemId}" otherwise.</summary>
+    [MaxLength(40)]
+    public string ProblemKey { get; set; } = "";
+
+    public ProblemLevel Level { get; set; }
+
+    public int XpAwarded { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>A student's submission to a bank problem in practice mode (independent of any board).</summary>
+public class BankSubmission
+{
+    public int Id { get; set; }
+
+    public int BankProblemId { get; set; }
+    public BankProblem? BankProblem { get; set; }
+
+    public int UserId { get; set; }
+    public User? User { get; set; }
+
+    public string Code { get; set; } = "";
+
+    public SubmissionStatus Status { get; set; } = SubmissionStatus.Queued;
+    public Verdict Verdict { get; set; } = Verdict.None;
+    public int RuntimeMs { get; set; }
+    public int MemoryKb { get; set; }
+    public double Score { get; set; }
+    public string CompilerOutput { get; set; } = "";
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? JudgedAt { get; set; }
 }

@@ -11,3 +11,6 @@ BeeLearn/ClientApp/dist/
 # core dumps
 core
 core.*
+
+# stray dotnet runfile cache
+dotnet/

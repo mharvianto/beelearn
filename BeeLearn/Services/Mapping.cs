@@ -64,4 +64,15 @@ public static class Mapping
 
     public static ProblemSummaryDto ToSummary(Problem p) =>
         new(p.Id, p.Title, p.Position, p.TimeLimitMs, p.MemoryLimitKb, p.Language, p.Tags, p.Level.ToString());
+
+    public static BankSubmissionDto ToDto(BankSubmission s, bool withCode = true) => new(
+        s.Id, s.BankProblemId, s.Status.ToString(), s.Verdict.ToString(),
+        s.RuntimeMs, s.MemoryKb, s.Score, s.CompilerOutput,
+        s.CreatedAt, s.JudgedAt, withCode ? s.Code : null);
+
+    public static PracticeProblemDto ToPracticeDto(BankProblem b, bool solved) => new(
+        b.Id, b.Title, b.StatementMarkdown, b.Language, b.StarterCode,
+        b.TimeLimitMs, b.MemoryLimitKb, b.Level.ToString(), b.Tags,
+        b.TestCases.Where(t => t.IsSample).OrderBy(t => t.Position).ThenBy(t => t.Id).Select(ToDto).ToList(),
+        solved);
 }

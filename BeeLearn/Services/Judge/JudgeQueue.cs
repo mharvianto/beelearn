@@ -8,6 +8,8 @@ public abstract record JudgeJob;
 
 public sealed record SubmissionJob(int SubmissionId) : JudgeJob;
 
+public sealed record BankSubmissionJob(int BankSubmissionId) : JudgeJob;
+
 public sealed record RunJob(
     string Language,
     string Code,

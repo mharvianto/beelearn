@@ -59,6 +59,21 @@ public record UpsertBankProblemDto(
     int TimeLimitMs, int MemoryLimitKb, string? Level, string Tags, bool IsPublic,
     List<UpsertTestCaseDto>? TestCases);   // null => leave test cases untouched
 
+// ---- Practice (students solve bank problems) ----
+public record PracticeSummaryDto(
+    int Id, string Title, string Language, string Level, string Tags,
+    string MyVerdict, double MyBestScore, bool Solved);
+
+public record PracticeProblemDto(
+    int Id, string Title, string StatementMarkdown, string Language, string StarterCode,
+    int TimeLimitMs, int MemoryLimitKb, string Level, string Tags,
+    List<TestCaseDto> SampleTests, bool Solved);
+
+public record BankSubmissionDto(
+    int Id, int BankProblemId, string Status, string Verdict,
+    int RuntimeMs, int MemoryKb, double Score, string CompilerOutput,
+    DateTime CreatedAt, DateTime? JudgedAt, string? Code);
+
 // ---- Submissions ----
 public record SubmitDto(string Code);
 public record UpdateSubmissionDto(bool HiddenByStudent);

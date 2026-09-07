@@ -52,6 +52,15 @@ All five visibility rules live in one place: `Services/VisibilityService.cs`.
    `BankController`: `GET/POST /api/bank`, `GET/PUT/DELETE /api/bank/{id}`,
    `POST /api/bank/{id}/copy-to/{slug}`, `POST /api/boards/{slug}/problems/{id}/to-bank`.
 
+7. **Free practice + XP / levels** (`/practice`, `/leaderboard`) — any signed-in user can
+   browse and solve **every public bank problem** independent of a board
+   (`PracticeController`, `BankSubmission`, judged by `BankSubmissionJob`). The first full
+   solve of a problem awards XP by difficulty (Easy 10 / Medium 20 / Hard 40), tracked in
+   `SolveRecord` with a unique `(user, problemKey)` — a bank problem and its board copies
+   share one key, so the same problem can't be farmed. XP rolls up to a level
+   (`ProgressService`, `25·L·(L-1)` cumulative); header shows `Lv N` + bar, and a
+   leaderboard ranks by total XP. `GET /api/me/progress`, `GET /api/leaderboard`.
+
 ## Running (dev)
 
 ```bash

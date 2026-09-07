@@ -18,6 +18,8 @@ public class AppDbContext : DbContext
     public DbSet<PostComment> PostComments => Set<PostComment>();
     public DbSet<BankProblem> BankProblems => Set<BankProblem>();
     public DbSet<BankTestCase> BankTestCases => Set<BankTestCase>();
+    public DbSet<BankSubmission> BankSubmissions => Set<BankSubmission>();
+    public DbSet<SolveRecord> SolveRecords => Set<SolveRecord>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -81,6 +83,19 @@ public class AppDbContext : DbContext
         b.Entity<BankTestCase>()
             .HasOne(x => x.BankProblem).WithMany(p => p.TestCases)
             .HasForeignKey(x => x.BankProblemId).OnDelete(DeleteBehavior.Cascade);
+
+        b.Entity<BankSubmission>().HasIndex(x => new { x.BankProblemId, x.UserId });
+        b.Entity<BankSubmission>()
+            .HasOne(x => x.BankProblem).WithMany()
+            .HasForeignKey(x => x.BankProblemId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<BankSubmission>()
+            .HasOne(x => x.User).WithMany()
+            .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+        b.Entity<SolveRecord>().HasIndex(x => new { x.UserId, x.ProblemKey }).IsUnique();
+        b.Entity<SolveRecord>()
+            .HasOne(x => x.User).WithMany()
+            .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
 
         b.Entity<PostComment>().HasIndex(x => x.PostId);
         b.Entity<PostComment>()
