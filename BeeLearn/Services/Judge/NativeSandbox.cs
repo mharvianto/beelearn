@@ -54,6 +54,8 @@ public class NativeSandbox
             b.Append("--ro-bind /usr /usr --tmpfs /tmp --proc /proc --dev /dev ");
             b.Append("--symlink usr/lib /lib --symlink usr/lib64 /lib64 ");
             b.Append("--symlink usr/bin /bin --symlink usr/sbin /sbin ");
+            // The runner binary lives in WorkRoot (outside workDir) — bind it in too.
+            b.Append($"--ro-bind \"{_tc.RunnerPath}\" \"{_tc.RunnerPath}\" ");
             // Bind the work dir at the SAME path so stat/exe paths line up.
             b.Append($"--bind \"{workDir}\" \"{workDir}\" --chdir \"{workDir}\" ");
             b.Append($"-- \"{_tc.RunnerPath}\" {runnerArgs}");
