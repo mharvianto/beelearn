@@ -488,6 +488,7 @@ variable (nesting pakai `__`).
 | `Lsp:MaxConcurrent` | `4` | Maksimum sesi clangd bersamaan (1 per editor yang terbuka). |
 | `Lsp:IdleTimeoutSeconds` | `300` | Sesi clangd dimatikan setelah sekian detik tanpa lalu-lintas. |
 | `Lsp:MemoryLimitMb` | `0` | *Runaway guard* opsional (RLIMIT_DATA via `prlimit`). `0` = nonaktif. Isi longgar (≥2048); nilai terlalu kecil membuat clangd *abort* saat meng-index header standar. |
+| `Admin:Token` | `""` (kosong) | Token untuk endpoint `/api/admin/*` (mengisi bank soal via skrip). Kosong ⇒ endpoint mati (404). |
 | `ASPNETCORE_URLS` | — | mis. `http://0.0.0.0:8080`. |
 
 Contoh override via env:
@@ -497,6 +498,57 @@ export ConnectionStrings__Default="Data Source=/var/lib/beecoding/beecoding.db"
 export Judge__MaxConcurrent=4
 export Judge__WorkRoot=/var/tmp/beecoding-judge
 export Lsp__Enabled=true          # setelah `apt install clangd`
+export Admin__Token="$(openssl rand -hex 24)"   # aktifkan endpoint admin bank soal
+```
+
+### Endpoint admin — mengisi bank soal via skrip
+
+Aktif hanya kalau `Admin:Token` di-set. Kirim token sebagai header `X-Admin-Token`
+(atau query `?token=`). Semua di bawah `/api/admin` — **bukan** cookie login.
+
+| Method & path | Fungsi |
+|---|---|
+| `GET /api/admin/ping` | cek token; balas owner default + jumlah soal bank |
+| `GET /api/admin/bank-problems` | daftar semua soal bank (semua owner) |
+| `POST /api/admin/bank-problems` | buat/update batch soal (upsert per *(owner, title)*) |
+| `DELETE /api/admin/bank-problems/{id}` | hapus satu soal |
+
+Soal yang dibuat masuk ke **bank publik** (muncul di **Practice**, dan guru bisa
+meng-copy-nya ke board lewat `POST /api/bank/{id}/copy-to/{slug}`). Body `POST`:
+
+```jsonc
+{
+  "ownerEmail": "teacher@demo.test",   // opsional; default = guru pertama
+  "replaceExisting": true,             // opsional; true = timpa yang judul-nya sama
+  "problems": [
+    {
+      "title": "Sum of Array",
+      "statementMarkdown": "Baca n lalu n bilangan, cetak jumlahnya.",
+      "language": "cpp",               // "c" | "cpp" (default cpp)
+      "level": "Easy",                 // Easy | Medium | Hard (default Medium)
+      "tags": "array, math",
+      "starterCode": "#include <bits/stdc++.h>\n...",
+      "timeLimitMs": 1000,             // opsional
+      "memoryLimitKb": 32768,          // opsional
+      "isPublic": true,                // opsional (default true)
+      "tests": [
+        { "stdin": "3\n1 2 3\n", "expectedStdout": "6\n", "isSample": true },
+        { "stdin": "1\n-5\n",    "expectedStdout": "-5\n" }
+      ]
+    }
+  ]
+}
+```
+
+Aturan validasi per soal: `title` wajib, minimal 1 test, dan minimal 1 test **penilaian**
+(`isSample:false`, `points`>0). Soal yang gagal dilewati dan dilaporkan di `errors`; sisanya
+tetap tersimpan. Contoh:
+
+```bash
+curl -sS -X POST http://localhost:5048/api/admin/bank-problems \
+  -H "X-Admin-Token: $Admin__Token" -H 'Content-Type: application/json' \
+  -d @soal.json
+# -> {"created":[...],"updated":[...],"errors":[...]}
 ```
 
 **IntelliSense C/C++ (clangd).** Bila `Lsp:Enabled=true` dan `clangd` ada di PATH, editor

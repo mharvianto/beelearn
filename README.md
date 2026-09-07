@@ -52,6 +52,10 @@ All five visibility rules live in one place: `Services/VisibilityService.cs`.
    an existing board problem can be saved back into the bank.
    `BankController`: `GET/POST /api/bank`, `GET/PUT/DELETE /api/bank/{id}`,
    `POST /api/bank/{id}/copy-to/{slug}`, `POST /api/boards/{slug}/problems/{id}/to-bank`.
+   For scripted bulk-loading there is also a token-authed `AdminController`
+   (`GET/POST/DELETE /api/admin/bank-problems`, header `X-Admin-Token`): batch-upsert public
+   bank problems by `(owner, title)`. Disabled (404) unless `Admin:Token` is configured.
+   See INSTALL.md §5.
 
 7. **Free practice + XP / levels** (`/practice`, `/leaderboard`) — any signed-in user can
    browse and solve **every public bank problem** independent of a board

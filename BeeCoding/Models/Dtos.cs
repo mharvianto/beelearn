@@ -59,6 +59,28 @@ public record UpsertBankProblemDto(
     int TimeLimitMs, int MemoryLimitKb, string? Level, string Tags, bool IsPublic,
     List<UpsertTestCaseDto>? TestCases);   // null => leave test cases untouched
 
+// ---- Admin ingest (token-authed, for scripting the problem bank) ----
+public record AdminTestInput(string Stdin, string ExpectedStdout, bool? IsSample, int? Points, int? Position);
+public record AdminBankProblemInput(
+    string Title,
+    string StatementMarkdown,
+    string? Language,          // "c" | "cpp"  (default cpp)
+    string? Level,             // Easy | Medium | Hard  (default Medium)
+    string? Tags,
+    string? StarterCode,
+    int? TimeLimitMs,
+    int? MemoryLimitKb,
+    bool? IsPublic,            // default true
+    List<AdminTestInput>? Tests);
+public record AdminIngestDto(
+    string? OwnerEmail,        // an existing Teacher; default = first teacher
+    bool? ReplaceExisting,     // default true: upsert by (owner, title)
+    List<AdminBankProblemInput> Problems);
+public record AdminBankRow(int Id, string Title, string Language, string Level, string Tags,
+    bool IsPublic, int TestCount, int SampleCount, DateTime UpdatedAt);
+public record AdminIngestResultDto(
+    List<AdminBankRow> Created, List<AdminBankRow> Updated, List<string> Errors);
+
 // ---- Practice (students solve bank problems) ----
 public record PracticeSummaryDto(
     int Id, string Title, string Language, string Level, string Tags,
