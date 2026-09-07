@@ -47,8 +47,8 @@ onMounted(() => { load(); progress.refresh(); });
 </script>
 
 <template>
-  <div class="max-w-5xl mx-auto px-4 py-8">
-    <div class="flex items-center justify-between mb-1">
+  <div class="max-w-5xl mx-auto px-4 py-6 sm:py-8">
+    <div class="flex items-baseline justify-between gap-x-3 gap-y-1 flex-wrap mb-1">
       <h1 class="text-xl font-bold">Practice</h1>
       <div class="text-sm text-slate-500 dark:text-slate-400">
         Lv {{ progress.level }} · {{ progress.xp }} XP · {{ progress.toNext }} XP to next level

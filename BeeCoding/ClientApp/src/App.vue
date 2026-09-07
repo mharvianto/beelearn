@@ -23,38 +23,36 @@ async function logout() {
 <template>
   <div class="h-full min-h-0 flex flex-col">
     <header v-if="auth.user" class="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-      <div class="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
-        <div class="flex items-center gap-4 min-w-0">
-          <RouterLink to="/boards" class="font-bold text-lg text-amber-600 dark:text-amber-400 shrink-0">🐝 BeeCoding</RouterLink>
-          <RouterLink to="/practice"
-                      class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
-            Practice
-          </RouterLink>
-          <RouterLink to="/leaderboard"
-                      class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
-            Leaderboard
-          </RouterLink>
-          <RouterLink v-if="auth.isTeacher" to="/bank"
-                      class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
-            Problem bank
-          </RouterLink>
-        </div>
-        <div class="flex items-center gap-3 text-sm shrink-0">
+      <div class="max-w-6xl mx-auto px-4 py-2 flex items-center gap-x-4 gap-y-2 flex-wrap">
+        <RouterLink to="/boards" class="order-1 font-bold text-lg text-amber-600 dark:text-amber-400 shrink-0">🐝 BeeCoding</RouterLink>
+
+        <!-- primary nav: own row on mobile, inline after the logo on ≥md -->
+        <nav class="order-3 md:order-2 w-full md:w-auto flex items-center gap-4 text-sm overflow-x-auto whitespace-nowrap
+                    text-slate-500 dark:text-slate-400 [&_a:hover]:text-slate-900 dark:[&_a:hover]:text-slate-100">
+          <RouterLink to="/practice">Practice</RouterLink>
+          <RouterLink to="/leaderboard">Leaderboard</RouterLink>
+          <RouterLink v-if="auth.isTeacher" to="/bank">Problem bank</RouterLink>
+        </nav>
+
+        <div class="order-2 md:order-3 ml-auto flex items-center gap-2 sm:gap-3 text-sm shrink-0">
           <RouterLink to="/leaderboard" v-if="progress.ready"
-                      class="hidden sm:flex items-center gap-2" title="Your XP">
+                      class="hidden md:flex items-center gap-2" title="Your XP">
             <span class="text-xs font-semibold text-amber-600 dark:text-amber-400">Lv {{ progress.level }}</span>
-            <span class="w-20 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+            <span class="w-16 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
               <span class="block h-full bg-amber-400" :style="{ width: (progress.pct * 100) + '%' }"></span>
             </span>
             <span class="text-xs text-slate-400 dark:text-slate-500">{{ progress.xp }} XP</span>
           </RouterLink>
-          <RouterLink to="/account" class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 truncate max-w-[10rem]" title="Account settings">{{ auth.user.displayName }}</RouterLink>
-          <span class="px-2 py-0.5 rounded-full text-xs"
-                :class="auth.isTeacher
-                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
-                  : 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'">
-            {{ auth.user.role }}
-          </span>
+          <RouterLink to="/account" title="Account settings"
+                      class="flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
+            <span class="hidden sm:block truncate max-w-[9rem]">{{ auth.user.displayName }}</span>
+            <span class="px-2 py-0.5 rounded-full text-xs shrink-0"
+                  :class="auth.isTeacher
+                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
+                    : 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'">
+              {{ auth.user.role }}
+            </span>
+          </RouterLink>
           <ThemeToggle />
           <button @click="logout" class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
             Sign out
