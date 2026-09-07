@@ -102,6 +102,14 @@ onBeforeUnmount(async () => { try { await conn?.stop(); } catch {} });
         <StatementImage :bank-id="props.id" />
       </ContentGuard>
 
+      <div v-if="problem.sampleTests?.length" class="mt-3 flex items-center gap-2 flex-wrap">
+        <span class="text-xs text-slate-400 dark:text-slate-500">Load sample input:</span>
+        <button v-for="(t, i) in problem.sampleTests" :key="i" @click="stdin = t.stdin"
+                class="text-xs px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 hover:border-amber-400">
+          Sample {{ i + 1 }}
+        </button>
+      </div>
+
       <h3 class="font-semibold text-sm mt-5 mb-2">History</h3>
       <div class="space-y-1">
         <div v-for="s in submissions" :key="s.id"

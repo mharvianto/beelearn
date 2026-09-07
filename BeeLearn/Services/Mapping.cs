@@ -70,10 +70,16 @@ public static class Mapping
         s.RuntimeMs, s.MemoryKb, s.Score, s.CompilerOutput,
         s.CreatedAt, s.JudgedAt, withCode ? s.Code : null);
 
-    // Practice statements are always served as an encrypted image, so the text and
-    // sample tests are never sent as JSON — see StatementController.PracticeProblem.
+    // Practice statements are always served as an encrypted image, so the statement text
+    // and expected outputs are never sent as JSON (see StatementController.PracticeProblem).
+    // Sample *inputs* are still returned so the Run box can be pre-filled — they're already
+    // fully visible in the rendered statement image anyway.
     public static PracticeProblemDto ToPracticeDto(BankProblem b, bool solved) => new(
         b.Id, b.Title, "", b.Language, b.StarterCode,
         b.TimeLimitMs, b.MemoryLimitKb, b.Level.ToString(), b.Tags,
-        new List<TestCaseDto>(), solved);
+        b.TestCases.Where(t => t.IsSample)
+            .OrderBy(t => t.Position).ThenBy(t => t.Id)
+            .Select(t => new TestCaseDto(t.Id, t.Stdin, "", true, t.Points, t.Position))
+            .ToList(),
+        solved);
 }
