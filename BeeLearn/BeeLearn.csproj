@@ -17,17 +17,17 @@
   </ItemGroup>
 
   <!--
-    Build the Vue SPA into wwwroot for publish (skip with -p:BuildClient=false).
-    Runs before Build so the freshly written wwwroot/** is picked up by the
-    static-web-assets glob in the SAME publish, then a post-publish copy
-    guarantees it lands in the output even on the very first clean run.
+    Build the Vue SPA into wwwroot on `dotnet publish` (skip with -p:BuildClient=false).
+    Publish-only so plain `dotnet build` / `dotnet run` stay fast in dev (use the Vite
+    dev server there). The static-web-assets glob runs before this target creates the
+    files, so CopyClientToPublish below copies wwwroot into the output afterwards.
   -->
-  <Target Name="BuildClientApp" BeforeTargets="BeforeBuild;BeforeRebuild" Condition="'$(BuildClient)' != 'false'">
+  <Target Name="BuildClientApp" BeforeTargets="Publish" Condition="'$(BuildClient)' != 'false'">
     <Exec Command="npm ci" WorkingDirectory="ClientApp" />
     <Exec Command="npm run build" WorkingDirectory="ClientApp" />
   </Target>
 
-  <Target Name="CopyClientToPublish" AfterTargets="Publish">
+  <Target Name="CopyClientToPublish" AfterTargets="Publish" Condition="Exists('wwwroot')">
     <ItemGroup>
       <_ClientPublishFiles Include="wwwroot/**/*" />
     </ItemGroup>
