@@ -7,8 +7,8 @@ import ThemeToggle from '../components/ThemeToggle.vue';
 const auth = useAuth();
 const router = useRouter();
 const route = useRoute();
-const email = ref('teacher@demo.test');
-const password = ref('password');
+const email = ref('');
+const password = ref('');
 const error = ref('');
 const busy = ref(false);
 
