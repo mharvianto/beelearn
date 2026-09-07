@@ -86,6 +86,9 @@ public record PracticeSummaryDto(
     int Id, string Title, string Language, string Level, string Tags,
     string MyVerdict, double MyBestScore, bool Solved);
 
+public record PracticePageDto(
+    int Total, int Solved, int Page, int PageSize, List<PracticeSummaryDto> Items);
+
 public record PracticeProblemDto(
     int Id, string Title, string StatementMarkdown, string Language, string StarterCode,
     int TimeLimitMs, int MemoryLimitKb, string Level, string Tags,

@@ -31,9 +31,13 @@ public class PracticeController : ApiControllerBase
     private IQueryable<BankProblem> Pool() => _db.BankProblems.Where(b => b.IsPublic);
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<PracticeSummaryDto>>> List(
-        [FromQuery] string? q, [FromQuery] string? tag, [FromQuery] string? level, [FromQuery] string? status)
+    public async Task<ActionResult<PracticePageDto>> List(
+        [FromQuery] string? q, [FromQuery] string? tag, [FromQuery] string? level, [FromQuery] string? status,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 25)
     {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
         var query = Pool();
         if (!string.IsNullOrWhiteSpace(q))
         {
@@ -51,7 +55,7 @@ public class PracticeController : ApiControllerBase
         var problems = await query
             .OrderBy(b => b.Level).ThenBy(b => b.Title)
             .Select(b => new { b.Id, b.Title, b.Language, b.Level, b.Tags })
-            .Take(500)
+            .Take(2000)
             .ToListAsync();
         var ids = problems.Select(p => p.Id).ToList();
 
@@ -86,7 +90,12 @@ public class PracticeController : ApiControllerBase
             "attempted" => list.Where(x => x.MyVerdict != "None" && !x.Solved),
             _ => list,
         };
-        return list.ToList();
+
+        var all = list.ToList();
+        var pageCount = Math.Max(1, (int)Math.Ceiling(all.Count / (double)pageSize));
+        page = Math.Min(page, pageCount);
+        var pageItems = all.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        return new PracticePageDto(all.Count, all.Count(x => x.Solved), page, pageSize, pageItems);
     }
 
     [HttpGet("{id:int}")]

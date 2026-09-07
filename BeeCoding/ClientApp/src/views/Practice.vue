@@ -12,6 +12,13 @@ const level = ref('');
 const status = ref('');
 const error = ref('');
 
+const page = ref(1);
+const pageSize = ref(25);
+const total = ref(0);
+const solvedTotal = ref(0);
+
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)));
+
 async function load() {
   error.value = '';
   try {
@@ -19,12 +26,24 @@ async function load() {
     if (q.value.trim()) p.set('q', q.value.trim());
     if (level.value) p.set('level', level.value);
     if (status.value) p.set('status', status.value);
-    items.value = await api.get(`/api/practice?${p}`);
+    p.set('page', page.value);
+    p.set('pageSize', pageSize.value);
+    const res = await api.get(`/api/practice?${p}`);
+    items.value = res.items ?? [];
+    total.value = res.total ?? 0;
+    solvedTotal.value = res.solved ?? 0;
+    page.value = res.page ?? 1;   // server clamps into range
   } catch (e) { error.value = e.message; }
 }
-onMounted(() => { load(); progress.refresh(); });
 
-const solvedCount = computed(() => items.value.filter((x) => x.solved).length);
+// filter change -> back to first page
+function search() { page.value = 1; load(); }
+function go(n) {
+  const t = Math.min(Math.max(1, n), totalPages.value);
+  if (t !== page.value) { page.value = t; load(); }
+}
+
+onMounted(() => { load(); progress.refresh(); });
 </script>
 
 <template>
@@ -40,27 +59,30 @@ const solvedCount = computed(() => items.value.filter((x) => x.solved).length);
     </p>
 
     <div class="flex gap-2 mb-4 flex-wrap">
-      <input v-model="q" @keyup.enter="load" placeholder="Search title or tag…"
+      <input v-model="q" @keyup.enter="search" placeholder="Search title or tag…"
              class="flex-1 min-w-48 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-2 text-sm" />
-      <select v-model="level" @change="load"
+      <select v-model="level" @change="search"
               class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 text-sm">
         <option value="">All levels</option>
         <option>Easy</option><option>Medium</option><option>Hard</option>
       </select>
-      <select v-model="status" @change="load"
+      <select v-model="status" @change="search"
               class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 text-sm">
         <option value="">All statuses</option>
         <option value="unsolved">Unsolved</option>
         <option value="attempted">Attempted</option>
         <option value="solved">Solved</option>
       </select>
-      <button @click="load" class="text-sm bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4">Search</button>
+      <button @click="search" class="text-sm bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4">Search</button>
     </div>
 
     <p v-if="error" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ error }}</p>
-    <p class="text-xs text-slate-400 dark:text-slate-500 mb-2">
-      {{ items.length }} problems · {{ solvedCount }} solved
-    </p>
+    <div class="flex items-center justify-between text-xs text-slate-400 dark:text-slate-500 mb-2">
+      <span>{{ total }} problems · {{ solvedTotal }} solved</span>
+      <span v-if="total">
+        Showing {{ (page - 1) * pageSize + 1 }}–{{ Math.min(page * pageSize, total) }}
+      </span>
+    </div>
 
     <div class="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
       <RouterLink v-for="p in items" :key="p.id" :to="`/practice/${p.id}`"
@@ -76,6 +98,18 @@ const solvedCount = computed(() => items.value.filter((x) => x.solved).length);
         <span class="text-[11px] text-slate-400 dark:text-slate-500 w-8 text-right">{{ p.language.toUpperCase() }}</span>
       </RouterLink>
       <p v-if="!items.length" class="px-4 py-6 text-sm text-slate-400 dark:text-slate-500">No problems.</p>
+    </div>
+
+    <div v-if="totalPages > 1" class="flex items-center justify-center gap-1 mt-4 text-sm">
+      <button @click="go(1)" :disabled="page === 1"
+              class="px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-40">«</button>
+      <button @click="go(page - 1)" :disabled="page === 1"
+              class="px-3 py-1 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-40">Prev</button>
+      <span class="px-3 text-slate-500 dark:text-slate-400">Page {{ page }} / {{ totalPages }}</span>
+      <button @click="go(page + 1)" :disabled="page === totalPages"
+              class="px-3 py-1 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-40">Next</button>
+      <button @click="go(totalPages)" :disabled="page === totalPages"
+              class="px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-40">»</button>
     </div>
   </div>
 </template>
