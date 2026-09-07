@@ -3,12 +3,22 @@ using BeeLearn.Hubs;
 using BeeLearn.Services;
 using BeeLearn.Services.Judge;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // journald integration + Type=notify readiness when run under systemd; no-op otherwise.
 builder.Host.UseSystemd();
+
+// Trust X-Forwarded-* from a reverse proxy (nginx) so Request.Scheme is "https"
+// behind TLS termination. Only the proxy should be able to reach the app port.
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    o.KnownNetworks.Clear();
+    o.KnownProxies.Clear();
+});
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
@@ -22,6 +32,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         o.Cookie.Name = "beelearn.auth";
         o.Cookie.HttpOnly = true;
         o.Cookie.SameSite = SameSiteMode.Lax;
+        o.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;   // Secure when served over HTTPS
         o.ExpireTimeSpan = TimeSpan.FromDays(7);
         o.SlidingExpiration = true;
         // API/hub calls should get 401/403, never an HTML redirect.
@@ -84,6 +95,8 @@ using (var scope = app.Services.CreateScope())
 
 // Build the sandbox runner + probe capabilities before serving traffic.
 app.Services.GetRequiredService<NativeToolchain>().Initialize();
+
+app.UseForwardedHeaders();
 
 if (app.Environment.IsDevelopment())
     app.UseCors(DevCors);

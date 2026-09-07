@@ -251,6 +251,140 @@ sudo systemctl restart beelearn
 
 ---
 
+## 4B. nginx (reverse proxy) + SSL/HTTPS
+
+BeeLearn dijalankan di `127.0.0.1:8080`, nginx di depan menangani TLS + WebSocket.
+
+### 1) Kunci app hanya ke localhost
+
+Di `/etc/systemd/system/beelearn.service` ubah:
+
+```
+Environment=ASPNETCORE_URLS=http://127.0.0.1:8080
+```
+
+lalu `sudo systemctl daemon-reload && sudo systemctl restart beelearn`.
+(Dukungan `X-Forwarded-Proto` sudah ada di aplikasi — `UseForwardedHeaders`, jadi cookie
+dan `Request.Scheme` mengikuti HTTPS.)
+
+### 2) Pasang nginx
+
+```bash
+sudo apt-get install -y nginx
+```
+
+### 3) Config situs
+
+```bash
+sudo tee /etc/nginx/sites-available/beelearn > /dev/null <<'EOF'
+# WebSocket upgrade (dipakai SignalR di /hubs)
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+upstream beelearn { server 127.0.0.1:8080; keepalive 32; }
+
+# HTTP -> HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name beelearn.example.com 192.168.50.7;   # ganti sesuai domain/IP
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name beelearn.example.com 192.168.50.7;   # ganti sesuai domain/IP
+
+    # --- sertifikat: diisi certbot (Opsi A) atau manual (Opsi B) ---
+    ssl_certificate     /etc/ssl/certs/beelearn.crt;
+    ssl_certificate_key /etc/ssl/private/beelearn.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    client_max_body_size 4m;         # kiriman kode murid (<=200 KB) + margin
+
+    location / {
+        proxy_pass http://beelearn;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        $connection_upgrade;
+    }
+
+    # SignalR: koneksi persisten -> timeout panjang
+    location /hubs/ {
+        proxy_pass http://beelearn;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        $connection_upgrade;
+        proxy_read_timeout  3600s;
+        proxy_send_timeout  3600s;
+        proxy_buffering     off;
+    }
+}
+EOF
+
+sudo ln -sf /etc/nginx/sites-available/beelearn /etc/nginx/sites-enabled/beelearn
+sudo rm -f /etc/nginx/sites-enabled/default
+```
+
+### 4) Sertifikat — pilih salah satu
+
+**Opsi A — Let's Encrypt (punya domain publik, port 80/443 terjangkau internet):**
+
+```bash
+sudo apt-get install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d beelearn.example.com
+```
+
+certbot mengisi `ssl_certificate*` otomatis dan memasang timer perpanjangan
+(`systemctl list-timers 'certbot*'`). Selesai.
+
+**Opsi B — self-signed (LAN / tanpa domain):**
+
+```bash
+sudo openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
+  -keyout /etc/ssl/private/beelearn.key \
+  -out /etc/ssl/certs/beelearn.crt \
+  -subj "/CN=192.168.50.7" \
+  -addext "subjectAltName=IP:192.168.50.7"
+```
+
+Browser akan menandai "not trusted" (wajar untuk sertifikat sendiri) — lanjutkan saja,
+atau impor `beelearn.crt` ke *trust store* perangkat klien. Alternatif yang otomatis
+dipercaya di jaringan lokal: pakai **mkcert**.
+
+### 5) Aktifkan
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+sudo apt-get install -y ufw && sudo ufw allow 'Nginx Full' && sudo ufw allow OpenSSH && sudo ufw enable
+```
+
+Buka `https://<domain-atau-IP>/`. Uji API: `curl -k https://<host>/api/auth/me` → `401`.
+
+### Catatan
+
+| Masalah | Solusi |
+|---|---|
+| SignalR putus-nyambung / "WebSocket closed" | Pastikan blok `map $http_upgrade` ada dan header `Upgrade`/`Connection` diteruskan. |
+| Login berhasil tapi langsung ter-logout | app harus di belakang HTTPS **dan** menerima `X-Forwarded-Proto` (sudah default). Jangan campur akses `http://` dan `https://`. |
+| 413 Request Entity Too Large saat submit | naikkan `client_max_body_size`. |
+| 502 Bad Gateway | `beelearn.service` mati / bukan di `127.0.0.1:8080`. Cek `systemctl status beelearn`. |
+
+---
+
 ## 5. Konfigurasi
 
 Ubah lewat `BeeLearn/appsettings.json`, `appsettings.Production.json`, atau environment
