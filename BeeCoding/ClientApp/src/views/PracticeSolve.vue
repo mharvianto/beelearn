@@ -9,6 +9,7 @@ import LevelBadge from '../components/LevelBadge.vue';
 import ContentGuard from '../components/ContentGuard.vue';
 import StatementImage from '../components/StatementImage.vue';
 import AiHint from '../components/AiHint.vue';
+import { CODE_TEMPLATES, isPristine } from '../lib/templates';
 
 const props = defineProps({ id: { type: [String, Number], required: true } });
 const progress = useProgress();
@@ -17,8 +18,15 @@ const problem = ref(null);
 const code = ref('');
 const stdin = ref('');
 const solveLang = ref('cpp');   // 'c' | 'cpp'
+
+function templateFor(l) {
+  const authored = problem.value?.language === 'c' ? 'c' : 'cpp';
+  return l === authored && problem.value?.starterCode ? problem.value.starterCode : CODE_TEMPLATES[l];
+}
 function setLang(l) {
+  if (l === solveLang.value) return;
   solveLang.value = l;
+  if (isPristine(code.value, problem.value?.starterCode)) code.value = templateFor(l);
   try { localStorage.setItem('beecoding.lang', l); } catch { /* ignore */ }
 }
 const runOut = ref(null);
@@ -34,7 +42,7 @@ async function load() {
   let pref = null;
   try { pref = localStorage.getItem('beecoding.lang'); } catch { /* ignore */ }
   solveLang.value = pref === 'c' || pref === 'cpp' ? pref : (problem.value.language === 'c' ? 'c' : 'cpp');
-  code.value = problem.value.starterCode || '';
+  code.value = templateFor(solveLang.value) || '';
   if (problem.value.sampleTests?.[0]) stdin.value = problem.value.sampleTests[0].stdin;
   await loadSubs();
 }
