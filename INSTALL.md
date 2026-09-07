@@ -273,39 +273,25 @@ dan `Request.Scheme` mengikuti HTTPS.)
 sudo apt-get install -y nginx
 ```
 
-### 3) Config situs
+### 3) Config situs — mulai **HTTP-only**
+
+Blok `map`/`upstream`/`proxy` di bawah dipakai oleh kedua opsi TLS. Jangan tulis blok
+`listen 443` dulu — certbot yang menambahkannya (Opsi A), atau kamu tambah manual setelah
+sertifikat dibuat (Opsi B).
 
 ```bash
 sudo tee /etc/nginx/sites-available/beelearn > /dev/null <<'EOF'
 # WebSocket upgrade (dipakai SignalR di /hubs)
-map $http_upgrade $connection_upgrade {
-    default upgrade;
-    ''      close;
-}
+map $http_upgrade $connection_upgrade { default upgrade; '' close; }
 
 upstream beelearn { server 127.0.0.1:8080; keepalive 32; }
 
-# HTTP -> HTTPS
 server {
     listen 80;
     listen [::]:80;
-    server_name beelearn.example.com 192.168.50.7;   # ganti sesuai domain/IP
-    return 301 https://$host$request_uri;
-}
+    server_name beelearn.example.com;     # <-- DOMAIN ASLI (Opsi A) atau IP LAN (Opsi B)
 
-server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    http2 on;
-    server_name beelearn.example.com 192.168.50.7;   # ganti sesuai domain/IP
-
-    # --- sertifikat: diisi certbot (Opsi A) atau manual (Opsi B) ---
-    ssl_certificate     /etc/ssl/certs/beelearn.crt;
-    ssl_certificate_key /etc/ssl/private/beelearn.key;
-    ssl_protocols       TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers off;
-
-    client_max_body_size 4m;         # kiriman kode murid (<=200 KB) + margin
+    client_max_body_size 4m;              # kiriman kode murid (<=200 KB) + margin
 
     location / {
         proxy_pass http://beelearn;
@@ -336,39 +322,96 @@ EOF
 
 sudo ln -sf /etc/nginx/sites-available/beelearn /etc/nginx/sites-enabled/beelearn
 sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
 ### 4) Sertifikat — pilih salah satu
 
-**Opsi A — Let's Encrypt (punya domain publik, port 80/443 terjangkau internet):**
+**Opsi A — Let's Encrypt** — hanya jika ada **domain publik** yang resolve ke **IP publik**
+server ini dan **port 80 terbuka dari internet**:
 
 ```bash
 sudo apt-get install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d beelearn.example.com
 ```
 
-certbot mengisi `ssl_certificate*` otomatis dan memasang timer perpanjangan
-(`systemctl list-timers 'certbot*'`). Selesai.
+certbot mengubah `server` HTTP tadi menjadi HTTPS (menambah `listen 443 ssl`, path
+sertifikat `/etc/letsencrypt/live/...`, dan redirect 80→443), lalu memasang timer
+perpanjangan (`systemctl list-timers 'certbot*'`). Selesai.
+
+> Kalau server hanya di LAN / tanpa domain publik, certbot **tidak akan berhasil**
+> (validasi HTTP-01 gagal). Pakai Opsi B.
 
 **Opsi B — self-signed (LAN / tanpa domain):**
 
 ```bash
+# 1) buat sertifikat DULU
 sudo openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
   -keyout /etc/ssl/private/beelearn.key \
   -out /etc/ssl/certs/beelearn.crt \
   -subj "/CN=192.168.50.7" \
-  -addext "subjectAltName=IP:192.168.50.7"
+  -addext "subjectAltName=IP:192.168.50.7"        # samakan dengan alamat yang dipakai klien
+```
+
+```bash
+# 2) baru ganti config: 80 -> redirect, tambah server 443
+sudo tee /etc/nginx/sites-available/beelearn > /dev/null <<'EOF'
+map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+upstream beelearn { server 127.0.0.1:8080; keepalive 32; }
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name 192.168.50.7;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name 192.168.50.7;
+
+    ssl_certificate     /etc/ssl/certs/beelearn.crt;
+    ssl_certificate_key /etc/ssl/private/beelearn.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    client_max_body_size 4m;
+
+    location / {
+        proxy_pass http://beelearn;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        $connection_upgrade;
+    }
+    location /hubs/ {
+        proxy_pass http://beelearn;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        $connection_upgrade;
+        proxy_read_timeout  3600s;
+        proxy_send_timeout  3600s;
+        proxy_buffering     off;
+    }
+}
+EOF
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
 Browser akan menandai "not trusted" (wajar untuk sertifikat sendiri) — lanjutkan saja,
 atau impor `beelearn.crt` ke *trust store* perangkat klien. Alternatif yang otomatis
 dipercaya di jaringan lokal: pakai **mkcert**.
 
-### 5) Aktifkan
+### 5) Firewall & uji
 
 ```bash
-sudo nginx -t
-sudo systemctl reload nginx
 sudo apt-get install -y ufw && sudo ufw allow 'Nginx Full' && sudo ufw allow OpenSSH && sudo ufw enable
 ```
 
@@ -382,6 +425,8 @@ Buka `https://<domain-atau-IP>/`. Uji API: `curl -k https://<host>/api/auth/me` 
 | Login berhasil tapi langsung ter-logout | app harus di belakang HTTPS **dan** menerima `X-Forwarded-Proto` (sudah default). Jangan campur akses `http://` dan `https://`. |
 | 413 Request Entity Too Large saat submit | naikkan `client_max_body_size`. |
 | 502 Bad Gateway | `beelearn.service` mati / bukan di `127.0.0.1:8080`. Cek `systemctl status beelearn`. |
+| certbot: `cannot load certificate ".../beelearn.crt"` saat `nginx -t` | Config sudah punya blok `listen 443 ssl` menunjuk file yang belum ada. Mulai dari config **HTTP-only** (langkah 3), baru jalankan `certbot --nginx`. |
+| certbot: challenge gagal / `NXDOMAIN` / timeout | Domain tidak mengarah ke IP publik server ini, atau port 80 tertutup. Untuk LAN pakai Opsi B. |
 
 ---
 
