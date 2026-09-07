@@ -9,6 +9,7 @@ import LevelBadge from '../components/LevelBadge.vue';
 import ContentGuard from '../components/ContentGuard.vue';
 import StatementImage from '../components/StatementImage.vue';
 import AiHint from '../components/AiHint.vue';
+import SplitPane from '../components/SplitPane.vue';
 import { CODE_TEMPLATES, isPristine } from '../lib/templates';
 
 const props = defineProps({ id: { type: [String, Number], required: true } });
@@ -94,8 +95,10 @@ onBeforeUnmount(async () => { try { await conn?.stop(); } catch {} });
 </script>
 
 <template>
-  <div v-if="problem" class="h-full grid lg:grid-cols-2 gap-0">
-    <div class="p-5 overflow-y-auto border-r border-slate-200 dark:border-slate-800">
+  <div v-if="problem" class="h-full">
+   <SplitPane direction="horizontal" storage-key="beecoding.split.solve-main" :initial="42" :min="260">
+    <template #a>
+    <div class="h-full overflow-y-auto p-5 border-r border-slate-200 dark:border-slate-800">
       <RouterLink to="/practice" class="text-sm text-slate-400 dark:text-slate-500">&larr; back to Practice</RouterLink>
       <div class="flex items-center gap-2 mt-2 mb-1 flex-wrap">
         <h1 class="text-lg font-bold">{{ problem.title }}</h1>
@@ -145,12 +148,15 @@ onBeforeUnmount(async () => { try { await conn?.stop(); } catch {} });
         <p v-if="!submissions.length" class="text-slate-400 dark:text-slate-500 text-sm">No submissions yet.</p>
       </div>
     </div>
+    </template>
 
-    <div class="flex flex-col h-full min-h-0">
-      <div class="flex-1 min-h-0">
+    <template #b>
+    <SplitPane direction="vertical" storage-key="beecoding.split.solve-console" :initial="66" :min="110">
+      <template #a>
         <MonacoEditor v-model="code" :language="solveLang" :lsp="solveLang" />
-      </div>
-      <div class="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 space-y-2">
+      </template>
+      <template #b>
+      <div class="h-full overflow-y-auto border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 space-y-2">
         <div class="flex gap-2 items-center">
           <button @click="run" :disabled="running"
                   class="bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
@@ -188,6 +194,9 @@ onBeforeUnmount(async () => { try { await conn?.stop(); } catch {} });
         </div>
         <p v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
       </div>
-    </div>
+      </template>
+    </SplitPane>
+    </template>
+   </SplitPane>
   </div>
 </template>
