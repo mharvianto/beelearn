@@ -120,7 +120,7 @@ var csp = string.Equals(cspCfg, "off", StringComparison.OrdinalIgnoreCase) ? ""
     : "default-src 'self'; " +
       "img-src 'self' data: blob:; " +
       "style-src 'self' 'unsafe-inline'; " +
-      "script-src 'self'; " +
+      "script-src 'self' blob:; " +          // blob: for Vite's Monaco worker shim
       "worker-src 'self' blob:; " +
       "connect-src 'self'; " +
       "font-src 'self' data:; " +

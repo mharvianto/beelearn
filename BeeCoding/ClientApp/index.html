@@ -4,13 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>BeeCoding</title>
-    <script>
-      try {
-        var t = localStorage.getItem('beecoding.theme') || 'system';
-        if (t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches))
-          document.documentElement.classList.add('dark');
-      } catch (e) {}
-    </script>
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="app"></div>
