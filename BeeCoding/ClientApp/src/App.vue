@@ -47,7 +47,7 @@ async function logout() {
             </span>
             <span class="text-xs text-slate-400 dark:text-slate-500">{{ progress.xp }} XP</span>
           </RouterLink>
-          <span class="text-slate-500 dark:text-slate-400 truncate max-w-[10rem]">{{ auth.user.displayName }}</span>
+          <RouterLink to="/account" class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 truncate max-w-[10rem]" title="Account settings">{{ auth.user.displayName }}</RouterLink>
           <span class="px-2 py-0.5 rounded-full text-xs"
                 :class="auth.isTeacher
                   ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'

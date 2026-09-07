@@ -26,5 +26,12 @@ export const useAuth = defineStore('auth', {
       await api.post('/api/auth/logout');
       this.user = null;
     },
+    async changePassword(currentPassword, newPassword) {
+      await api.post('/api/auth/change-password', { currentPassword, newPassword });
+    },
+    async deleteAccount(password, deleteOwnedBoards = false) {
+      await api.del('/api/auth/account', { password, deleteOwnedBoards });
+      this.user = null;
+    },
   },
 });

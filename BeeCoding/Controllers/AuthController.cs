@@ -111,6 +111,53 @@ public class AuthController : ApiControllerBase
         return new MeDto(user.Id, user.Email, user.DisplayName, user.Role.ToString());
     }
 
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword(ChangePasswordDto dto)
+    {
+        var user = await _db.Users.FindAsync(UserId);
+        if (user is null) return Unauthorized();
+
+        if (!_pw.Verify(user, dto.CurrentPassword ?? ""))
+            return BadRequest("Current password is wrong.");
+        if ((dto.NewPassword ?? "").Length < 6)
+            return BadRequest("New password must be at least 6 characters.");
+
+        user.PasswordHash = _pw.Hash(user, dto.NewPassword!);
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    /// <summary>Permanently delete the caller's own account and everything owned by it.</summary>
+    [HttpDelete("account")]
+    [Authorize]
+    public async Task<IActionResult> DeleteAccount(DeleteAccountDto dto)
+    {
+        var user = await _db.Users.FindAsync(UserId);
+        if (user is null) return Unauthorized();
+        if (!_pw.Verify(user, dto.Password ?? ""))
+            return BadRequest("Password is wrong.");
+
+        // Board.OwnerId is Restrict — a teacher's boards must go first (they carry other
+        // people's submissions/posts, so require an explicit opt-in).
+        var ownedBoards = await _db.Boards.Where(x => x.OwnerId == UserId)
+            .Select(x => new { x.Id, x.Slug, x.Title }).ToListAsync();
+        if (ownedBoards.Count > 0 && !dto.DeleteOwnedBoards)
+            return Conflict(new
+            {
+                message = "You own boards. Deleting your account will also delete them (and everyone's work on them). Confirm to proceed.",
+                boards = ownedBoards.Select(b => new { b.Slug, b.Title }),
+            });
+
+        if (ownedBoards.Count > 0)
+            _db.Boards.RemoveRange(_db.Boards.Where(x => x.OwnerId == UserId));
+        _db.Users.Remove(user);
+        await _db.SaveChangesAsync();   // cascades memberships, submissions, posts, bank problems, solve records
+
+        await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        return NoContent();
+    }
+
     private async Task SignInAsync(User user)
     {
         var claims = new List<Claim>

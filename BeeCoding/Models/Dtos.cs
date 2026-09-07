@@ -4,6 +4,8 @@ namespace BeeCoding.Models;
 public record RegisterDto(string Email, string Password, string DisplayName, string Role, string? TeacherCode = null);
 public record LoginDto(string Email, string Password);
 public record MeDto(int Id, string Email, string DisplayName, string Role);
+public record ChangePasswordDto(string CurrentPassword, string NewPassword);
+public record DeleteAccountDto(string Password, bool DeleteOwnedBoards = false);
 
 // ---- Boards ----
 public record CreateBoardDto(string Title);
