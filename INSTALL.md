@@ -514,6 +514,12 @@ export Admin__Token="$(openssl rand -hex 32)"   # aktifkan endpoint admin bank s
 - Di nginx, batasi body untuk route judge: `location /api/run { client_max_body_size 1m; proxy_pass http://beecoding; ... }` — biarkan `100m` hanya untuk `/api/admin/`.
 - Header keamanan (CSP, `X-Frame-Options`, `X-Content-Type-Options`, HSTS saat HTTPS) sudah dikirim aplikasi otomatis.
 - Statement soal disanitasi (DOMPurify) sebelum dirender — aman dari HTML/script sisipan.
+- Login sudah di-throttle otomatis (8 gagal / 15 menit per akun, 25 per IP → `429`). Untuk membendung spam pendaftaran, tambahkan `limit_req` nginx pada `/api/auth/`:
+  ```nginx
+  limit_req_zone $binary_remote_addr zone=auth:10m rate=10r/m;   # di http {}
+  location /api/auth/ { limit_req zone=auth burst=20 nodelay; proxy_pass http://beecoding; ... }
+  ```
+- Scratch dir judge yang tertinggal (proses ke-kill) dibersihkan otomatis tiap 15 menit (usia > 1 jam).
 
 ### Endpoint admin — mengisi bank soal via skrip
 

@@ -60,8 +60,10 @@ builder.Services.AddSingleton<PresenceTracker>();
 builder.Services.AddSingleton<DraftStore>();
 builder.Services.AddSingleton<StatementImageService>();
 builder.Services.AddSingleton<RateLimiter>();
+builder.Services.AddSingleton<LoginThrottle>();
 builder.Services.AddSingleton<IBoardNotifier, BoardNotifier>();
 builder.Services.AddHostedService<JudgeWorker>();
+builder.Services.AddHostedService<JudgeJanitor>();
 
 builder.Services.AddScoped<VisibilityService>();
 builder.Services.AddScoped<BoardService>();

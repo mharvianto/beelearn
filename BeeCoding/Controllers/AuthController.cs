@@ -17,13 +17,17 @@ public class AuthController : ApiControllerBase
     private readonly AppDbContext _db;
     private readonly PasswordService _pw;
     private readonly IConfiguration _cfg;
+    private readonly LoginThrottle _throttle;
 
-    public AuthController(AppDbContext db, PasswordService pw, IConfiguration cfg)
+    public AuthController(AppDbContext db, PasswordService pw, IConfiguration cfg, LoginThrottle throttle)
     {
         _db = db;
         _pw = pw;
         _cfg = cfg;
+        _throttle = throttle;
     }
+
+    private string ClientIp => HttpContext.Connection.RemoteIpAddress?.ToString() ?? "?";
 
     [HttpPost("register")]
     [AllowAnonymous]
@@ -73,10 +77,19 @@ public class AuthController : ApiControllerBase
     public async Task<ActionResult<MeDto>> Login(LoginDto dto)
     {
         var email = (dto.Email ?? "").Trim().ToLowerInvariant();
+        var ip = ClientIp;
+
+        if (_throttle.IsBlocked(ip, email))
+            return StatusCode(StatusCodes.Status429TooManyRequests, "Too many failed attempts. Try again in a few minutes.");
+
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
         if (user is null || !_pw.Verify(user, dto.Password ?? ""))
+        {
+            _throttle.RecordFailure(ip, email);
             return Unauthorized("Wrong email or password.");
+        }
 
+        _throttle.RecordSuccess(ip, email);
         await SignInAsync(user);
         return new MeDto(user.Id, user.Email, user.DisplayName, user.Role.ToString());
     }
