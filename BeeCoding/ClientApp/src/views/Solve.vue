@@ -10,6 +10,7 @@ import VerdictBadge from '../components/VerdictBadge.vue';
 import LevelBadge from '../components/LevelBadge.vue';
 import ContentGuard from '../components/ContentGuard.vue';
 import StatementImage from '../components/StatementImage.vue';
+import AiHint from '../components/AiHint.vue';
 
 const props = defineProps({ slug: { type: String, required: true }, problemId: [String, Number] });
 const auth = useAuth();
@@ -146,6 +147,11 @@ onBeforeUnmount(async () => {
           ? "🔒 Live code & progress hidden from classmates"
           : "👥 Hide live code & progress from classmates" }}
       </button>
+
+      <AiHint :problem-id="props.problemId" :language="problem.language" :code="code" :stdin="stdin"
+              :verdict="latestMine?.status === 'Done' ? latestMine?.verdict : ''"
+              :compiler-output="runOut && !runOut.compileOk ? runOut.compilerOutput : (latestMine?.compilerOutput || '')"
+              :stderr="runOut?.stderr || ''" />
 
       <h3 class="font-semibold text-sm mt-5 mb-2">Submissions</h3>
       <div class="space-y-1">

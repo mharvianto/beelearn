@@ -493,6 +493,13 @@ variable (nesting pakai `__`).
 | `Lsp:IdleTimeoutSeconds` | `300` | Sesi clangd dimatikan setelah sekian detik tanpa lalu-lintas. |
 | `Lsp:MemoryLimitMb` | `0` | *Runaway guard* opsional (RLIMIT_DATA via `prlimit`). `0` = nonaktif. Isi longgar (≥2048); nilai terlalu kecil membuat clangd *abort* saat meng-index header standar. |
 | `Admin:Token` | `""` (kosong) | Token untuk endpoint `/api/admin/*` (mengisi bank soal via skrip). Kosong ⇒ endpoint mati (404). |
+| `Ai:Enabled` | `false` | Aktifkan tutor AI (butuh `Ai:ApiKey` juga). |
+| `Ai:ApiKey` | `""` | Bearer token endpoint chat-completions (kompatibel OpenAI). Set via **env**, jangan commit. |
+| `Ai:BaseUrl` | NVIDIA NIM | URL chat-completions. |
+| `Ai:Model` | `deepseek-ai/deepseek-v4-flash-0731` | Nama model. |
+| `Ai:Thinking` | `false` | Kirim `chat_template_kwargs.thinking` (lebih teliti, lebih lambat). |
+| `Ai:TimeoutSeconds` | `60` | Batas tunggu 1 permintaan; lewat ⇒ `502` ramah. |
+| `Ai:MaxTokens` / `Ai:Temperature` / `Ai:RateLimitSeconds` | `700` / `0.3` / `8` | Batas panjang jawaban, kreativitas, dan jarak antar-permintaan per user. |
 | `ASPNETCORE_URLS` | — | mis. `http://0.0.0.0:8080`. |
 
 Contoh override via env:
@@ -503,7 +510,21 @@ export Judge__MaxConcurrent=4
 export Judge__WorkRoot=/var/tmp/beecoding-judge
 export Lsp__Enabled=true          # setelah `apt install clangd`
 export Admin__Token="$(openssl rand -hex 32)"   # aktifkan endpoint admin bank soal
+export Ai__Enabled=true; export Ai__ApiKey="nvapi-…"   # tutor AI
 ```
+
+### Tutor AI (hint, bukan jawaban)
+
+Dengan `Ai:Enabled=true` + `Ai:ApiKey` terisi, muncul panel **🤖 AI tutor** di halaman
+Solve & Practice. Endpoint: `GET /api/ai/enabled`, `POST /api/ai/hint`
+(`{ problemId | bankProblemId, language, code, verdict?, compilerOutput?, stderr?, question? }`).
+
+Server mengirim statement + sample test + kode & error murid ke model dengan *system prompt*
+yang **melarang** memberi solusi lengkap / badan fungsi / algoritma sebagai kode; balasannya
+juga dipangkas kalau ada blok kode > 12 baris. Kompatibel dengan endpoint chat-completions
+gaya OpenAI mana pun — ganti `Ai:BaseUrl` + `Ai:Model` (mis. OpenAI, Groq, vLLM lokal).
+Kalau model default lambat, naikkan `Ai:TimeoutSeconds` atau pakai model lain; `Ai:Thinking=true`
+lebih teliti tapi jauh lebih lambat.
 
 ### Checklist keamanan produksi
 

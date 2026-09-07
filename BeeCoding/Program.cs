@@ -1,6 +1,7 @@
 using BeeCoding.Data;
 using BeeCoding.Hubs;
 using BeeCoding.Services;
+using BeeCoding.Services.Ai;
 using BeeCoding.Services.Judge;
 using BeeCoding.Services.Lsp;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -49,7 +50,9 @@ builder.Services.AddAuthorization();
 
 builder.Services.Configure<JudgeOptions>(builder.Configuration.GetSection("Judge"));
 builder.Services.Configure<LspOptions>(builder.Configuration.GetSection("Lsp"));
+builder.Services.Configure<AiOptions>(builder.Configuration.GetSection("Ai"));
 builder.Services.AddSingleton<LspEndpoint>();
+builder.Services.AddHttpClient<AiTutorService>();
 
 builder.Services.AddSingleton<PasswordService>();
 builder.Services.AddSingleton<NativeToolchain>();

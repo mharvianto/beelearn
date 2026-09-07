@@ -75,6 +75,15 @@ All five visibility rules live in one place: `Services/VisibilityService.cs`.
    LSP client (`lib/cpplsp.js`) feeds Monaco providers directly. Without clangd the editor
    still works with word-based completion.
 
+9. **AI tutor** (optional, off by default) — with `Ai:Enabled=true` and `Ai:ApiKey` set, a
+   **🤖 AI tutor** panel appears on Solve/Practice. `POST /api/ai/hint` sends the statement,
+   samples, the student's code and any error text to an OpenAI-compatible chat-completions
+   endpoint (`Ai:BaseUrl`/`Ai:Model`, defaults to NVIDIA NIM `deepseek-v4-flash`) behind a
+   system prompt that forbids handing over a solution — it points at the bug, suggests an
+   approach, and asks a guiding question. Replies with a code fence over ~12 lines are
+   trimmed server-side. Per-user throttle (`Ai:RateLimitSeconds`); a slow/failed upstream
+   returns a friendly `502`. `AiController` + `AiTutorService`.
+
 ## Running (dev)
 
 ```bash
