@@ -10,6 +10,7 @@ const routes = [
   { path: '/boards', component: () => import('./views/Dashboard.vue') },
   { path: '/bank', component: () => import('./views/Bank.vue') },
   { path: '/practice', component: () => import('./views/Practice.vue') },
+  { path: '/playground', component: () => import('./views/Playground.vue') },
   { path: '/practice/:id', component: () => import('./views/PracticeSolve.vue'), props: true },
   { path: '/leaderboard', component: () => import('./views/Leaderboard.vue') },
   { path: '/account', component: () => import('./views/Account.vue') },

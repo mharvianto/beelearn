@@ -15,7 +15,7 @@ const route = useRoute();
 // full-height editor views where there is no natural page bottom.
 const showFooter = computed(() =>
   !/\/problems\/\d+/.test(route.path) && !/^\/practice\/\d+/.test(route.path)
-  && !/^\/boards\/[^/]+\/live$/.test(route.path));
+  && !/^\/boards\/[^/]+\/live$/.test(route.path) && route.path !== '/playground');
 
 // keep the header XP in sync with who's logged in
 watch(() => auth.user?.id, (id) => (id ? progress.refresh() : progress.reset()), { immediate: true });
@@ -59,6 +59,7 @@ onBeforeUnmount(() => {
         <nav class="order-3 md:order-2 w-full md:w-auto flex items-center gap-4 text-sm overflow-x-auto whitespace-nowrap
                     text-slate-500 dark:text-slate-400 [&_a:hover]:text-slate-900 dark:[&_a:hover]:text-slate-100">
           <RouterLink to="/practice">Practice</RouterLink>
+          <RouterLink to="/playground">Playground</RouterLink>
           <RouterLink to="/leaderboard">Leaderboard</RouterLink>
           <RouterLink v-if="auth.isTeacher" to="/bank">Problem bank</RouterLink>
         </nav>
