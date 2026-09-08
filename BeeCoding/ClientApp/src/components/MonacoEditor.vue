@@ -21,6 +21,14 @@ const emit = defineEmits(['update:modelValue']);
 
 const el = ref(null);
 let editor = null;
+let selfEmit = false;   // true while we're emitting our own change — don't echo it back
+
+// Touch devices: Monaco's virtual-keyboard/IME handling is fragile. The browser
+// EditContext API fixes most of the "typed char lands wrong / deletes the wrong
+// one" desync; auto-closing pairs and Enter-accepts-suggestion make it worse on a
+// phone, so turn those off there.
+const coarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
+const hasEditContext = typeof window !== 'undefined' && 'EditContext' in window;
 
 // ---- clangd LSP wiring --------------------------------------------------------
 let lspClient = null;
@@ -152,21 +160,43 @@ onMounted(() => {
     value: props.modelValue,
     language: props.language,
     theme: editorTheme(),
-    fontSize: 13,
+    fontSize: coarse ? 14 : 13,
     minimap: { enabled: false },
     scrollBeyondLastLine: false,
     automaticLayout: true,
     tabSize: 4,
     readOnly: props.readOnly,
+    experimentalEditContext: hasEditContext,
+    ...(coarse ? {
+      wordWrap: 'on',
+      autoClosingBrackets: 'never',
+      autoClosingQuotes: 'never',
+      autoClosingOvertype: 'never',
+      autoSurround: 'never',
+      acceptSuggestionOnEnter: 'off',
+      tabCompletion: 'off',
+      contextmenu: false,
+    } : {}),
   });
-  editor.onDidChangeModelContent(() => emit('update:modelValue', editor.getValue()));
+  editor.onDidChangeModelContent(() => {
+    selfEmit = true;
+    emit('update:modelValue', editor.getValue());
+    selfEmit = false;
+  });
   if (!props.readOnly) initLsp();
 });
 
 watch(() => props.readOnly, (ro) => editor?.updateOptions({ readOnly: ro }));
 
 watch(() => props.modelValue, (v) => {
-  if (editor && v !== editor.getValue()) editor.setValue(v || '');
+  // Only for genuinely external changes (template switch, "copy into my editor").
+  // Never yank text out from under someone who is typing — that's what scrambled
+  // input on mobile: setValue resets the cursor mid-keystroke.
+  if (!editor || selfEmit) return;
+  if (v === editor.getValue() || editor.hasTextFocus()) return;
+  const model = editor.getModel();
+  editor.executeEdits('external', [{ range: model.getFullModelRange(), text: v || '' }]);
+  editor.pushUndoStop();
 });
 watch(() => props.language, (l) => {
   if (editor) monaco.editor.setModelLanguage(editor.getModel(), l);
