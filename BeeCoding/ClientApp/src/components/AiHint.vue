@@ -1,11 +1,13 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { api } from '../lib/api';
 import MarkdownBlock from './MarkdownBlock.vue';
 
 const props = defineProps({
   problemId: [String, Number],
   bankProblemId: [String, Number],
+  boardSlug: { type: String, default: '' },     // live-coding session (no problem)
+  teacherCode: { type: String, default: '' },   // teacher's live buffer, for "explain this"
   language: { type: String, default: 'cpp' },
   code: { type: String, default: '' },
   stdin: { type: String, default: '' },
@@ -13,6 +15,8 @@ const props = defineProps({
   compilerOutput: { type: String, default: '' },
   stderr: { type: String, default: '' },
 });
+
+const liveMode = computed(() => !!props.boardSlug && !props.problemId && !props.bankProblemId);
 
 const enabled = ref(false);
 const open = ref(false);
@@ -42,6 +46,7 @@ onMounted(async () => {
 const idPayload = () => ({
   problemId: props.problemId ? Number(props.problemId) : null,
   bankProblemId: props.bankProblemId ? Number(props.bankProblemId) : null,
+  boardSlug: props.boardSlug || null,
 });
 
 async function startOver() {
@@ -50,10 +55,12 @@ async function startOver() {
   reply.value = '';
 }
 
-function payload() {
+function payload(extra = {}) {
   return {
     problemId: props.problemId ? Number(props.problemId) : null,
     bankProblemId: props.bankProblemId ? Number(props.bankProblemId) : null,
+    boardSlug: props.boardSlug || null,
+    teacherCode: liveMode.value ? (props.teacherCode || null) : null,
     language: props.language,
     code: props.code,
     stdin: props.stdin,
@@ -62,17 +69,18 @@ function payload() {
     stderr: props.stderr,
     question: question.value.trim() || null,
     lang: lang.value,
+    ...extra,
   };
 }
 
-async function ask() {
+async function ask(extra = {}) {
   error.value = ''; reply.value = ''; busy.value = true; level.value = 0;
   try {
     const res = await fetch('/api/ai/hint/stream', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload()),
+      body: JSON.stringify(payload(extra)),
     });
     if (!res.ok) {
       if (res.status === 429) throw new Error('Give the AI tutor a few seconds between questions.');
@@ -112,14 +120,19 @@ async function ask() {
   <div v-if="enabled" class="mt-5 border border-violet-200 dark:border-violet-500/30 rounded-xl overflow-hidden">
     <button @click="open = !open"
             class="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300">
-      <span>🤖 AI tutor — hints only</span>
+      <span>🤖 AI tutor{{ liveMode ? '' : ' — hints only' }}</span>
       <span class="text-xs">{{ open ? '▾' : '▸' }}</span>
     </button>
 
     <div v-if="open" class="p-3 space-y-2">
       <p class="text-[11px] text-slate-400 dark:text-slate-500">
-        It looks at your current code and errors, points out bugs, and suggests an approach — it
-        will <b>not</b> write the solution for you.
+        <template v-if="liveMode">
+          Ask what the teacher's code does, or get help with an error in your own follow-along code.
+        </template>
+        <template v-else>
+          It looks at your current code and errors, points out bugs, and suggests an approach — it
+          will <b>not</b> write the solution for you.
+        </template>
       </p>
 
       <div class="flex items-center gap-1 text-xs">
@@ -133,22 +146,29 @@ async function ask() {
         </button>
       </div>
 
-      <textarea v-model="question" rows="2" placeholder="Optional: ask something specific (e.g. “why does test 3 fail?”)"
+      <textarea v-model="question" rows="2"
+                :placeholder="liveMode ? 'Optional: ask something specific (e.g. “what does line 12 do?”)' : 'Optional: ask something specific (e.g. “why does test 3 fail?”)'"
                 class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1.5 text-xs"></textarea>
-      <button @click="ask" :disabled="busy || !code"
-              class="bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
-        {{ busy ? 'Thinking…' : 'Ask for a hint' }}
-      </button>
+      <div class="flex flex-wrap gap-2">
+        <button @click="ask()" :disabled="busy || (!code && !liveMode)"
+                class="bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
+          {{ busy ? 'Thinking…' : liveMode ? 'Ask about my code' : 'Ask for a hint' }}
+        </button>
+        <button v-if="liveMode" @click="ask({ explain: true })" :disabled="busy || !teacherCode"
+                class="border border-violet-300 dark:border-violet-500/40 text-violet-700 dark:text-violet-300 rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
+          ✨ Explain the teacher's code
+        </button>
+      </div>
 
       <p v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
       <div v-if="reply" class="text-sm bg-slate-50 dark:bg-slate-800/60 rounded-lg p-3">
-        <p v-if="level > 0" class="text-[10px] uppercase tracking-wide text-violet-500 dark:text-violet-400 mb-1">
+        <p v-if="level > 0 && !liveMode" class="text-[10px] uppercase tracking-wide text-violet-500 dark:text-violet-400 mb-1">
           Hint {{ level }} / 4 · {{ LEVEL_LABEL[level] }}
         </p>
         <MarkdownBlock :text="reply" />
         <span v-if="busy" class="inline-block w-1.5 h-4 bg-violet-400 animate-pulse align-middle ml-0.5"></span>
       </div>
-      <p v-if="level >= 2 && !busy" class="text-[11px] text-slate-400 dark:text-slate-500">
+      <p v-if="level >= 2 && !busy && !liveMode" class="text-[11px] text-slate-400 dark:text-slate-500">
         Ask again for a more detailed hint (the tutor still won't give the full solution).
         <button @click="startOver" class="text-violet-500 dark:text-violet-400 hover:underline ml-1">Start over</button>
       </p>

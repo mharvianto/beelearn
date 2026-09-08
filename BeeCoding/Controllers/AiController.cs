@@ -18,7 +18,10 @@ public record AiHintDto(
     int? ProblemId, int? BankProblemId,
     string? Language, string? Code,
     string? Stdin, string? Verdict, string? CompilerOutput, string? Stderr,
-    string? Question, string? Lang);   // Lang: "id" | "en" (reply language)
+    string? Question, string? Lang,     // Lang: "id" | "en" (reply language)
+    string? BoardSlug = null,           // live-coding session (no problem) on this board
+    string? TeacherCode = null,         // the teacher's current live buffer, for context / "explain this"
+    bool Explain = false);              // student asked to explain the teacher's code
 
 public record AiGenerateDto(string? Idea, string? Level, string? Language, int? Count, string? Lang);
 
@@ -148,7 +151,10 @@ public class AiController : ApiControllerBase
     }
 
     private static string? ProblemKey(AiHintDto dto) =>
-        dto.BankProblemId is int b ? $"bank:{b}" : dto.ProblemId is int p ? $"board:{p}" : null;
+        dto.BankProblemId is int b ? $"bank:{b}"
+        : dto.ProblemId is int p ? $"board:{p}"
+        : !string.IsNullOrWhiteSpace(dto.BoardSlug) ? $"live:{dto.BoardSlug}"
+        : null;
 
     [HttpPost("hint")]
     public async Task<IActionResult> Hint(AiHintDto dto)
@@ -239,9 +245,12 @@ public class AiController : ApiControllerBase
 
     private async Task<(AiHintContext? ctx, ObjectResult? err)> BuildContextAsync(AiHintDto dto)
     {
-        if (string.IsNullOrWhiteSpace(dto.Code))
+        // In a live session the student may ask about the teacher's code before writing anything.
+        bool haveSomething = !string.IsNullOrWhiteSpace(dto.Code)
+            || (!string.IsNullOrWhiteSpace(dto.BoardSlug) && !string.IsNullOrWhiteSpace(dto.TeacherCode));
+        if (!haveSomething)
             return (null, new ObjectResult("There's no code to look at yet.") { StatusCode = 400 });
-        if (dto.Code.Length > 200_000)
+        if (dto.Code is { Length: > 200_000 })
             return (null, new ObjectResult("Code is too large.") { StatusCode = 400 });
 
         string statement, language;
@@ -266,9 +275,29 @@ public class AiController : ApiControllerBase
             samples = p.TestCases.Where(t => t.IsSample).OrderBy(t => t.Position).ThenBy(t => t.Id)
                 .Select(t => (t.Stdin, t.ExpectedStdout)).ToList();
         }
+        else if (!string.IsNullOrWhiteSpace(dto.BoardSlug))
+        {
+            var boardId = await _boards.ResolveBoardIdAsync(dto.BoardSlug!);
+            if (boardId is null) return (null, new ObjectResult("Board not found.") { StatusCode = 404 });
+            if (await _boards.GetMembershipAsync(boardId.Value, UserId) is null)
+                return (null, new ObjectResult("Not a member of this board.") { StatusCode = 403 });
+            if (!await _db.Boards.Where(b => b.Id == boardId).Select(b => b.LecturingMode).FirstAsync())
+                return (null, new ObjectResult("No live-coding session is running.") { StatusCode = 409 });
+
+            var teacherCode = dto.TeacherCode is { Length: > 0 } tc ? (tc.Length > 60_000 ? tc[..60_000] : tc) : null;
+            var q = dto.Question;
+            if (string.IsNullOrWhiteSpace(q) && dto.Explain)
+                q = "Explain what the teacher's code does, step by step.";
+
+            var live = new AiHintContext(
+                "", string.IsNullOrWhiteSpace(dto.Language) ? "cpp" : dto.Language!,
+                dto.Code ?? "", dto.Stdin, dto.Verdict, dto.CompilerOutput, dto.Stderr, q,
+                Array.Empty<(string, string)>(), LiveMode: true, TeacherCode: teacherCode);
+            return (live, null);
+        }
         else
         {
-            return (null, new ObjectResult("problemId or bankProblemId is required.") { StatusCode = 400 });
+            return (null, new ObjectResult("problemId, bankProblemId or boardSlug is required.") { StatusCode = 400 });
         }
 
         var ctx = new AiHintContext(
