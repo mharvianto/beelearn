@@ -51,6 +51,16 @@ public class AiController : ApiControllerBase
     [HttpGet("usage")]
     public async Task<IActionResult> Usage() => Ok(await _usage.SummaryAsync(UserId));
 
+    /// <summary>Forget the progressive-hint level for one problem — the next hint starts gentle again.</summary>
+    [HttpPost("hint-progress/reset")]
+    public async Task<IActionResult> ResetHintProgress(AiHintDto dto)
+    {
+        var key = ProblemKey(dto);
+        if (key is null) return BadRequest("problemId or bankProblemId is required.");
+        await _prog.ResetAsync(UserId, key, HttpContext.RequestAborted);
+        return NoContent();
+    }
+
     private static string? ProblemKey(AiHintDto dto) =>
         dto.BankProblemId is int b ? $"bank:{b}" : dto.ProblemId is int p ? $"board:{p}" : null;
 
@@ -63,7 +73,7 @@ public class AiController : ApiControllerBase
         var (ctx, err) = await BuildContextAsync(dto);
         if (err is not null) return err;
 
-        var level = await _prog.BumpAsync(UserId, ProblemKey(dto)!, HttpContext.RequestAborted);
+        var level = await _prog.BumpAsync(UserId, ProblemKey(dto)!, AiHintProgressService.HashCode(dto.Code), HttpContext.RequestAborted);
         try
         {
             var r = await _ai.HintAsync(ctx!, dto.Lang, level, HttpContext.RequestAborted);
@@ -96,7 +106,7 @@ public class AiController : ApiControllerBase
         HttpContext.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
 
         var ct = HttpContext.RequestAborted;
-        var level = await _prog.BumpAsync(UserId, ProblemKey(dto)!, ct);
+        var level = await _prog.BumpAsync(UserId, ProblemKey(dto)!, AiHintProgressService.HashCode(dto.Code), ct);
         await WriteEventAsync(new { level }, ct);
 
         try

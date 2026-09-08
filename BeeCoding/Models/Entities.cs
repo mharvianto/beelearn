@@ -378,5 +378,11 @@ public class AiHintProgress
     public string ProblemKey { get; set; } = "";
 
     public int Count { get; set; }
+
+    /// <summary>Short hash of the code at the last hint — used to tell whether the student
+    /// tried something between asks (if so, the tutor doesn't escalate).</summary>
+    [MaxLength(32)]
+    public string? LastCodeHash { get; set; }
+
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

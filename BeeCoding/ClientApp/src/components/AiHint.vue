@@ -39,6 +39,17 @@ onMounted(async () => {
   } catch { enabled.value = false; }
 });
 
+const idPayload = () => ({
+  problemId: props.problemId ? Number(props.problemId) : null,
+  bankProblemId: props.bankProblemId ? Number(props.bankProblemId) : null,
+});
+
+async function startOver() {
+  try { await api.post('/api/ai/hint-progress/reset', idPayload()); } catch { /* ignore */ }
+  level.value = 0;
+  reply.value = '';
+}
+
 function payload() {
   return {
     problemId: props.problemId ? Number(props.problemId) : null,
@@ -139,6 +150,7 @@ async function ask() {
       </div>
       <p v-if="level >= 2 && !busy" class="text-[11px] text-slate-400 dark:text-slate-500">
         Ask again for a more detailed hint (the tutor still won't give the full solution).
+        <button @click="startOver" class="text-violet-500 dark:text-violet-400 hover:underline ml-1">Start over</button>
       </p>
     </div>
   </div>
