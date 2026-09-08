@@ -1,5 +1,5 @@
 <script setup>
-import { watch, computed } from 'vue';
+import { watch, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuth } from './stores/auth';
 import { useProgress } from './stores/progress';
@@ -24,6 +24,28 @@ async function logout() {
   progress.reset();
   router.push('/login');
 }
+
+// On mobile the soft keyboard overlays the page without shrinking the layout
+// viewport, so it hides the editor / toolbar. Track the *visual* viewport and
+// expose it as --app-h; the root uses it as its height (see style.css).
+function syncViewportHeight() {
+  const vv = window.visualViewport;
+  const h = vv ? vv.height : window.innerHeight;
+  document.documentElement.style.setProperty('--app-h', h + 'px');
+}
+onMounted(() => {
+  syncViewportHeight();
+  window.visualViewport?.addEventListener('resize', syncViewportHeight);
+  window.visualViewport?.addEventListener('scroll', syncViewportHeight);
+  window.addEventListener('resize', syncViewportHeight);
+  window.addEventListener('orientationchange', syncViewportHeight);
+});
+onBeforeUnmount(() => {
+  window.visualViewport?.removeEventListener('resize', syncViewportHeight);
+  window.visualViewport?.removeEventListener('scroll', syncViewportHeight);
+  window.removeEventListener('resize', syncViewportHeight);
+  window.removeEventListener('orientationchange', syncViewportHeight);
+});
 </script>
 
 <template>

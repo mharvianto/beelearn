@@ -134,7 +134,7 @@ onBeforeUnmount(async () => {
 
 <template>
   <div v-if="problem" class="h-full">
-   <SplitPane direction="horizontal" storage-key="beecoding.split.solve-main" :initial="42" :min="260">
+   <SplitPane direction="horizontal" storage-key="beecoding.split.solve-main" :initial="42" :initial-stacked="34" :min="260">
     <template #a>
     <div class="h-full overflow-y-auto p-5 border-r border-slate-200 dark:border-slate-800">
       <RouterLink to="/practice" class="text-sm text-slate-400 dark:text-slate-500">&larr; back to Practice</RouterLink>

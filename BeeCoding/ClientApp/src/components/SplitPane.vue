@@ -1,28 +1,39 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 
 const props = defineProps({
   direction: { type: String, default: 'horizontal' },  // 'horizontal' = side by side, 'vertical' = stacked
   initial: { type: Number, default: 50 },               // starting % for pane A
+  initialStacked: { type: Number, default: 0 },         // starting % for pane A when a horizontal split is stacked (0 = use `initial`)
   min: { type: Number, default: 120 },                  // px min for either pane
   storageKey: { type: String, default: '' },
-  collapseBelow: { type: Number, default: 1024 },       // horizontal splits stack (no drag) under this px
+  collapseBelow: { type: Number, default: 1024 },       // a horizontal split lays out stacked under this width (still draggable)
 });
-
-const isRow = computed(() => props.direction === 'horizontal');
-
-const pct = ref(props.initial);
-try {
-  if (props.storageKey) {
-    const v = parseFloat(localStorage.getItem(props.storageKey));
-    if (!Number.isNaN(v) && v > 4 && v < 96) pct.value = v;
-  }
-} catch { /* ignore */ }
 
 const el = ref(null);
 const wide = ref(typeof window === 'undefined' || window.innerWidth >= props.collapseBelow);
-const stacked = computed(() => isRow.value && !wide.value);
 function updateWide() { wide.value = window.innerWidth >= props.collapseBelow; }
+
+// side-by-side only for a wide horizontal split; otherwise a top/bottom split — still draggable.
+const isRow = computed(() => props.direction === 'horizontal' && wide.value);
+const effMin = computed(() => (wide.value ? props.min : Math.min(props.min, 104)));
+// a horizontal split stores width-% and, when stacked on a phone, height-% — keep those
+// under separate keys. A pure vertical split keeps its original key.
+const storeKey = computed(() =>
+  !props.storageKey ? ''
+  : (props.direction === 'horizontal' && !isRow.value) ? props.storageKey + ':v'
+  : props.storageKey);
+
+const pct = ref(props.initial);
+function loadPct() {
+  pct.value = (!isRow.value && props.initialStacked) ? props.initialStacked : props.initial;
+  try {
+    const v = parseFloat(localStorage.getItem(storeKey.value));
+    if (!Number.isNaN(v) && v > 4 && v < 96) pct.value = v;
+  } catch { /* ignore */ }
+}
+loadPct();
+watch(isRow, loadPct);
 
 let dragging = false;
 function onDown() {
@@ -36,7 +47,7 @@ function onMove(e) {
   const total = isRow.value ? r.width : r.height;
   if (total <= 0) return;
   const pos = isRow.value ? e.clientX - r.left : e.clientY - r.top;
-  const minPct = (props.min / total) * 100;
+  const minPct = (effMin.value / total) * 100;
   pct.value = Math.max(minPct, Math.min(100 - minPct, (pos / total) * 100));
 }
 function onUp() {
@@ -44,7 +55,7 @@ function onUp() {
   dragging = false;
   document.body.style.userSelect = '';
   document.body.style.cursor = '';
-  try { if (props.storageKey) localStorage.setItem(props.storageKey, String(Math.round(pct.value * 10) / 10)); } catch { /* ignore */ }
+  try { if (storeKey.value) localStorage.setItem(storeKey.value, String(Math.round(pct.value * 10) / 10)); } catch { /* ignore */ }
 }
 
 onMounted(() => {
@@ -63,18 +74,20 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="el" class="min-h-0 min-w-0 h-full w-full flex"
-       :class="stacked ? 'flex-col' : isRow ? 'flex-row' : 'flex-col'">
+  <div ref="el" class="min-h-0 min-w-0 h-full w-full flex" :class="isRow ? 'flex-row' : 'flex-col'">
     <div class="min-h-0 min-w-0 overflow-hidden"
-         :class="stacked ? 'flex-1' : ''"
-         :style="stacked ? null : isRow ? { width: pct + '%' } : { height: pct + '%' }">
+         :style="isRow ? { width: pct + '%' } : { height: pct + '%' }">
       <slot name="a" />
     </div>
 
-    <div v-if="!stacked" @pointerdown.prevent="onDown"
-         class="shrink-0 z-10 bg-slate-200 dark:bg-slate-800 hover:bg-amber-400 dark:hover:bg-amber-500 transition-colors touch-none"
-         :class="isRow ? 'w-1.5 cursor-col-resize' : 'h-1.5 cursor-row-resize'"
-         title="Drag to resize"></div>
+    <div @pointerdown.prevent="onDown"
+         class="group shrink-0 z-10 flex items-center justify-center touch-none select-none
+                bg-slate-200 dark:bg-slate-800 hover:bg-amber-400 dark:hover:bg-amber-500 active:bg-amber-400 transition-colors"
+         :class="isRow ? 'w-1.5 cursor-col-resize' : 'h-3 md:h-1.5 cursor-row-resize'"
+         title="Drag to resize">
+      <span class="rounded-full bg-slate-400/80 dark:bg-slate-500/80 group-hover:bg-white/90 group-active:bg-white/90"
+            :class="isRow ? 'w-0.5 h-8' : 'h-0.5 w-10'"></span>
+    </div>
 
     <div class="flex-1 min-h-0 min-w-0 overflow-hidden">
       <slot name="b" />
