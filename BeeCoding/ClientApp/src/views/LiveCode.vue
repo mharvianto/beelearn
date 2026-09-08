@@ -1,7 +1,8 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, computed, reactive, onMounted, onBeforeUnmount, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import { api } from '../lib/api';
+import { useAuth } from '../stores/auth';
 import { createBoardConnection } from '../lib/signalr';
 import MonacoEditor from '../components/MonacoEditor.vue';
 import SplitPane from '../components/SplitPane.vue';
@@ -9,10 +10,11 @@ import AiHint from '../components/AiHint.vue';
 import { CODE_TEMPLATES } from '../lib/templates';
 
 // A board-wide live-coding scratchpad — lecturing mode without a problem.
-// Streamed with problemId 0 so it never collides with a real problem's lecture buffer.
+// Streamed with problemId 0 so it never collides with a real problem's buffers.
 const SCRATCH = 0;
 
 const props = defineProps({ slug: { type: String, required: true } });
+const auth = useAuth();
 
 const board = ref(null);
 const error = ref('');
@@ -28,6 +30,16 @@ const liveLang = ref('cpp');
 const lecture = ref(null);
 const showTeacher = ref(true);
 
+// teacher view of students' buffers
+const studentDrafts = reactive({});   // userId -> { authorName, code, updatedAt }
+const selectedUid = ref(null);
+const studentList = computed(() =>
+  Object.entries(studentDrafts)
+    .map(([uid, d]) => ({ uid, ...d }))
+    .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '')));
+const selectedStudent = computed(() =>
+  studentList.value.find((s) => String(s.uid) === String(selectedUid.value)) || studentList.value[0] || null);
+
 // run panel
 const stdin = ref('');
 const running = ref(false);
@@ -38,13 +50,18 @@ let pushTimer = null;
 let saveTimer = null;
 
 function pushSoon() {
-  if (!conn || conn.state !== 'Connected' || !isStaff.value || !lecturingOn.value) return;
+  if (!conn || conn.state !== 'Connected') return;
   clearTimeout(pushTimer);
   pushTimer = setTimeout(pushNow, 600);
 }
 function pushNow() {
-  if (conn?.state === 'Connected' && isStaff.value && lecturingOn.value)
-    conn.invoke('PushLecture', board.value.id, SCRATCH, code.value, liveLang.value).catch(() => {});
+  if (!conn || conn.state !== 'Connected') return;
+  if (isStaff.value) {
+    if (lecturingOn.value)
+      conn.invoke('PushLecture', board.value.id, SCRATCH, code.value, liveLang.value).catch(() => {});
+  } else {
+    conn.invoke('PushDraft', board.value.id, SCRATCH, code.value).catch(() => {});
+  }
 }
 
 function setLang(l) {
@@ -87,6 +104,12 @@ watch(code, () => {
 watch(liveLang, pushSoon);
 watch(lecturingOn, (on) => { if (on) pushNow(); });
 
+function ingestDraft(d) {
+  if (!d || d.problemId !== SCRATCH || d.userId === auth.user?.id) return;
+  studentDrafts[d.userId] = { authorName: d.authorName, code: d.code, updatedAt: d.updatedAt };
+  if (selectedUid.value == null) selectedUid.value = d.userId;
+}
+
 onMounted(async () => {
   try { board.value = await api.get(`/api/boards/${props.slug}`); }
   catch (e) { error.value = e.message; return; }
@@ -103,14 +126,20 @@ onMounted(async () => {
   conn.on('lectureUpdated', (l) => {
     if (l.problemId === SCRATCH && !isStaff.value) lecture.value = l;
   });
+  conn.on('draftUpdated', (d) => { if (isStaff.value) ingestDraft(d); });
   try {
     await conn.start();
     await conn.invoke('JoinBoard', board.value.id);
     if (isStaff.value) {
       pushNow();
+      try {
+        const ds = await conn.invoke('GetDrafts', board.value.id);
+        (ds || []).forEach(ingestDraft);
+      } catch { /* ignore */ }
     } else {
       const l = await conn.invoke('GetLecture', board.value.id, SCRATCH);
       if (l) lecture.value = l;
+      pushNow();
     }
   } catch { /* ignore */ }
 });
@@ -152,47 +181,73 @@ onBeforeUnmount(async () => {
 
     <p v-if="error" class="text-sm text-red-600 dark:text-red-400 px-4 py-2">{{ error }}</p>
 
-    <!-- Teacher: editable pad + run console -->
+    <!-- Teacher: left = my code + stdin + AI tutor, right = a student's code -->
     <div v-if="isStaff" class="flex-1 min-h-0">
-      <SplitPane direction="vertical" storage-key="beecoding.split.livecode" :initial="70" :min="110">
+      <SplitPane direction="horizontal" storage-key="beecoding.split.livecode-main"
+                 :initial="55" :initial-stacked="50" :min="320">
         <template #a>
-          <MonacoEditor v-model="code" :language="liveLang" :lsp="liveLang" />
+          <SplitPane direction="vertical" storage-key="beecoding.split.livecode" :initial="60" :min="110">
+            <template #a>
+              <MonacoEditor v-model="code" :language="liveLang" :lsp="liveLang" />
+            </template>
+            <template #b>
+              <div class="h-full overflow-y-auto bg-white dark:bg-slate-900 p-3 space-y-2 border-r border-slate-200 dark:border-slate-800">
+                <div class="flex gap-2 items-center">
+                  <button @click="run" :disabled="running"
+                          class="bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
+                    {{ running ? 'Running…' : 'Run' }}
+                  </button>
+                  <span class="text-xs text-slate-400 dark:text-slate-500">Run only — nothing is graded.</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="text-xs text-slate-400 dark:text-slate-500">stdin</label>
+                    <textarea v-model="stdin"
+                              class="w-full h-20 resize-y border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1 font-mono text-xs"></textarea>
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-400 dark:text-slate-500">output</label>
+                    <pre class="w-full h-20 bg-slate-900 text-slate-100 dark:bg-black dark:border dark:border-slate-800 rounded-lg px-2 py-1 font-mono text-xs overflow-auto whitespace-pre-wrap">{{
+                      runOut
+                        ? (runOut.compileOk
+                            ? (runOut.stdout || '') + (runOut.stderr ? '\n[stderr] ' + runOut.stderr : '') +
+                              `\n— ${runOut.runtimeMs}ms, ${runOut.memoryKb}KB${runOut.timedOut ? ', TIMED OUT' : ''}`
+                            : '[compile error]\n' + runOut.compilerOutput)
+                        : ''
+                    }}</pre>
+                  </div>
+                </div>
+                <AiHint :board-slug="props.slug" :language="liveLang" :code="code" :stdin="stdin"
+                        :compiler-output="compilerOutput" :stderr="runOut?.stderr || ''" />
+              </div>
+            </template>
+          </SplitPane>
         </template>
+
         <template #b>
-          <div class="h-full overflow-y-auto bg-white dark:bg-slate-900 p-3 space-y-2">
-            <div class="flex gap-2 items-center">
-              <button @click="run" :disabled="running"
-                      class="bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
-                {{ running ? 'Running…' : 'Run' }}
-              </button>
-              <span class="text-xs text-slate-400 dark:text-slate-500">No problem attached — Run only, nothing is graded.</span>
+          <div class="h-full flex flex-col bg-white dark:bg-slate-900">
+            <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-800 text-sm">
+              <span class="font-semibold">👀 Student code</span>
+              <span class="text-[11px] text-slate-400 dark:text-slate-500">{{ studentList.length }} live</span>
+              <select v-if="studentList.length" v-model="selectedUid"
+                      class="ml-auto text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1 max-w-[55%]">
+                <option v-for="s in studentList" :key="s.uid" :value="s.uid">
+                  {{ s.authorName }} · {{ ago(s.updatedAt) }} ago
+                </option>
+              </select>
             </div>
-            <div class="grid grid-cols-2 gap-2">
-              <div>
-                <label class="text-xs text-slate-400 dark:text-slate-500">stdin</label>
-                <textarea v-model="stdin"
-                          class="w-full h-20 resize-y border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1 font-mono text-xs"></textarea>
-              </div>
-              <div>
-                <label class="text-xs text-slate-400 dark:text-slate-500">output</label>
-                <pre class="w-full h-20 bg-slate-900 text-slate-100 dark:bg-black dark:border dark:border-slate-800 rounded-lg px-2 py-1 font-mono text-xs overflow-auto whitespace-pre-wrap">{{
-                  runOut
-                    ? (runOut.compileOk
-                        ? (runOut.stdout || '') + (runOut.stderr ? '\n[stderr] ' + runOut.stderr : '') +
-                          `\n— ${runOut.runtimeMs}ms, ${runOut.memoryKb}KB${runOut.timedOut ? ', TIMED OUT' : ''}`
-                        : '[compile error]\n' + runOut.compilerOutput)
-                    : ''
-                }}</pre>
-              </div>
+            <MonacoEditor v-if="selectedStudent" :model-value="selectedStudent.code"
+                          :language="liveLang" :read-only="true" class="flex-1 min-h-0" />
+            <div v-else class="flex-1 grid place-items-center text-sm text-slate-400 dark:text-slate-500 p-6 text-center">
+              No student is typing yet.
             </div>
           </div>
         </template>
       </SplitPane>
     </div>
 
-    <!-- Student: follow along in their own editor -->
+    <!-- Student: follow along in their own editor + AI tutor -->
     <div v-else class="flex-1 min-h-0 flex flex-col">
-      <!-- teacher's live code (peek) -->
       <div class="border-b border-slate-200 dark:border-slate-800">
         <div class="flex items-center gap-2 px-4 py-1.5 text-xs"
              :class="lecturingOn && lecture
@@ -211,7 +266,6 @@ onBeforeUnmount(async () => {
              class="bg-slate-900 text-slate-100 dark:bg-black px-4 py-2 font-mono text-xs overflow-auto max-h-56 whitespace-pre">{{ lecture.code || '(empty)' }}</pre>
       </div>
 
-      <!-- student's own editor + console + AI tutor -->
       <div class="flex-1 min-h-0">
         <SplitPane direction="vertical" storage-key="beecoding.split.livecode-student" :initial="58" :min="110">
           <template #a>
@@ -224,7 +278,7 @@ onBeforeUnmount(async () => {
                         class="bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
                   {{ running ? 'Running…' : 'Run' }}
                 </button>
-                <span class="text-xs text-slate-400 dark:text-slate-500">Your own scratch editor — nothing is graded or shared.</span>
+                <span class="text-xs text-slate-400 dark:text-slate-500">Your own scratch editor — nothing is graded.</span>
               </div>
               <div class="grid grid-cols-2 gap-2">
                 <div>
