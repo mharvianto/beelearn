@@ -23,6 +23,7 @@ const lecturingOn = computed(() => !!board.value?.lecturingMode);
 
 const storeKey = computed(() =>
   !board.value ? '' : `beecoding.livecode.${isStaff.value ? '' : 'student.'}${board.value.id}`);
+const stdinKey = computed(() => (storeKey.value ? storeKey.value + '.stdin' : ''));
 const code = ref(CODE_TEMPLATES.cpp);
 const liveLang = ref('cpp');
 
@@ -114,7 +115,10 @@ watch(code, () => {
   }, 400);
 });
 watch(liveLang, pushSoon);
-watch(stdin, () => { if (isStaff.value) pushSoon(); });
+watch(stdin, () => {
+  if (isStaff.value) pushSoon();
+  try { if (stdinKey.value) localStorage.setItem(stdinKey.value, stdin.value); } catch { /* ignore */ }
+});
 watch(lecturingOn, (on) => { if (on) pushNow(); });
 
 function ingestDraft(d) {
@@ -130,6 +134,10 @@ onMounted(async () => {
   try {
     const saved = localStorage.getItem(storeKey.value);
     if (saved && saved.trim()) code.value = saved;
+  } catch { /* ignore */ }
+  try {
+    const s = localStorage.getItem(stdinKey.value);
+    if (s != null) stdin.value = s;
   } catch { /* ignore */ }
   try { showStudents.value = localStorage.getItem(stKey.value) !== '0'; } catch { /* ignore */ }
 

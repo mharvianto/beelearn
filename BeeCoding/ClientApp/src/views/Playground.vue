@@ -8,6 +8,7 @@ import { CODE_TEMPLATES } from '../lib/templates';
 // A no-strings scratch editor: anyone can try C / C++, Run it, see output.
 // Nothing is submitted, graded, saved to the server, or shared.
 const LANG_KEY = 'beecoding.playground.lang';
+const STDIN_KEY = 'beecoding.playground.stdin';
 const codeKey = (l) => `beecoding.playground.code.${l}`;
 
 const lang = ref('cpp');
@@ -48,11 +49,18 @@ watch(code, () => {
     try { localStorage.setItem(codeKey(lang.value), code.value); } catch { /* ignore */ }
   }, 400);
 });
+watch(stdin, () => {
+  try { localStorage.setItem(STDIN_KEY, stdin.value); } catch { /* ignore */ }
+});
 
 onMounted(() => {
   try {
     const l = localStorage.getItem(LANG_KEY);
     if (l === 'c' || l === 'cpp') lang.value = l;
+  } catch { /* ignore */ }
+  try {
+    const s = localStorage.getItem(STDIN_KEY);
+    if (s != null) stdin.value = s;
   } catch { /* ignore */ }
   loadCode(lang.value);
 });
