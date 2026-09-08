@@ -13,6 +13,32 @@ const error = ref('');
 const editError = ref('');
 const busy = ref(false);
 
+// AI problem generator
+const aiEnabled = ref(false);
+const genOpen = ref(false);
+const genBusy = ref(false);
+const genError = ref('');
+const gen = ref({ idea: '', level: 'Medium', language: 'cpp', count: 10, lang: 'id' });
+
+async function generate() {
+  genError.value = ''; genBusy.value = true;
+  try {
+    const p = await api.post('/api/ai/generate-problem', {
+      idea: gen.value.idea.trim(),
+      level: gen.value.level,
+      language: gen.value.language,
+      count: Number(gen.value.count),
+      lang: gen.value.lang,
+    });
+    genOpen.value = false;
+    gen.value.idea = '';
+    await load();
+    editing.value = p;   // open it for review / tweak / publish
+  } catch (e) {
+    genError.value = e.message + (e.compilerOutput ? '\n\n' + e.compilerOutput : '') + (e.stderr ? '\n\n' + e.stderr : '');
+  } finally { genBusy.value = false; }
+}
+
 async function load() {
   error.value = '';
   try {
@@ -22,7 +48,10 @@ async function load() {
     items.value = await api.get(`/api/bank?${p}`);
   } catch (e) { error.value = e.message; }
 }
-onMounted(load);
+onMounted(async () => {
+  load();
+  try { aiEnabled.value = (await api.get('/api/ai/enabled'))?.enabled === true; } catch { /* ignore */ }
+});
 
 async function openEdit(item) {
   editError.value = '';
@@ -54,11 +83,52 @@ async function remove() {
 
 <template>
   <div class="max-w-5xl mx-auto px-4 py-8">
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center justify-between mb-4 gap-2 flex-wrap">
       <h1 class="text-xl font-bold">Problem bank</h1>
-      <button @click="editing = {}" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500 text-white">
-        + New problem
-      </button>
+      <div class="flex items-center gap-2">
+        <button v-if="aiEnabled" @click="genOpen = !genOpen"
+                class="px-3 py-1.5 rounded-lg text-sm font-medium border border-violet-300 dark:border-violet-500/40 text-violet-700 dark:text-violet-300">
+          ✨ Generate with AI
+        </button>
+        <button @click="editing = {}" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500 text-white">
+          + New problem
+        </button>
+      </div>
+    </div>
+
+    <div v-if="genOpen" class="mb-4 border border-violet-200 dark:border-violet-500/30 rounded-xl p-4 space-y-3 bg-violet-50/40 dark:bg-violet-500/5">
+      <p class="text-sm font-semibold text-violet-700 dark:text-violet-300">✨ Generate a problem from an idea</p>
+      <textarea v-model="gen.idea" rows="3"
+                placeholder="e.g. 'jumlah elemen array yang habis dibagi k', 'cek graf bipartit', 'prefix sum kueri rentang'"
+                class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-2 text-sm"></textarea>
+      <div class="flex flex-wrap gap-2 text-sm">
+        <select v-model="gen.level" class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1">
+          <option>Easy</option><option>Medium</option><option>Hard</option>
+        </select>
+        <select v-model="gen.language" class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1">
+          <option value="cpp">C++</option><option value="c">C</option>
+        </select>
+        <label class="flex items-center gap-1">tests
+          <input v-model.number="gen.count" type="number" min="3" max="15"
+                 class="w-14 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1" />
+        </label>
+        <select v-model="gen.lang" class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1">
+          <option value="id">Statement: Indonesia</option><option value="en">Statement: English</option>
+        </select>
+      </div>
+      <p class="text-[11px] text-slate-400 dark:text-slate-500">
+        The AI writes the statement + a reference solution; the judge runs that solution against the
+        inputs, so the stored expected outputs are the real program output. Saved to your bank as a
+        private draft — review and publish it yourself.
+      </p>
+      <pre v-if="genError" class="text-xs text-red-600 dark:text-red-400 whitespace-pre-wrap max-h-40 overflow-auto">{{ genError }}</pre>
+      <div class="flex gap-2">
+        <button @click="generate" :disabled="genBusy || !gen.idea.trim()"
+                class="bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
+          {{ genBusy ? 'Writing & checking…' : 'Generate' }}
+        </button>
+        <button @click="genOpen = false" class="text-slate-500 dark:text-slate-400 text-sm px-3">Cancel</button>
+      </div>
     </div>
 
     <div class="flex gap-2 mb-4">

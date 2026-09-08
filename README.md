@@ -66,6 +66,11 @@ All five visibility rules live in one place: `Services/VisibilityService.cs`.
    (`GET/POST/DELETE /api/admin/bank-problems`, header `X-Admin-Token`): batch-upsert public
    bank problems by `(owner, title)`. Disabled (404) unless `Admin:Token` is configured.
    See INSTALL.md §5.
+   With AI enabled, a teacher can also **generate a problem from an idea**
+   (`POST /api/ai/generate-problem`): the model drafts the statement + a reference solution,
+   the judge compiles and runs that solution against the model's inputs, and the *actual*
+   program output is stored as each test's expected output (so the test data is verified,
+   not the model's word). Saved to the teacher's bank as a private draft to review/publish.
 
 7. **Free practice + XP / levels** (`/practice`, `/leaderboard`) — any signed-in user can
    browse and solve **every public bank problem** independent of a board

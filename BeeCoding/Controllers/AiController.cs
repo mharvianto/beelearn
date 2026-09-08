@@ -5,6 +5,7 @@ using BeeCoding.Data;
 using BeeCoding.Models;
 using BeeCoding.Services;
 using BeeCoding.Services.Ai;
+using BeeCoding.Services.Judge;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
@@ -19,6 +20,8 @@ public record AiHintDto(
     string? Stdin, string? Verdict, string? CompilerOutput, string? Stderr,
     string? Question, string? Lang);   // Lang: "id" | "en" (reply language)
 
+public record AiGenerateDto(string? Idea, string? Level, string? Language, int? Count, string? Lang);
+
 [ApiController]
 [Authorize]
 [Route("api/ai")]
@@ -29,18 +32,20 @@ public class AiController : ApiControllerBase
     private readonly AiTutorService _ai;
     private readonly AiUsageService _usage;
     private readonly AiHintProgressService _prog;
+    private readonly JudgeQueue _queue;
     private readonly AiOptions _opt;
 
     private static readonly ConcurrentDictionary<int, long> _last = new();
 
     public AiController(AppDbContext db, BoardService boards, AiTutorService ai,
-        AiUsageService usage, AiHintProgressService prog, IOptions<AiOptions> opt)
+        AiUsageService usage, AiHintProgressService prog, JudgeQueue queue, IOptions<AiOptions> opt)
     {
         _db = db;
         _boards = boards;
         _ai = ai;
         _usage = usage;
         _prog = prog;
+        _queue = queue;
         _opt = opt.Value;
     }
 
@@ -50,6 +55,87 @@ public class AiController : ApiControllerBase
 
     [HttpGet("usage")]
     public async Task<IActionResult> Usage() => Ok(await _usage.SummaryAsync(UserId));
+
+    /// <summary>
+    /// Teacher-only. Ask the AI to draft a full bank problem from an idea, then compile and
+    /// run its reference solution against the AI's inputs so the stored expected outputs are
+    /// the program's ACTUAL output (not the model's claim). Saved to the caller's bank as
+    /// private, returned for review/editing.
+    /// </summary>
+    [HttpPost("generate-problem")]
+    public async Task<IActionResult> GenerateProblem(AiGenerateDto dto)
+    {
+        if (!_ai.Available) return NotFound();
+        if (CurrentRole != "Teacher") return StatusCode(StatusCodes.Status403Forbidden, "Teachers only.");
+        if (string.IsNullOrWhiteSpace(dto.Idea)) return BadRequest("Describe the idea or topic.");
+        if (RateLimited()) return StatusCode(StatusCodes.Status429TooManyRequests, "Give the AI a few seconds.");
+
+        var wantLang = dto.Language is "c" ? "c" : "cpp";
+        var level = dto.Level is "Easy" or "Medium" or "Hard" ? dto.Level! : "Medium";
+        var count = dto.Count is >= 3 and <= 15 ? dto.Count!.Value : 10;
+
+        AiTutorService.AiGenResult gen;
+        try
+        {
+            gen = await _ai.GenerateProblemAsync(dto.Idea!, level, wantLang, count,
+                string.IsNullOrWhiteSpace(dto.Lang) ? _ai.DefaultReplyLanguage : dto.Lang!, HttpContext.RequestAborted);
+        }
+        catch (AiUnavailableException ex) { return StatusCode(StatusCodes.Status502BadGateway, ex.Message); }
+        await _usage.RecordAsync(UserId, gen.PromptTokens, gen.CompletionTokens);
+
+        var gp = gen.Problem;
+        var refLang = gp.Language is "c" ? "c" : "cpp";
+        var built = new List<(string Stdin, string Expected, bool IsSample)>();
+
+        int i = 0;
+        foreach (var t in gp.Tests.Take(15))
+        {
+            var job = new RunJob(refLang, gp.ReferenceSolution, t.Stdin ?? "", gp.TimeLimitMs, gp.MemoryLimitKb,
+                new TaskCompletionSource<RunResultDto>(TaskCreationOptions.RunContinuationsAsynchronously));
+            RunResultDto res;
+            try { res = await _queue.EnqueueRunAsync(job, HttpContext.RequestAborted); }
+            catch { return StatusCode(StatusCodes.Status504GatewayTimeout, "Timed out validating the generated problem."); }
+
+            if (!res.CompileOk)
+                return UnprocessableEntity(new { message = "The AI's reference solution didn't compile — try again or rephrase the idea.", compilerOutput = res.CompilerOutput });
+            if (res.TimedOut || res.Signal != 0 || res.ExitCode != 0)
+                return UnprocessableEntity(new { message = $"The AI's reference solution failed on test #{i + 1} (signal {res.Signal}, exit {res.ExitCode}) — try again or rephrase.", stderr = res.Stderr });
+
+            built.Add((t.Stdin ?? "", res.Stdout ?? "", t.IsSample));
+            i++;
+        }
+        if (built.Count < 2)
+            return UnprocessableEntity(new { message = "The AI didn't produce enough usable tests — try again." });
+
+        if (!built.Any(x => x.IsSample)) built[0] = (built[0].Stdin, built[0].Expected, true);
+        if (built.All(x => x.IsSample)) built[^1] = (built[^1].Stdin, built[^1].Expected, false);
+
+        var problem = new BankProblem
+        {
+            OwnerId = UserId,
+            Title = gp.Title.Trim(),
+            StatementMarkdown = gp.StatementMarkdown ?? "",
+            Language = refLang,
+            StarterCode = gp.StarterCode ?? "",
+            Level = Mapping.ParseLevel(gp.Level),
+            Tags = Mapping.NormalizeTags(gp.Tags),
+            TimeLimitMs = gp.TimeLimitMs,
+            MemoryLimitKb = gp.MemoryLimitKb,
+            IsPublic = false,
+        };
+        int pos = 0;
+        foreach (var (stdin, expected, isSample) in built)
+            problem.TestCases.Add(new BankTestCase
+            {
+                Stdin = stdin, ExpectedStdout = expected, IsSample = isSample,
+                Points = isSample ? 0 : 1, Position = pos++,
+            });
+
+        _db.BankProblems.Add(problem);
+        await _db.SaveChangesAsync();
+        await _db.Entry(problem).Reference(x => x.Owner).LoadAsync();
+        return Ok(Mapping.ToDto(problem, UserId));
+    }
 
     /// <summary>Forget the progressive-hint level for one problem — the next hint starts gentle again.</summary>
     [HttpPost("hint-progress/reset")]

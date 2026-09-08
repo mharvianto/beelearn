@@ -278,6 +278,101 @@ Reply with ONLY compact JSON and nothing else:
         return new AiPickResult(picks, promptTok, completionTok);
     }
 
+    // ---- problem generator --------------------------------------------------
+    public sealed record GenTest(string Stdin, bool IsSample);
+    public sealed record AiGeneratedProblem(
+        string Title, string StatementMarkdown, string Tags, string Level, string Language,
+        string StarterCode, string ReferenceSolution, int TimeLimitMs, int MemoryLimitKb,
+        List<GenTest> Tests);
+    public sealed record AiGenResult(AiGeneratedProblem Problem, int PromptTokens, int CompletionTokens);
+
+    public async Task<AiGenResult> GenerateProblemAsync(
+        string idea, string level, string language, int count, string lang, CancellationToken ct)
+    {
+        count = Math.Clamp(count, 3, 15);
+        var sys = $$"""
+You are a problem setter for a C/C++ online judge. From the teacher's idea, produce ONE
+complete, self-contained problem.
+
+Rules:
+- The problem must be solvable in {{language}} and read a clearly specified stdin format.
+- Provide a CORRECT reference solution in {{language}} that reads exactly that format and
+  prints exactly the required output. It must run in well under 1 second on every test.
+- Provide EXACTLY {{count}} tests. Mark the first 1–2 as isSample:true (small, will be shown
+  to students); the rest hidden, deliberately covering edge cases (minimum / empty, maximum
+  bounds within the stated constraints, negatives, zeros, ties, all-same, ...).
+- Do NOT include expected outputs — the judge computes them by running your reference
+  solution, so the reference MUST be right.
+- Statement in {{(lang == "en" ? "English" : "Bahasa Indonesia")}}, with clear "Input",
+  "Output" and "Contoh"/"Example" sections and stated constraints.
+- Difficulty: {{level}}. starterCode = a minimal skeleton (includes + empty main), NOT the solution.
+- tags = 1–3 lowercase comma-separated topic tags.
+
+Reply with ONLY compact JSON, no prose, no code fences:
+{"title":"...","statementMarkdown":"...","tags":"...","level":"Easy|Medium|Hard",
+ "language":"{{language}}","starterCode":"...","referenceSolution":"...",
+ "timeLimitMs":1000,"memoryLimitKb":65536,
+ "tests":[{"stdin":"...","isSample":true},{"stdin":"...","isSample":false}]}
+""";
+        using var req = NewRequest(BuildPayload(sys, $"Idea / topic:\n{Trunc(idea, 4000)}", stream: false));
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(20, _opt.TimeoutSeconds)));
+
+        HttpResponseMessage resp;
+        try { resp = await _http.SendAsync(req, HttpCompletionOption.ResponseContentRead, timeout.Token); }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        { throw new AiUnavailableException("The AI took too long to write the problem."); }
+        catch (HttpRequestException ex)
+        { _log.LogWarning(ex, "AI generate request failed"); throw new AiUnavailableException("Couldn't reach the AI."); }
+
+        var body = await resp.Content.ReadAsStringAsync(ct);
+        if (!resp.IsSuccessStatusCode)
+        { _log.LogWarning("AI generate {Status}: {Body}", (int)resp.StatusCode, Trunc(body, 400)); throw new AiUnavailableException($"AI error ({(int)resp.StatusCode})."); }
+
+        string content;
+        int promptTok, completionTok;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            content = root.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
+            (promptTok, completionTok) = UsageFrom(root, sys + idea, content);
+        }
+        catch (Exception ex) { _log.LogWarning(ex, "AI generate parse failed: {Body}", Trunc(body, 400)); throw new AiUnavailableException("Unexpected AI response."); }
+
+        int a = content.IndexOf('{'), b = content.LastIndexOf('}');
+        if (a < 0 || b <= a) throw new AiUnavailableException("AI did not return JSON.");
+
+        AiGeneratedProblem gp;
+        try
+        {
+            using var doc = JsonDocument.Parse(content[a..(b + 1)]);
+            var r = doc.RootElement;
+            string S(string k) => r.TryGetProperty(k, out var e) && e.ValueKind == JsonValueKind.String ? e.GetString()! : "";
+            int I(string k, int d) => r.TryGetProperty(k, out var e) && e.TryGetInt32(out var v) ? v : d;
+            var tests = new List<GenTest>();
+            if (r.TryGetProperty("tests", out var te) && te.ValueKind == JsonValueKind.Array)
+                foreach (var t in te.EnumerateArray())
+                    tests.Add(new GenTest(
+                        t.TryGetProperty("stdin", out var se) ? (se.GetString() ?? "") : "",
+                        t.TryGetProperty("isSample", out var ie) && ie.ValueKind == JsonValueKind.True));
+
+            gp = new AiGeneratedProblem(
+                S("title"), S("statementMarkdown"), S("tags"), S("level"),
+                S("language"), S("starterCode"), S("referenceSolution"),
+                Math.Clamp(I("timeLimitMs", 1000), 100, 10_000),
+                Math.Clamp(I("memoryLimitKb", 65_536), 4_096, 512_000),
+                tests);
+        }
+        catch (Exception ex) { _log.LogWarning(ex, "AI generate JSON invalid"); throw new AiUnavailableException("AI returned malformed JSON."); }
+
+        if (string.IsNullOrWhiteSpace(gp.Title) || string.IsNullOrWhiteSpace(gp.ReferenceSolution) || gp.Tests.Count < 2)
+            throw new AiUnavailableException("The AI's problem was incomplete — try again or rephrase the idea.");
+
+        return new AiGenResult(gp, promptTok, completionTok);
+    }
+
     // ---- streaming (SSE) ------------------------------------------------------
     /// <summary>
     /// Yields content deltas as they arrive. The final element is always a sentinel
