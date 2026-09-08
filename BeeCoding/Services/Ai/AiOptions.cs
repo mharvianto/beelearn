@@ -20,9 +20,14 @@ public class AiOptions
     public int MaxTokens { get; set; } = 700;
     public int TimeoutSeconds { get; set; } = 60;
 
-    /// <summary>Ceiling for <c>POST /api/ai/generate-problem</c> — writing a whole problem
-    /// (statement + reference solution + N inputs) takes far longer than a hint.</summary>
-    public int GenerateTimeoutSeconds { get; set; } = 180;
+    /// <summary>Hard ceiling for <c>POST /api/ai/generate-problem</c>. The call streams, so
+    /// as long as tokens keep arriving (see <see cref="GenerateIdleTimeoutSeconds"/>) it will
+    /// run up to this long before giving up.</summary>
+    public int GenerateTimeoutSeconds { get; set; } = 300;
+
+    /// <summary>Abort generation if the model sends nothing for this many seconds. A slow but
+    /// steady model finishes; a stalled one fails fast.</summary>
+    public int GenerateIdleTimeoutSeconds { get; set; } = 45;
 
     /// <summary>Pass <c>chat_template_kwargs.thinking</c> to the model (slower, more thorough).</summary>
     public bool Thinking { get; set; }

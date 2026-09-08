@@ -377,34 +377,13 @@ Reply with ONLY compact JSON, no prose, no code fences:
 """;
         // a full problem (statement + reference solution + N inputs) needs real room; the
         // hint-sized default (_opt.MaxTokens) truncates it. thinking off -> spend budget on JSON.
-        using var req = NewRequest(BuildPayload(sys, $"Idea / topic:\n{Trunc(idea, 4000)}", stream: false,
+        // Stream it: a slow endpoint that keeps emitting tokens still succeeds; only a true
+        // stall (no bytes for GenerateIdleTimeoutSeconds) or the hard cap aborts.
+        using var req = NewRequest(BuildPayload(sys, $"Idea / topic:\n{Trunc(idea, 4000)}", stream: true,
             maxTokens: Math.Max(4000, _opt.MaxTokens), thinking: false, model: GenModel));
 
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(60, _opt.GenerateTimeoutSeconds)));
-
-        HttpResponseMessage resp;
-        try { resp = await _http.SendAsync(req, HttpCompletionOption.ResponseContentRead, timeout.Token); }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        { throw new AiUnavailableException("The AI took too long to write the problem."); }
-        catch (HttpRequestException ex)
-        { _log.LogWarning(ex, "AI generate request failed"); throw new AiUnavailableException("Couldn't reach the AI."); }
-
-        var body = await resp.Content.ReadAsStringAsync(ct);
-        if (!resp.IsSuccessStatusCode)
-        { _log.LogWarning("AI generate {Status}: {Body}", (int)resp.StatusCode, Trunc(body, 400)); throw new AiUnavailableException($"AI error ({(int)resp.StatusCode})."); }
-
-        string content;
-        int promptTok, completionTok;
-        try
-        {
-            using var doc = JsonDocument.Parse(body);
-            var root = doc.RootElement;
-            content = MessageText(root);
-            (promptTok, completionTok) = UsageFrom(root, sys + idea, content);
-        }
-        catch (AiUnavailableException) { throw; }
-        catch (Exception ex) { _log.LogWarning(ex, "AI generate parse failed: {Body}", Trunc(body, 400)); throw new AiUnavailableException("Unexpected AI response."); }
+        var (content, promptTok, completionTok) = await CollectStreamAsync(
+            req, sys + idea, _opt.GenerateIdleTimeoutSeconds, _opt.GenerateTimeoutSeconds, ct);
 
         var json = ExtractJson(content);
 
@@ -534,6 +513,87 @@ Reply with ONLY compact JSON, no prose, no code fences:
 
     public const string FinalSentinel = " FINAL ";
     public const string UsageSentinel = " USAGE ";
+
+    /// <summary>
+    /// POST a streaming chat-completions request and concatenate the whole reply. Uses an
+    /// idle watchdog (reset on every line) plus a hard cap, so a slow-but-steady model
+    /// finishes while a stalled one fails fast. Reads reasoning_content as a fallback.
+    /// </summary>
+    private async Task<(string Text, int Prompt, int Completion)> CollectStreamAsync(
+        HttpRequestMessage req, string estPromptText, int idleSeconds, int hardSeconds, CancellationToken ct)
+    {
+        idleSeconds = Math.Max(10, idleSeconds);
+        using var hard = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        hard.CancelAfter(TimeSpan.FromSeconds(Math.Max(30, hardSeconds)));
+        using var idle = CancellationTokenSource.CreateLinkedTokenSource(hard.Token);
+        idle.CancelAfter(TimeSpan.FromSeconds(idleSeconds));
+
+        HttpResponseMessage resp;
+        try { resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, idle.Token); }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        { throw new AiUnavailableException("The AI took too long to start writing the problem."); }
+        catch (HttpRequestException ex)
+        { _log.LogWarning(ex, "AI generate stream request failed"); throw new AiUnavailableException("Couldn't reach the AI."); }
+
+        using (resp)
+        {
+            if (!resp.IsSuccessStatusCode)
+            {
+                var err = await SafeReadAsync(resp, ct);
+                _log.LogWarning("AI generate {Status}: {Body}", (int)resp.StatusCode, Trunc(err, 400));
+                throw new AiUnavailableException($"AI error ({(int)resp.StatusCode}).");
+            }
+
+            var full = new StringBuilder();
+            var reasoning = new StringBuilder();
+            int promptTok = 0, completionTok = 0;
+            await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+
+            while (true)
+            {
+                string? line;
+                try { line = await reader.ReadLineAsync(idle.Token); }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                { throw new AiUnavailableException("The AI stalled while writing the problem."); }
+                if (line is null) break;
+
+                idle.CancelAfter(TimeSpan.FromSeconds(idleSeconds));   // got bytes -> reset the idle window
+
+                if (line.Length == 0 || !line.StartsWith("data:", StringComparison.Ordinal)) continue;
+                var data = line["data:".Length..].Trim();
+                if (data == "[DONE]") break;
+
+                try
+                {
+                    using var doc = JsonDocument.Parse(data);
+                    var root = doc.RootElement;
+                    if (root.TryGetProperty("usage", out var u) && u.ValueKind == JsonValueKind.Object)
+                    {
+                        if (u.TryGetProperty("prompt_tokens", out var pp) && pp.TryGetInt32(out var pv)) promptTok = pv;
+                        if (u.TryGetProperty("completion_tokens", out var cc) && cc.TryGetInt32(out var cv)) completionTok = cv;
+                    }
+                    if (root.TryGetProperty("choices", out var chs) && chs.ValueKind == JsonValueKind.Array
+                        && chs.GetArrayLength() > 0 && chs[0].TryGetProperty("delta", out var d))
+                    {
+                        if (d.TryGetProperty("content", out var cEl) && cEl.ValueKind == JsonValueKind.String)
+                            full.Append(cEl.GetString());
+                        else if (d.TryGetProperty("reasoning_content", out var rEl) && rEl.ValueKind == JsonValueKind.String)
+                            reasoning.Append(rEl.GetString());
+                    }
+                }
+                catch { /* keep-alive / partial line */ }
+            }
+
+            var text = full.Length > 0 ? full.ToString() : reasoning.ToString();
+            if (promptTok == 0 && completionTok == 0)
+            {
+                promptTok = EstTokens(estPromptText);
+                completionTok = EstTokens(text);
+            }
+            return (text, promptTok, completionTok);
+        }
+    }
 
     private static async Task<string> SafeReadAsync(HttpResponseMessage r, CancellationToken ct)
     {
