@@ -1,6 +1,7 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { api } from '../lib/api';
+import { useAuth } from '../stores/auth';
 import { useProgress } from '../stores/progress';
 import { createBoardConnection } from '../lib/signalr';
 import MonacoEditor from '../components/MonacoEditor.vue';
@@ -11,8 +12,10 @@ import StatementImage from '../components/StatementImage.vue';
 import AiHint from '../components/AiHint.vue';
 import SplitPane from '../components/SplitPane.vue';
 import { CODE_TEMPLATES, isPristine } from '../lib/templates';
+import { loadDraft, saveDraft, clearDraft } from '../lib/draft';
 
 const props = defineProps({ id: { type: [String, Number], required: true } });
+const auth = useAuth();
 const progress = useProgress();
 
 const problem = ref(null);
@@ -30,6 +33,20 @@ function setLang(l) {
   if (isPristine(code.value, problem.value?.starterCode)) code.value = templateFor(l);
   try { localStorage.setItem('beecoding.lang', l); } catch { /* ignore */ }
 }
+
+// local autosave so an accidental refresh doesn't wipe the editor
+const draftScope = computed(() => `bank:${props.id}`);
+const restored = ref(false);
+const restoredAt = ref('');
+let saveTimer = null;
+function saveDraftNow() {
+  if (problem.value) saveDraft(auth.user?.id, draftScope.value, code.value, solveLang.value);
+}
+function useTemplate() {
+  code.value = templateFor(solveLang.value);
+  clearDraft(auth.user?.id, draftScope.value);
+  restored.value = false;
+}
 const runOut = ref(null);
 const running = ref(false);
 const submitting = ref(false);
@@ -44,6 +61,15 @@ async function load() {
   try { pref = localStorage.getItem('beecoding.lang'); } catch { /* ignore */ }
   solveLang.value = pref === 'c' || pref === 'cpp' ? pref : (problem.value.language === 'c' ? 'c' : 'cpp');
   code.value = templateFor(solveLang.value) || '';
+
+  const d = loadDraft(auth.user?.id, draftScope.value);
+  if (d && d.code.trim() && !isPristine(d.code, problem.value.starterCode)) {
+    code.value = d.code;
+    if (d.lang === 'c' || d.lang === 'cpp') solveLang.value = d.lang;
+    restored.value = true;
+    restoredAt.value = new Date(d.ts).toLocaleString();
+  }
+
   if (problem.value.sampleTests?.[0]) stdin.value = problem.value.sampleTests[0].stdin;
   await loadSubs();
 }
@@ -77,8 +103,15 @@ async function submit() {
   finally { submitting.value = false; }
 }
 
+watch(code, () => {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveDraftNow, 500);
+});
+watch(solveLang, saveDraftNow);
+
 onMounted(async () => {
   try { await load(); } catch (e) { error.value = e.message; return; }
+  window.addEventListener('beforeunload', saveDraftNow);
   progress.refresh();
   conn = createBoardConnection();
   conn.on('practiceResult', (dto) => {
@@ -91,7 +124,12 @@ onMounted(async () => {
   });
   try { await conn.start(); } catch { /* realtime best-effort */ }
 });
-onBeforeUnmount(async () => { try { await conn?.stop(); } catch {} });
+onBeforeUnmount(async () => {
+  clearTimeout(saveTimer);
+  saveDraftNow();
+  window.removeEventListener('beforeunload', saveDraftNow);
+  try { await conn?.stop(); } catch {}
+});
 </script>
 
 <template>
@@ -109,6 +147,12 @@ onBeforeUnmount(async () => { try { await conn?.stop(); } catch {} });
       </div>
       <div class="text-xs text-slate-400 dark:text-slate-500 mb-3">
         {{ solveLang === 'c' ? 'C' : 'C++' }} · limit {{ problem.timeLimitMs }} ms · {{ problem.memoryLimitKb }} KB
+      </div>
+
+      <div v-if="restored" class="mb-3 text-xs bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-200 rounded-lg px-3 py-2 flex items-center gap-2 flex-wrap">
+        <span>↩︎ Restored your unsaved code from {{ restoredAt }}.</span>
+        <button @click="useTemplate" class="underline hover:no-underline">Use the template instead</button>
+        <button @click="restored = false" class="ml-auto text-amber-600 dark:text-amber-300" title="Dismiss">✕</button>
       </div>
 
       <div v-if="gained" class="mb-3 text-sm bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200 rounded-lg px-3 py-2">

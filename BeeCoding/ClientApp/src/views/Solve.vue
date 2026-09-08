@@ -13,6 +13,7 @@ import StatementImage from '../components/StatementImage.vue';
 import AiHint from '../components/AiHint.vue';
 import SplitPane from '../components/SplitPane.vue';
 import { CODE_TEMPLATES, isPristine } from '../lib/templates';
+import { loadDraft, saveDraft, clearDraft } from '../lib/draft';
 
 const props = defineProps({ slug: { type: String, required: true }, problemId: [String, Number] });
 const auth = useAuth();
@@ -26,6 +27,20 @@ const watermark = computed(() =>
 const code = ref('');
 const stdin = ref('');
 const solveLang = ref('cpp');   // 'c' | 'cpp' — student's choice of compiler
+
+// local autosave so an accidental refresh doesn't wipe the editor
+const draftScope = computed(() => `board:${props.problemId}`);
+const restored = ref(false);
+const restoredAt = ref('');
+let saveTimer = null;
+function saveDraftNow() {
+  if (problem.value) saveDraft(auth.user?.id, draftScope.value, code.value, solveLang.value);
+}
+function useTemplate() {
+  code.value = templateFor(solveLang.value);
+  clearDraft(auth.user?.id, draftScope.value);
+  restored.value = false;
+}
 
 // The teacher's starter if it's in this language, otherwise the generic template.
 function templateFor(l) {
@@ -57,6 +72,16 @@ async function load() {
   try { pref = localStorage.getItem('beecoding.lang'); } catch { /* ignore */ }
   solveLang.value = pref === 'c' || pref === 'cpp' ? pref : (problem.value.language === 'c' ? 'c' : 'cpp');
   code.value = templateFor(solveLang.value) || '';
+
+  // bring back an unsaved draft from a previous visit / refresh
+  const d = loadDraft(auth.user?.id, draftScope.value);
+  if (d && d.code.trim() && !isPristine(d.code, problem.value.starterCode)) {
+    code.value = d.code;
+    if (d.lang === 'c' || d.lang === 'cpp') solveLang.value = d.lang;
+    restored.value = true;
+    restoredAt.value = new Date(d.ts).toLocaleString();
+  }
+
   if (problem.value.sampleTests?.[0]) stdin.value = problem.value.sampleTests[0].stdin;
   await loadSubs();
 }
@@ -98,10 +123,16 @@ function pushDraftSoon() {
     conn.invoke('PushDraft', board.value.id, Number(props.problemId), code.value).catch(() => {});
   }, 900);
 }
-watch(code, pushDraftSoon);
+watch(code, () => {
+  pushDraftSoon();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveDraftNow, 500);
+});
+watch(solveLang, saveDraftNow);
 
 onMounted(async () => {
   try { await load(); } catch (e) { error.value = e.message; return; }
+  window.addEventListener('beforeunload', saveDraftNow);
   // Make sure a wall card exists for this student even before they run/submit.
   if (isStudent()) {
     try { myPost.value = await api.post(`/api/problems/${props.problemId}/post`); } catch { /* ignore */ }
@@ -120,6 +151,9 @@ onMounted(async () => {
 });
 onBeforeUnmount(async () => {
   clearTimeout(draftTimer);
+  clearTimeout(saveTimer);
+  saveDraftNow();
+  window.removeEventListener('beforeunload', saveDraftNow);
   try { await conn?.stop(); } catch {}
 });
 </script>
@@ -140,6 +174,13 @@ onBeforeUnmount(async () => {
       <div class="text-xs text-slate-400 dark:text-slate-500 mb-3">
         {{ solveLang === 'c' ? 'C' : 'C++' }} · limit {{ problem.timeLimitMs }} ms · {{ problem.memoryLimitKb }} KB
       </div>
+
+      <div v-if="restored" class="mb-3 text-xs bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-200 rounded-lg px-3 py-2 flex items-center gap-2 flex-wrap">
+        <span>↩︎ Restored your unsaved code from {{ restoredAt }}.</span>
+        <button @click="useTemplate" class="underline hover:no-underline">Use the template instead</button>
+        <button @click="restored = false" class="ml-auto text-amber-600 dark:text-amber-300" title="Dismiss">✕</button>
+      </div>
+
       <p v-if="protectOn" class="text-[11px] text-amber-600 dark:text-amber-400 mb-2">
         🔒 Protected problem — served as an encrypted image watermarked with your identity.
       </p>
