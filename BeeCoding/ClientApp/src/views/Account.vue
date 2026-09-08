@@ -1,12 +1,22 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { api } from '../lib/api';
 import { useAuth } from '../stores/auth';
 import { useProgress } from '../stores/progress';
 
 const auth = useAuth();
 const progress = useProgress();
 const router = useRouter();
+
+// AI usage (only shown if the tutor is enabled on this instance)
+const aiUsage = ref(null);
+onMounted(async () => {
+  try {
+    if ((await api.get('/api/ai/enabled'))?.enabled) aiUsage.value = await api.get('/api/ai/usage');
+  } catch { /* ignore */ }
+});
+const fmt = (n) => (n ?? 0).toLocaleString();
 
 // change password
 const cur = ref('');
@@ -57,6 +67,30 @@ async function deleteAccount(force = false) {
         {{ auth.user?.displayName }} · {{ auth.user?.email }} · {{ auth.user?.role }}
       </p>
     </div>
+
+    <!-- AI usage -->
+    <section v-if="aiUsage" class="space-y-2">
+      <h2 class="font-semibold text-sm">AI tutor usage</h2>
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-xs text-slate-400 dark:text-slate-500 text-left">
+            <th class="font-normal py-1"></th><th class="font-normal">Calls</th>
+            <th class="font-normal">Prompt</th><th class="font-normal">Reply</th><th class="font-normal">Total tokens</th>
+          </tr>
+        </thead>
+        <tbody class="[&_td]:py-1 [&_td:not(:first-child)]:tabular-nums">
+          <tr><td class="text-slate-500 dark:text-slate-400">Today</td>
+            <td>{{ fmt(aiUsage.today.calls) }}</td><td>{{ fmt(aiUsage.today.promptTokens) }}</td>
+            <td>{{ fmt(aiUsage.today.completionTokens) }}</td><td class="font-medium">{{ fmt(aiUsage.today.totalTokens) }}</td></tr>
+          <tr><td class="text-slate-500 dark:text-slate-400">This month</td>
+            <td>{{ fmt(aiUsage.month.calls) }}</td><td>{{ fmt(aiUsage.month.promptTokens) }}</td>
+            <td>{{ fmt(aiUsage.month.completionTokens) }}</td><td class="font-medium">{{ fmt(aiUsage.month.totalTokens) }}</td></tr>
+          <tr><td class="text-slate-500 dark:text-slate-400">All time</td>
+            <td>{{ fmt(aiUsage.allTime.calls) }}</td><td>{{ fmt(aiUsage.allTime.promptTokens) }}</td>
+            <td>{{ fmt(aiUsage.allTime.completionTokens) }}</td><td class="font-medium">{{ fmt(aiUsage.allTime.totalTokens) }}</td></tr>
+        </tbody>
+      </table>
+    </section>
 
     <!-- change password -->
     <section class="space-y-3">

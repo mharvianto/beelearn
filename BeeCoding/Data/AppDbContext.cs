@@ -20,6 +20,8 @@ public class AppDbContext : DbContext
     public DbSet<BankTestCase> BankTestCases => Set<BankTestCase>();
     public DbSet<BankSubmission> BankSubmissions => Set<BankSubmission>();
     public DbSet<SolveRecord> SolveRecords => Set<SolveRecord>();
+    public DbSet<AiUsage> AiUsages => Set<AiUsage>();
+    public DbSet<AiHintProgress> AiHintProgresses => Set<AiHintProgress>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -102,6 +104,16 @@ public class AppDbContext : DbContext
             .HasOne(x => x.Post).WithMany(p => p.Comments)
             .HasForeignKey(x => x.PostId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<PostComment>()
+            .HasOne(x => x.User).WithMany()
+            .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+        b.Entity<AiUsage>().HasIndex(x => new { x.UserId, x.Day }).IsUnique();
+        b.Entity<AiUsage>()
+            .HasOne(x => x.User).WithMany()
+            .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+        b.Entity<AiHintProgress>().HasIndex(x => new { x.UserId, x.ProblemKey }).IsUnique();
+        b.Entity<AiHintProgress>()
             .HasOne(x => x.User).WithMany()
             .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
     }

@@ -21,17 +21,20 @@ public class PracticeController : ApiControllerBase
     private readonly JudgeQueue _queue;
     private readonly RateLimiter _rate;
     private readonly Services.Ai.AiTutorService _ai;
+    private readonly Services.Ai.AiUsageService _aiUsage;
 
     // per-user cache of AI picks (they cost a model call); short TTL.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, (long Ts, List<RecommendationDto> Recs)> _aiCache = new();
     private static readonly long AiTtlTicks = TimeSpan.FromMinutes(10).Ticks;
 
-    public PracticeController(AppDbContext db, JudgeQueue queue, RateLimiter rate, Services.Ai.AiTutorService ai)
+    public PracticeController(AppDbContext db, JudgeQueue queue, RateLimiter rate,
+        Services.Ai.AiTutorService ai, Services.Ai.AiUsageService aiUsage)
     {
         _db = db;
         _queue = queue;
         _rate = rate;
         _ai = ai;
+        _aiUsage = aiUsage;
     }
 
     private IQueryable<BankProblem> Pool() => _db.BankProblems.Where(b => b.IsPublic);
@@ -226,8 +229,9 @@ public class PracticeController : ApiControllerBase
 
                 try
                 {
-                    var picks = await _ai.PickNextAsync(msg.ToString(), HttpContext.RequestAborted);
-                    var chosen = picks
+                    var result = await _ai.PickNextAsync(msg.ToString(), HttpContext.RequestAborted);
+                    await _aiUsage.RecordAsync(UserId, result.PromptTokens, result.CompletionTokens);
+                    var chosen = result.Picks
                         .Where(x => byId.ContainsKey(x.Id) && !solvedSet.Contains(x.Id))
                         .DistinctBy(x => x.Id).Take(3)
                         .Select(x =>

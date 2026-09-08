@@ -20,6 +20,8 @@ const question = ref('');
 const reply = ref('');
 const busy = ref(false);
 const error = ref('');
+const level = ref(0);   // progressive hint level for this problem (1..4)
+const LEVEL_LABEL = ['', 'a small nudge', 'more specific', 'step-by-step', 'detailed walkthrough'];
 
 const LANGS = { id: 'Bahasa Indonesia', en: 'English' };
 const lang = ref('id');
@@ -53,7 +55,7 @@ function payload() {
 }
 
 async function ask() {
-  error.value = ''; reply.value = ''; busy.value = true;
+  error.value = ''; reply.value = ''; busy.value = true; level.value = 0;
   try {
     const res = await fetch('/api/ai/hint/stream', {
       method: 'POST',
@@ -82,6 +84,7 @@ async function ask() {
         let msg;
         try { msg = JSON.parse(dataLine.slice(5).trim()); } catch { continue; }
         if (msg.error) throw new Error(msg.error);
+        if (msg.level != null) level.value = msg.level;
         if (msg.delta) reply.value += msg.delta;
         else if (msg.final != null && msg.final !== reply.value) reply.value = msg.final;
       }
@@ -128,9 +131,15 @@ async function ask() {
 
       <p v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
       <div v-if="reply" class="text-sm bg-slate-50 dark:bg-slate-800/60 rounded-lg p-3">
+        <p v-if="level > 0" class="text-[10px] uppercase tracking-wide text-violet-500 dark:text-violet-400 mb-1">
+          Hint {{ level }} / 4 · {{ LEVEL_LABEL[level] }}
+        </p>
         <MarkdownBlock :text="reply" />
         <span v-if="busy" class="inline-block w-1.5 h-4 bg-violet-400 animate-pulse align-middle ml-0.5"></span>
       </div>
+      <p v-if="level >= 2 && !busy" class="text-[11px] text-slate-400 dark:text-slate-500">
+        Ask again for a more detailed hint (the tutor still won't give the full solution).
+      </p>
     </div>
   </div>
 </template>

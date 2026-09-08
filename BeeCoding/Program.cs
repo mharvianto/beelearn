@@ -53,6 +53,8 @@ builder.Services.Configure<LspOptions>(builder.Configuration.GetSection("Lsp"));
 builder.Services.Configure<AiOptions>(builder.Configuration.GetSection("Ai"));
 builder.Services.AddSingleton<LspEndpoint>();
 builder.Services.AddHttpClient<AiTutorService>();
+builder.Services.AddScoped<AiUsageService>();
+builder.Services.AddScoped<AiHintProgressService>();
 
 builder.Services.AddSingleton<PasswordService>();
 builder.Services.AddSingleton<NativeToolchain>();

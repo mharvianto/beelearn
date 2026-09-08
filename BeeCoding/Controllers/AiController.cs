@@ -27,21 +27,32 @@ public class AiController : ApiControllerBase
     private readonly AppDbContext _db;
     private readonly BoardService _boards;
     private readonly AiTutorService _ai;
+    private readonly AiUsageService _usage;
+    private readonly AiHintProgressService _prog;
     private readonly AiOptions _opt;
 
     private static readonly ConcurrentDictionary<int, long> _last = new();
 
-    public AiController(AppDbContext db, BoardService boards, AiTutorService ai, IOptions<AiOptions> opt)
+    public AiController(AppDbContext db, BoardService boards, AiTutorService ai,
+        AiUsageService usage, AiHintProgressService prog, IOptions<AiOptions> opt)
     {
         _db = db;
         _boards = boards;
         _ai = ai;
+        _usage = usage;
+        _prog = prog;
         _opt = opt.Value;
     }
 
     [HttpGet("enabled")]
     public IActionResult Enabled() =>
         Ok(new { enabled = _ai.Available, defaultLang = _ai.DefaultReplyLanguage });
+
+    [HttpGet("usage")]
+    public async Task<IActionResult> Usage() => Ok(await _usage.SummaryAsync(UserId));
+
+    private static string? ProblemKey(AiHintDto dto) =>
+        dto.BankProblemId is int b ? $"bank:{b}" : dto.ProblemId is int p ? $"board:{p}" : null;
 
     [HttpPost("hint")]
     public async Task<IActionResult> Hint(AiHintDto dto)
@@ -52,10 +63,12 @@ public class AiController : ApiControllerBase
         var (ctx, err) = await BuildContextAsync(dto);
         if (err is not null) return err;
 
+        var level = await _prog.BumpAsync(UserId, ProblemKey(dto)!, HttpContext.RequestAborted);
         try
         {
-            var reply = await _ai.HintAsync(ctx!, dto.Lang, HttpContext.RequestAborted);
-            return Ok(new { reply });
+            var r = await _ai.HintAsync(ctx!, dto.Lang, level, HttpContext.RequestAborted);
+            await _usage.RecordAsync(UserId, r.PromptTokens, r.CompletionTokens);
+            return Ok(new { reply = r.Text, level });
         }
         catch (AiUnavailableException ex)
         {
@@ -83,10 +96,20 @@ public class AiController : ApiControllerBase
         HttpContext.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
 
         var ct = HttpContext.RequestAborted;
+        var level = await _prog.BumpAsync(UserId, ProblemKey(dto)!, ct);
+        await WriteEventAsync(new { level }, ct);
+
         try
         {
-            await foreach (var chunk in _ai.StreamAsync(ctx!, dto.Lang, ct))
+            await foreach (var chunk in _ai.StreamAsync(ctx!, dto.Lang, level, ct))
             {
+                if (chunk.StartsWith(AiTutorService.UsageSentinel, StringComparison.Ordinal))
+                {
+                    var parts = chunk[AiTutorService.UsageSentinel.Length..].Split(' ');
+                    if (parts.Length == 2 && int.TryParse(parts[0], out var pt) && int.TryParse(parts[1], out var ctk))
+                        await _usage.RecordAsync(UserId, pt, ctk, CancellationToken.None);
+                    continue;
+                }
                 bool isFinal = chunk.StartsWith(AiTutorService.FinalSentinel, StringComparison.Ordinal);
                 string? final = isFinal ? chunk[AiTutorService.FinalSentinel.Length..] : null;
                 string? delta = isFinal ? null : chunk;

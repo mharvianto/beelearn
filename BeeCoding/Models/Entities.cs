@@ -344,3 +344,39 @@ public class BankSubmission
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? JudgedAt { get; set; }
 }
+
+/// <summary>Per-day rollup of a user's AI usage (hint + recommendation calls).</summary>
+public class AiUsage
+{
+    public int Id { get; set; }
+
+    public int UserId { get; set; }
+    public User? User { get; set; }
+
+    /// <summary>UTC calendar day.</summary>
+    public DateOnly Day { get; set; }
+
+    public int Calls { get; set; }
+    public long PromptTokens { get; set; }
+    public long CompletionTokens { get; set; }
+}
+
+/// <summary>
+/// How many times a user has asked the AI tutor for a hint on one problem recently.
+/// Drives progressive hints: the more they ask, the more the tutor reveals (still never
+/// the full solution). Resets after a quiet gap.
+/// </summary>
+public class AiHintProgress
+{
+    public int Id { get; set; }
+
+    public int UserId { get; set; }
+    public User? User { get; set; }
+
+    /// <summary>"bank:{id}" or "board:{id}".</summary>
+    [MaxLength(40)]
+    public string ProblemKey { get; set; } = "";
+
+    public int Count { get; set; }
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
