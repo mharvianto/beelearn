@@ -15,6 +15,10 @@ public class AiOptions
     public int MaxTokens { get; set; } = 700;
     public int TimeoutSeconds { get; set; } = 60;
 
+    /// <summary>Ceiling for <c>POST /api/ai/generate-problem</c> — writing a whole problem
+    /// (statement + reference solution + N inputs) takes far longer than a hint.</summary>
+    public int GenerateTimeoutSeconds { get; set; } = 180;
+
     /// <summary>Pass <c>chat_template_kwargs.thinking</c> to the model (slower, more thorough).</summary>
     public bool Thinking { get; set; }
 

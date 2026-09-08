@@ -339,7 +339,7 @@ Reply with ONLY compact JSON, no prose, no code fences:
             maxTokens: Math.Max(4000, _opt.MaxTokens), thinking: false));
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(30, _opt.TimeoutSeconds)));
+        timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(60, _opt.GenerateTimeoutSeconds)));
 
         HttpResponseMessage resp;
         try { resp = await _http.SendAsync(req, HttpCompletionOption.ResponseContentRead, timeout.Token); }

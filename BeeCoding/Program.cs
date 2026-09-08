@@ -52,7 +52,9 @@ builder.Services.Configure<JudgeOptions>(builder.Configuration.GetSection("Judge
 builder.Services.Configure<LspOptions>(builder.Configuration.GetSection("Lsp"));
 builder.Services.Configure<AiOptions>(builder.Configuration.GetSection("Ai"));
 builder.Services.AddSingleton<LspEndpoint>();
-builder.Services.AddHttpClient<AiTutorService>();
+// The default HttpClient.Timeout is 100s — too short for generate-problem. Let each call's
+// own CancellationTokenSource (Ai:TimeoutSeconds / Ai:GenerateTimeoutSeconds) be the limit.
+builder.Services.AddHttpClient<AiTutorService>(c => c.Timeout = Timeout.InfiniteTimeSpan);
 builder.Services.AddScoped<AiUsageService>();
 builder.Services.AddScoped<AiHintProgressService>();
 
