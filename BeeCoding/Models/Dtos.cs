@@ -10,8 +10,8 @@ public record DeleteAccountDto(string Password, bool DeleteOwnedBoards = false);
 // ---- Boards ----
 public record CreateBoardDto(string Title);
 public record JoinBoardDto(string Code);
-public record UpdateBoardDto(bool? ExamMode, bool? ProtectContent);
-public record BoardDto(int Id, string Slug, string Title, string JoinCode, bool ExamMode, bool ProtectContent, bool IsOwner, string Role, int MemberCount, int ProblemCount);
+public record UpdateBoardDto(bool? ExamMode, bool? ProtectContent, bool? LecturingMode);
+public record BoardDto(int Id, string Slug, string Title, string JoinCode, bool ExamMode, bool ProtectContent, bool LecturingMode, bool IsOwner, string Role, int MemberCount, int ProblemCount);
 
 public record MemberDto(int UserId, string DisplayName, string Role, bool HiddenByTeacher);
 public record UpdateMemberDto(bool HiddenByTeacher);

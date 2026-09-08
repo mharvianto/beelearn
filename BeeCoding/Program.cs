@@ -63,6 +63,7 @@ builder.Services.AddSingleton<NativeSandbox>();
 builder.Services.AddSingleton<JudgeQueue>();
 builder.Services.AddSingleton<PresenceTracker>();
 builder.Services.AddSingleton<DraftStore>();
+builder.Services.AddSingleton<LectureStore>();
 builder.Services.AddSingleton<StatementImageService>();
 builder.Services.AddSingleton<RateLimiter>();
 builder.Services.AddSingleton<LoginThrottle>();

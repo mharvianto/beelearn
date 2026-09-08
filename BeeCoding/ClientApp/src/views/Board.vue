@@ -53,6 +53,9 @@ async function toggleExam() {
 async function toggleProtect() {
   board.value = await api.patch(`/api/boards/${props.slug}`, { protectContent: !board.value.protectContent });
 }
+async function toggleLecturing() {
+  board.value = await api.patch(`/api/boards/${props.slug}`, { lecturingMode: !board.value.lecturingMode });
+}
 async function toggleHide(student) {
   await api.patch(`/api/boards/${props.slug}/members/${student.userId}`, { hiddenByTeacher: !student.hiddenByTeacher });
   await loadProgress();
@@ -112,6 +115,7 @@ onMounted(async () => {
   conn.on('wallChanged', () => { wallSignal.value++; refreshDrafts(); });
   conn.on('memberVisibilityChanged', () => { scheduleRefresh(); refreshDrafts(); });
   conn.on('examModeChanged', async () => { await loadAll(); refreshDrafts(); });
+  conn.on('boardSettingsChanged', async () => { await loadAll(); });
   conn.on('problemChanged', async () => { problems.value = await api.get(`/api/boards/${props.slug}/problems`); scheduleRefresh(); });
   conn.on('presence', (list) => { presence.value = list; });
   conn.on('draftUpdated', (d) => {
@@ -157,6 +161,13 @@ onBeforeUnmount(async () => {
                 ? 'bg-slate-800 text-white border-slate-800 dark:bg-slate-200 dark:text-slate-900 dark:border-slate-200'
                 : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700'">
         {{ board.protectContent ? '🔒 Content protected' : 'Protect content' }}
+      </button>
+      <button @click="toggleLecturing"
+              class="px-3 py-1.5 rounded-lg text-sm font-medium border"
+              :class="board.lecturingMode
+                ? 'bg-sky-600 text-white border-sky-600'
+                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700'">
+        {{ board.lecturingMode ? '👨‍🏫 Lecturing ON — students see your code' : 'Lecturing mode' }}
       </button>
       <button @click="editing = {}" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500 text-white">
         + Add problem

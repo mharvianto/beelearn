@@ -109,8 +109,10 @@ public class BoardsController : ApiControllerBase
 
         if (dto.ExamMode is bool exam) board.ExamMode = exam;
         if (dto.ProtectContent is bool protect) board.ProtectContent = protect;
+        if (dto.LecturingMode is bool lecture) board.LecturingMode = lecture;
         await _db.SaveChangesAsync();
         await _notifier.ExamModeChangedAsync(board.Id, board.ExamMode);
+        await _notifier.BoardSettingsChangedAsync(board.Id);
 
         return ToDto(board, MembershipRole.Owner);
     }
@@ -125,7 +127,7 @@ public class BoardsController : ApiControllerBase
     }
 
     private BoardDto ToDto(Board b, MembershipRole role) => new(
-        b.Id, b.Slug, b.Title, b.JoinCode, b.ExamMode, b.ProtectContent,
+        b.Id, b.Slug, b.Title, b.JoinCode, b.ExamMode, b.ProtectContent, b.LecturingMode,
         b.OwnerId == UserId, role.ToString(),
         b.Members?.Count(m => m.Role == MembershipRole.Student) ?? 0,
         b.Problems?.Count ?? 0);

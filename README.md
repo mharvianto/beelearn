@@ -45,6 +45,13 @@ everyone's progress — with layered controls over who can see whose answers.
    (`PATCH /api/boards/{id}/members/{userId} { hiddenByTeacher }`) **and** board-wide exam
    mode (`PATCH /api/boards/{id} { examMode }`).
 
+5b. **Lecturing mode** (`PATCH /api/boards/{slug} { lecturingMode }`) — for live-coding
+   demos. The teacher's editor buffer streams read-only to students on the same problem
+   (`BoardHub.PushLecture` → `lectureUpdated`, `LectureStore`), with a "Copy into my editor"
+   button; the teacher gets an expandable list of every student's live code for that
+   problem. Students keep their own editor, can run/submit, and can still ask the AI tutor
+   to explain an error or the code.
+
 All five visibility rules live in one place: `Services/VisibilityService.cs`.
 
 6. **Problem bank** (`/bank`, teachers) — a reusable library of problems, private by default

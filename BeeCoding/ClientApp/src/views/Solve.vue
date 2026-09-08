@@ -65,6 +65,36 @@ let conn = null;
 const mine = computed(() => submissions.value.filter((s) => s.mine));
 const latestMine = computed(() => mine.value[0]);
 
+// lecturing mode
+const isStaff = computed(() => board.value?.role === 'Owner' || board.value?.role === 'Teacher');
+const lecture = ref(null);            // { code, language, teacherName, updatedAt } — what the teacher is typing (seen by students)
+const showLecture = ref(true);
+const studentDrafts = ref({});        // userId -> { authorName, code, updatedAt } — for the teacher monitor
+const openStudent = ref(null);
+const showMonitor = ref(true);
+const studentList = computed(() =>
+  Object.entries(studentDrafts.value)
+    .map(([uid, d]) => ({ uid, ...d }))
+    .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '')));
+
+let lectureTimer = null;
+function pushLectureSoon() {
+  if (!conn || conn.state !== 'Connected' || !isStaff.value || !board.value?.lecturingMode) return;
+  clearTimeout(lectureTimer);
+  lectureTimer = setTimeout(() => {
+    conn.invoke('PushLecture', board.value.id, Number(props.problemId), code.value, solveLang.value).catch(() => {});
+  }, 700);
+}
+function pushLectureNow() {
+  if (conn?.state === 'Connected' && isStaff.value && board.value?.lecturingMode)
+    conn.invoke('PushLecture', board.value.id, Number(props.problemId), code.value, solveLang.value).catch(() => {});
+}
+function useLectureCode() {
+  if (!lecture.value) return;
+  code.value = lecture.value.code;
+  if (lecture.value.language === 'c' || lecture.value.language === 'cpp') setLang(lecture.value.language);
+}
+
 async function load() {
   board.value = await api.get(`/api/boards/${props.slug}`);
   problem.value = await api.get(`/api/boards/${props.slug}/problems/${props.problemId}`);
@@ -125,10 +155,12 @@ function pushDraftSoon() {
 }
 watch(code, () => {
   pushDraftSoon();
+  pushLectureSoon();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveDraftNow, 500);
 });
-watch(solveLang, saveDraftNow);
+watch(solveLang, () => { saveDraftNow(); pushLectureSoon(); });
+watch(() => board.value?.lecturingMode, (on) => { if (on) pushLectureNow(); });
 
 onMounted(async () => {
   try { await load(); } catch (e) { error.value = e.message; return; }
@@ -143,19 +175,48 @@ onMounted(async () => {
     if (dto.problemId === Number(props.problemId)) { loadSubs(); progress.refresh(); }
   });
   conn.on('progressBumped', (p) => progress.$patch({ ...p, ready: true }));
+  conn.on('boardSettingsChanged', async () => {
+    try { board.value = await api.get(`/api/boards/${props.slug}`); } catch { /* ignore */ }
+  });
+  conn.on('lectureUpdated', (l) => {
+    if (l.problemId === Number(props.problemId) && !isStaff.value) lecture.value = l;
+  });
+  conn.on('draftUpdated', (d) => {
+    if (d.problemId === Number(props.problemId) && isStaff.value && d.userId !== auth.user?.id)
+      studentDrafts.value[d.userId] = { authorName: d.authorName, code: d.code, updatedAt: d.updatedAt };
+  });
   try {
     await conn.start();
     await conn.invoke('JoinBoard', board.value.id);
     if (isStudent()) conn.invoke('PushDraft', board.value.id, Number(props.problemId), code.value).catch(() => {});
+    if (isStaff.value) {
+      pushLectureNow();
+      try {
+        const ds = await conn.invoke('GetDrafts', board.value.id);
+        (ds || []).filter((d) => d.problemId === Number(props.problemId) && d.userId !== auth.user?.id)
+          .forEach((d) => { studentDrafts.value[d.userId] = { authorName: d.authorName, code: d.code, updatedAt: d.updatedAt }; });
+      } catch { /* ignore */ }
+    } else {
+      try {
+        const l = await conn.invoke('GetLecture', board.value.id, Number(props.problemId));
+        if (l) lecture.value = l;
+      } catch { /* ignore */ }
+    }
   } catch {}
 });
 onBeforeUnmount(async () => {
   clearTimeout(draftTimer);
   clearTimeout(saveTimer);
+  clearTimeout(lectureTimer);
   saveDraftNow();
   window.removeEventListener('beforeunload', saveDraftNow);
   try { await conn?.stop(); } catch {}
 });
+
+function ago(ts) {
+  const s = Math.max(0, (Date.now() - new Date(ts + (ts?.endsWith('Z') ? '' : 'Z')).getTime()) / 1000);
+  return s < 60 ? `${s | 0}s` : s < 3600 ? `${(s / 60) | 0}m` : `${(s / 3600) | 0}h`;
+}
 </script>
 
 <template>
@@ -209,6 +270,41 @@ onBeforeUnmount(async () => {
           ? "🔒 Live code & progress hidden from classmates"
           : "👥 Hide live code & progress from classmates" }}
       </button>
+
+      <!-- lecturing mode: teacher's live code, shown to students -->
+      <div v-if="board?.lecturingMode && !isStaff && lecture" class="mt-4 border border-sky-200 dark:border-sky-500/30 rounded-xl overflow-hidden">
+        <button @click="showLecture = !showLecture"
+                class="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300">
+          <span>👨‍🏫 {{ lecture.teacherName }}'s code · live</span>
+          <span class="text-xs font-normal">{{ ago(lecture.updatedAt) }} ago · {{ showLecture ? '▾' : '▸' }}</span>
+        </button>
+        <div v-if="showLecture" class="p-2 space-y-2">
+          <pre class="bg-slate-900 text-slate-100 dark:bg-black rounded-lg p-2 font-mono text-xs overflow-auto max-h-72 whitespace-pre">{{ lecture.code || '(empty)' }}</pre>
+          <button @click="useLectureCode" class="text-xs bg-sky-600 hover:bg-sky-700 text-white rounded-lg px-3 py-1">Copy into my editor</button>
+        </div>
+      </div>
+
+      <!-- lecturing mode: teacher watches students' live code -->
+      <div v-if="isStaff && board?.lecturingMode" class="mt-4 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+        <button @click="showMonitor = !showMonitor"
+                class="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold bg-slate-50 dark:bg-slate-800/60">
+          <span>👀 Student code · {{ studentList.length }} live</span>
+          <span class="text-xs">{{ showMonitor ? '▾' : '▸' }}</span>
+        </button>
+        <div v-if="showMonitor" class="divide-y divide-slate-100 dark:divide-slate-800">
+          <div v-for="s in studentList" :key="s.uid">
+            <button @click="openStudent = openStudent === s.uid ? null : s.uid"
+                    class="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left hover:bg-slate-50 dark:hover:bg-slate-800/40">
+              <span class="flex-1 truncate">{{ s.authorName }}</span>
+              <span class="text-[11px] text-slate-400 dark:text-slate-500">{{ ago(s.updatedAt) }} ago</span>
+              <span class="text-xs text-slate-400">{{ openStudent === s.uid ? '▾' : '▸' }}</span>
+            </button>
+            <pre v-if="openStudent === s.uid"
+                 class="bg-slate-900 text-slate-100 dark:bg-black rounded-lg m-2 p-2 font-mono text-xs overflow-auto max-h-72 whitespace-pre">{{ s.code || '(empty)' }}</pre>
+          </div>
+          <p v-if="!studentList.length" class="px-3 py-2 text-sm text-slate-400 dark:text-slate-500">No student is typing yet.</p>
+        </div>
+      </div>
 
       <AiHint :problem-id="props.problemId" :language="solveLang" :code="code" :stdin="stdin"
               :verdict="latestMine?.status === 'Done' ? latestMine?.verdict : ''"

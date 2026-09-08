@@ -14,12 +14,14 @@ public class BoardHub : Hub
     private readonly AppDbContext _db;
     private readonly PresenceTracker _presence;
     private readonly DraftStore _drafts;
+    private readonly LectureStore _lectures;
 
-    public BoardHub(AppDbContext db, PresenceTracker presence, DraftStore drafts)
+    public BoardHub(AppDbContext db, PresenceTracker presence, DraftStore drafts, LectureStore lectures)
     {
         _db = db;
         _presence = presence;
         _drafts = drafts;
+        _lectures = lectures;
     }
 
     private int UserId => int.Parse(Context.User!.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -72,6 +74,26 @@ public class BoardHub : Hub
         if (await DraftVisibleToPeersAsync(boardId, problemId, membership))
             await Clients.Group(BoardGroup(boardId)).SendAsync("draftUpdated", draft);
     }
+
+    /// <summary>
+    /// Lecturing mode: a teacher streams their own editor buffer so students can follow along.
+    /// Staff-only, and only while the board has LecturingMode on.
+    /// </summary>
+    public async Task PushLecture(int boardId, int problemId, string code, string language)
+    {
+        var m = await _db.BoardMemberships
+            .FirstOrDefaultAsync(x => x.BoardId == boardId && x.UserId == UserId);
+        if (m is null || m.Role is not (MembershipRole.Owner or MembershipRole.Teacher)) return;
+        if (!await _db.Boards.Where(b => b.Id == boardId).Select(b => b.LecturingMode).FirstAsync()) return;
+        if (code is { Length: > 200_000 }) code = code[..200_000];
+
+        var name = Context.User!.FindFirstValue(ClaimTypes.Name) ?? "teacher";
+        var lec = _lectures.Set(boardId, problemId, code ?? "", language is "c" or "cpp" ? language : "cpp", name);
+        await Clients.Group(BoardGroup(boardId)).SendAsync("lectureUpdated", lec);
+    }
+
+    public Task<Lecture?> GetLecture(int boardId, int problemId) =>
+        Task.FromResult(_lectures.Get(boardId, problemId));
 
     private async Task<bool> DraftVisibleToPeersAsync(int boardId, int problemId, BoardMembership me)
     {

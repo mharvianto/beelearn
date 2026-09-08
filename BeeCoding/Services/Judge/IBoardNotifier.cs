@@ -21,6 +21,9 @@ public interface IBoardNotifier
     /// <summary>Board exam-mode toggled.</summary>
     Task ExamModeChangedAsync(int boardId, bool examMode);
 
+    /// <summary>Board settings changed (exam / protect / lecturing) — clients should re-fetch the board.</summary>
+    Task BoardSettingsChangedAsync(int boardId);
+
     /// <summary>Teacher toggled per-student visibility.</summary>
     Task MemberVisibilityChangedAsync(int boardId, int studentUserId, bool hiddenByTeacher);
 
