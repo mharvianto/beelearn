@@ -111,6 +111,26 @@ public class AuthController : ApiControllerBase
         return new MeDto(user.Id, user.Email, user.DisplayName, user.Role.ToString());
     }
 
+    [HttpPatch("profile")]
+    [Authorize]
+    public async Task<ActionResult<MeDto>> UpdateProfile(UpdateProfileDto dto)
+    {
+        var user = await _db.Users.FindAsync(UserId);
+        if (user is null) return Unauthorized();
+
+        var name = (dto.DisplayName ?? "").Trim();
+        if (name.Length < 2) return BadRequest("Display name must be at least 2 characters.");
+        if (name.Length > 40) return BadRequest("Display name must be 40 characters or fewer.");
+
+        if (name != user.DisplayName)
+        {
+            user.DisplayName = name;
+            await _db.SaveChangesAsync();
+            await SignInAsync(user);   // refresh the cookie so ClaimTypes.Name (author names, etc.) is current
+        }
+        return new MeDto(user.Id, user.Email, user.DisplayName, user.Role.ToString());
+    }
+
     [HttpPost("change-password")]
     [Authorize]
     public async Task<IActionResult> ChangePassword(ChangePasswordDto dto)

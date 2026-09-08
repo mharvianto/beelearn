@@ -29,6 +29,9 @@ export const useAuth = defineStore('auth', {
     async changePassword(currentPassword, newPassword) {
       await api.post('/api/auth/change-password', { currentPassword, newPassword });
     },
+    async updateDisplayName(displayName) {
+      this.user = await api.patch('/api/auth/profile', { displayName });
+    },
     async deleteAccount(password, deleteOwnedBoards = false) {
       await api.del('/api/auth/account', { password, deleteOwnedBoards });
       this.user = null;

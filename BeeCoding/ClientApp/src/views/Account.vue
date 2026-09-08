@@ -18,6 +18,26 @@ onMounted(async () => {
 });
 const fmt = (n) => (n ?? 0).toLocaleString();
 
+// display name
+const name = ref(auth.user?.displayName || '');
+const nameMsg = ref('');
+const nameErr = ref('');
+const nameBusy = ref(false);
+
+async function saveName() {
+  nameMsg.value = ''; nameErr.value = '';
+  const v = name.value.trim();
+  if (v.length < 2) { nameErr.value = 'Display name must be at least 2 characters.'; return; }
+  if (v === auth.user?.displayName) { nameMsg.value = 'No change.'; return; }
+  nameBusy.value = true;
+  try {
+    await auth.updateDisplayName(v);
+    name.value = auth.user.displayName;
+    nameMsg.value = 'Display name updated.';
+  } catch (e) { nameErr.value = e.message; }
+  finally { nameBusy.value = false; }
+}
+
 // change password
 const cur = ref('');
 const next = ref('');
@@ -67,6 +87,22 @@ async function deleteAccount(force = false) {
         {{ auth.user?.displayName }} · {{ auth.user?.email }} · {{ auth.user?.role }}
       </p>
     </div>
+
+    <!-- display name -->
+    <section class="space-y-3">
+      <h2 class="font-semibold text-sm">Display name</h2>
+      <p class="text-xs text-slate-400 dark:text-slate-500">Shown on the board, wall cards and leaderboard.</p>
+      <div class="flex gap-2">
+        <input v-model="name" maxlength="40" placeholder="Your name" @keyup.enter="saveName"
+               class="flex-1 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-2 text-sm" />
+        <button @click="saveName" :disabled="nameBusy || !name.trim() || name.trim() === auth.user?.displayName"
+                class="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50">
+          {{ nameBusy ? '…' : 'Save' }}
+        </button>
+      </div>
+      <p v-if="nameErr" class="text-sm text-red-600 dark:text-red-400">{{ nameErr }}</p>
+      <p v-if="nameMsg" class="text-sm text-emerald-600 dark:text-emerald-400">{{ nameMsg }}</p>
+    </section>
 
     <!-- AI usage -->
     <section v-if="aiUsage" class="space-y-2">

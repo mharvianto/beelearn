@@ -164,8 +164,9 @@ that appear inside it.
     private static int EstTokens(string? s) => string.IsNullOrEmpty(s) ? 0 : s.Length / 4 + 1;
 
     private string BuildPayload(string sys, string usr, bool stream, int? maxTokens = null, bool? thinking = null,
-        string? model = null, bool jsonObject = false)
+        string? model = null, bool jsonObject = false, string? reasoningEffort = null)
     {
+        var effort = reasoningEffort ?? (string.IsNullOrWhiteSpace(_opt.ReasoningEffort) ? null : _opt.ReasoningEffort.Trim());
         var payload = new Dictionary<string, object?>
         {
             ["model"] = string.IsNullOrWhiteSpace(model) ? _opt.Model : model,
@@ -182,6 +183,7 @@ that appear inside it.
         };
         if (stream) payload["stream_options"] = new { include_usage = true };   // ask for a final usage chunk
         if (jsonObject) payload["response_format"] = new { type = "json_object" };   // suppress the CoT preamble, force valid JSON
+        if (!string.IsNullOrEmpty(effort)) payload["reasoning_effort"] = effort;     // gpt-oss / o-series
         return JsonSerializer.Serialize(payload);
     }
 
@@ -289,7 +291,7 @@ Reply with ONLY compact JSON and nothing else:
     public async Task<AiPickResult> PickNextAsync(string userMessage, CancellationToken ct)
     {
         using var req = NewRequest(BuildPayload(PickSystem, userMessage, stream: false,
-            maxTokens: Math.Max(800, _opt.MaxTokens), thinking: false, model: GenModel, jsonObject: true));
+            maxTokens: Math.Max(800, _opt.MaxTokens), thinking: false, model: GenModel, jsonObject: true, reasoningEffort: "low"));
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(5, _opt.TimeoutSeconds)));
@@ -390,7 +392,7 @@ Shape:
         async Task<(string, int, int)> AttemptAsync(bool jsonMode)
         {
             using var req = NewRequest(BuildPayload(sys, userMsg, stream: true,
-                maxTokens: maxTok, thinking: false, model: GenModel, jsonObject: jsonMode));
+                maxTokens: maxTok, thinking: false, model: GenModel, jsonObject: jsonMode, reasoningEffort: "low"));
             return await CollectStreamAsync(req, sys + idea,
                 _opt.GenerateIdleTimeoutSeconds, _opt.GenerateTimeoutSeconds, ct);
         }

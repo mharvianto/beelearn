@@ -32,6 +32,11 @@ public class AiOptions
     /// <summary>Pass <c>chat_template_kwargs.thinking</c> to the model (slower, more thorough).</summary>
     public bool Thinking { get; set; }
 
+    /// <summary>OpenAI-style <c>reasoning_effort</c> for reasoning models (gpt-oss, o-series):
+    /// "low" | "medium" | "high". Empty = don't send it. The JSON tasks force "low" so the
+    /// model doesn't burn its budget on a chain-of-thought preamble.</summary>
+    public string ReasoningEffort { get; set; } = "";
+
     /// <summary>Reply language when the request doesn't specify one: "id" or "en".</summary>
     public string DefaultReplyLanguage { get; set; } = "id";
 

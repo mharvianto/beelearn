@@ -5,6 +5,7 @@ public record RegisterDto(string Email, string Password, string DisplayName, str
 public record LoginDto(string Email, string Password);
 public record MeDto(int Id, string Email, string DisplayName, string Role);
 public record ChangePasswordDto(string CurrentPassword, string NewPassword);
+public record UpdateProfileDto(string DisplayName);
 public record DeleteAccountDto(string Password, bool DeleteOwnedBoards = false);
 
 // ---- Boards ----
