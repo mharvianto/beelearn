@@ -15,9 +15,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseSystemd();
 
 // Cap request bodies. Code/stdin are validated per-endpoint; this is the backstop for
-// the admin ingest route and anything else. nginx should keep its own (smaller) limit
-// on /api/run and friends.
-builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 16 * 1024 * 1024);
+// the admin ingest route, big generated problems, and anything else. Keep nginx's
+// client_max_body_size at least this large or nginx 413s first.
+var maxBodyMb = builder.Configuration.GetValue("Kestrel:MaxRequestBodyMb", 32);
+builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = (long)maxBodyMb * 1024 * 1024);
 
 // Trust X-Forwarded-* from a reverse proxy (nginx) so Request.Scheme is "https"
 // behind TLS termination. Only the proxy should be able to reach the app port.

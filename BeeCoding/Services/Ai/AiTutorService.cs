@@ -363,6 +363,9 @@ Rules:
 - Provide EXACTLY {{count}} tests. Mark the first 1–2 as isSample:true (small, will be shown
   to students); the rest hidden, deliberately covering edge cases (minimum / empty, maximum
   bounds within the stated constraints, negatives, zeros, ties, all-same, ...).
+- This is for teaching, NOT stress-testing: keep constraints modest (e.g. array length
+  <= 200, values fit in int) and EVERY test's stdin under ~1 KB. Never emit thousands of
+  numbers.
 - Do NOT include expected outputs — the judge computes them by running your reference
   solution, so the reference MUST be right.
 - Statement in {{(lang == "en" ? "English" : "Bahasa Indonesia")}}, with clear "Input",

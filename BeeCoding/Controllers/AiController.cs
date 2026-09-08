@@ -141,6 +141,8 @@ public class AiController : ApiControllerBase
             int i = 0;
             foreach (var t in gp.Tests.Take(15))
             {
+                // teaching data, not a stress test — drop any oversized input the model slipped in
+                if ((t.Stdin ?? "").Length > 16_000) continue;
                 var run = new RunJob(refLang, gp.ReferenceSolution, t.Stdin ?? "", gp.TimeLimitMs, gp.MemoryLimitKb,
                     new TaskCompletionSource<RunResultDto>(TaskCreationOptions.RunContinuationsAsynchronously));
                 RunResultDto res;
