@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
 namespace BeeCoding.Controllers;
@@ -37,11 +38,15 @@ public class AiController : ApiControllerBase
     private readonly AiHintProgressService _prog;
     private readonly JudgeQueue _queue;
     private readonly AiOptions _opt;
+    private readonly AiGenerationJobs _jobs;
+    private readonly IServiceScopeFactory _scopes;
+    private readonly ILogger<AiController> _log;
 
     private static readonly ConcurrentDictionary<int, long> _last = new();
 
     public AiController(AppDbContext db, BoardService boards, AiTutorService ai,
-        AiUsageService usage, AiHintProgressService prog, JudgeQueue queue, IOptions<AiOptions> opt)
+        AiUsageService usage, AiHintProgressService prog, JudgeQueue queue, IOptions<AiOptions> opt,
+        AiGenerationJobs jobs, IServiceScopeFactory scopes, ILogger<AiController> log)
     {
         _db = db;
         _boards = boards;
@@ -50,6 +55,9 @@ public class AiController : ApiControllerBase
         _prog = prog;
         _queue = queue;
         _opt = opt.Value;
+        _jobs = jobs;
+        _scopes = scopes;
+        _log = log;
     }
 
     [HttpGet("enabled")]
@@ -66,78 +74,126 @@ public class AiController : ApiControllerBase
     /// private, returned for review/editing.
     /// </summary>
     [HttpPost("generate-problem")]
-    public async Task<IActionResult> GenerateProblem(AiGenerateDto dto)
+    public IActionResult GenerateProblem(AiGenerateDto dto)
     {
         if (!_ai.Available) return NotFound();
         if (CurrentRole != "Teacher") return StatusCode(StatusCodes.Status403Forbidden, "Teachers only.");
         if (string.IsNullOrWhiteSpace(dto.Idea)) return BadRequest("Describe the idea or topic.");
         if (RateLimited()) return StatusCode(StatusCodes.Status429TooManyRequests, "Give the AI a few seconds.");
+        if (_jobs.RunningFor(UserId) >= 2)
+            return StatusCode(StatusCodes.Status429TooManyRequests, "You already have generations running — wait for those to finish.");
 
         var wantLang = dto.Language is "c" ? "c" : "cpp";
         var level = dto.Level is "Easy" or "Medium" or "Hard" ? dto.Level! : "Medium";
         var count = dto.Count is >= 3 and <= 15 ? dto.Count!.Value : 10;
+        var lang = string.IsNullOrWhiteSpace(dto.Lang) ? _ai.DefaultReplyLanguage : dto.Lang!;
 
-        AiTutorService.AiGenResult gen;
+        // The AI call + compiling & running the reference against N tests takes minutes, far
+        // longer than a request should hang. Run it detached; the client polls the job id.
+        var job = _jobs.Create(UserId);
+        _ = Task.Run(() => RunGenerateAsync(job.Id, UserId, dto.Idea!, level, wantLang, count, lang));
+        return Accepted(new { jobId = job.Id });
+    }
+
+    [HttpGet("generate-problem/{id:guid}")]
+    public IActionResult GenerateProblemStatus(Guid id)
+    {
+        var job = _jobs.Get(id);
+        if (job is null || job.UserId != UserId) return NotFound();
+        return job.Status switch
+        {
+            "done" => Ok(new { status = "done", problem = job.Result }),
+            "error" => Ok(new { status = "error", message = job.Message, compilerOutput = job.CompilerOutput, stderr = job.Stderr }),
+            _ => Ok(new { status = "running" }),
+        };
+    }
+
+    private async Task RunGenerateAsync(Guid jobId, int userId, string idea, string level, string wantLang, int count, string lang)
+    {
+        var job = _jobs.Get(jobId);
+        if (job is null) return;
+
+        void Fail(string msg, string? compilerOutput = null, string? stderr = null)
+        {
+            job.Message = msg; job.CompilerOutput = compilerOutput; job.Stderr = stderr;
+            job.Status = "error"; job.Finished = DateTime.UtcNow;
+        }
+
         try
         {
-            gen = await _ai.GenerateProblemAsync(dto.Idea!, level, wantLang, count,
-                string.IsNullOrWhiteSpace(dto.Lang) ? _ai.DefaultReplyLanguage : dto.Lang!, HttpContext.RequestAborted);
-        }
-        catch (AiUnavailableException ex) { return StatusCode(StatusCodes.Status502BadGateway, ex.Message); }
-        await _usage.RecordAsync(UserId, gen.PromptTokens, gen.CompletionTokens);
+            using var scope = _scopes.CreateScope();
+            var sp = scope.ServiceProvider;
+            var db = sp.GetRequiredService<AppDbContext>();
+            var ai = sp.GetRequiredService<AiTutorService>();
+            var usage = sp.GetRequiredService<AiUsageService>();
+            var queue = sp.GetRequiredService<JudgeQueue>();
+            var ct = CancellationToken.None;   // detached from the original request
 
-        var gp = gen.Problem;
-        var refLang = gp.Language is "c" ? "c" : "cpp";
-        var built = new List<(string Stdin, string Expected, bool IsSample)>();
+            AiTutorService.AiGenResult gen;
+            try { gen = await ai.GenerateProblemAsync(idea, level, wantLang, count, lang, ct); }
+            catch (AiUnavailableException ex) { Fail(ex.Message); return; }
+            await usage.RecordAsync(userId, gen.PromptTokens, gen.CompletionTokens, ct);
 
-        int i = 0;
-        foreach (var t in gp.Tests.Take(15))
-        {
-            var job = new RunJob(refLang, gp.ReferenceSolution, t.Stdin ?? "", gp.TimeLimitMs, gp.MemoryLimitKb,
-                new TaskCompletionSource<RunResultDto>(TaskCreationOptions.RunContinuationsAsynchronously));
-            RunResultDto res;
-            try { res = await _queue.EnqueueRunAsync(job, HttpContext.RequestAborted); }
-            catch { return StatusCode(StatusCodes.Status504GatewayTimeout, "Timed out validating the generated problem."); }
+            var gp = gen.Problem;
+            var refLang = gp.Language is "c" ? "c" : "cpp";
+            var built = new List<(string Stdin, string Expected, bool IsSample)>();
 
-            if (!res.CompileOk)
-                return UnprocessableEntity(new { message = "The AI's reference solution didn't compile — try again or rephrase the idea.", compilerOutput = res.CompilerOutput });
-            if (res.TimedOut || res.Signal != 0 || res.ExitCode != 0)
-                return UnprocessableEntity(new { message = $"The AI's reference solution failed on test #{i + 1} (signal {res.Signal}, exit {res.ExitCode}) — try again or rephrase.", stderr = res.Stderr });
-
-            built.Add((t.Stdin ?? "", res.Stdout ?? "", t.IsSample));
-            i++;
-        }
-        if (built.Count < 2)
-            return UnprocessableEntity(new { message = "The AI didn't produce enough usable tests — try again." });
-
-        if (!built.Any(x => x.IsSample)) built[0] = (built[0].Stdin, built[0].Expected, true);
-        if (built.All(x => x.IsSample)) built[^1] = (built[^1].Stdin, built[^1].Expected, false);
-
-        var problem = new BankProblem
-        {
-            OwnerId = UserId,
-            Title = gp.Title.Trim(),
-            StatementMarkdown = gp.StatementMarkdown ?? "",
-            Language = refLang,
-            StarterCode = gp.StarterCode ?? "",
-            Level = Mapping.ParseLevel(gp.Level),
-            Tags = Mapping.NormalizeTags(gp.Tags),
-            TimeLimitMs = gp.TimeLimitMs,
-            MemoryLimitKb = gp.MemoryLimitKb,
-            IsPublic = false,
-        };
-        int pos = 0;
-        foreach (var (stdin, expected, isSample) in built)
-            problem.TestCases.Add(new BankTestCase
+            int i = 0;
+            foreach (var t in gp.Tests.Take(15))
             {
-                Stdin = stdin, ExpectedStdout = expected, IsSample = isSample,
-                Points = isSample ? 0 : 1, Position = pos++,
-            });
+                var run = new RunJob(refLang, gp.ReferenceSolution, t.Stdin ?? "", gp.TimeLimitMs, gp.MemoryLimitKb,
+                    new TaskCompletionSource<RunResultDto>(TaskCreationOptions.RunContinuationsAsynchronously));
+                RunResultDto res;
+                try { res = await queue.EnqueueRunAsync(run, ct); }
+                catch { Fail("Timed out validating the generated problem."); return; }
 
-        _db.BankProblems.Add(problem);
-        await _db.SaveChangesAsync();
-        await _db.Entry(problem).Reference(x => x.Owner).LoadAsync();
-        return Ok(Mapping.ToDto(problem, UserId));
+                if (!res.CompileOk)
+                { Fail("The AI's reference solution didn't compile — try again or rephrase the idea.", compilerOutput: res.CompilerOutput); return; }
+                if (res.TimedOut || res.Signal != 0 || res.ExitCode != 0)
+                { Fail($"The AI's reference solution failed on test #{i + 1} (signal {res.Signal}, exit {res.ExitCode}) — try again or rephrase.", stderr: res.Stderr); return; }
+
+                built.Add((t.Stdin ?? "", res.Stdout ?? "", t.IsSample));
+                i++;
+            }
+            if (built.Count < 2) { Fail("The AI didn't produce enough usable tests — try again."); return; }
+
+            if (!built.Any(x => x.IsSample)) built[0] = (built[0].Stdin, built[0].Expected, true);
+            if (built.All(x => x.IsSample)) built[^1] = (built[^1].Stdin, built[^1].Expected, false);
+
+            var problem = new BankProblem
+            {
+                OwnerId = userId,
+                Title = gp.Title.Trim(),
+                StatementMarkdown = gp.StatementMarkdown ?? "",
+                Language = refLang,
+                StarterCode = gp.StarterCode ?? "",
+                Level = Mapping.ParseLevel(gp.Level),
+                Tags = Mapping.NormalizeTags(gp.Tags),
+                TimeLimitMs = gp.TimeLimitMs,
+                MemoryLimitKb = gp.MemoryLimitKb,
+                IsPublic = false,
+            };
+            int pos = 0;
+            foreach (var (stdin, expected, isSample) in built)
+                problem.TestCases.Add(new BankTestCase
+                {
+                    Stdin = stdin, ExpectedStdout = expected, IsSample = isSample,
+                    Points = isSample ? 0 : 1, Position = pos++,
+                });
+
+            db.BankProblems.Add(problem);
+            await db.SaveChangesAsync(ct);
+            await db.Entry(problem).Reference(x => x.Owner).LoadAsync(ct);
+
+            job.Result = Mapping.ToDto(problem, userId);
+            job.Status = "done";
+            job.Finished = DateTime.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "generate-problem job {Job} failed", jobId);
+            if (job.Status == "running") Fail("Generation failed unexpectedly — try again.");
+        }
     }
 
     /// <summary>Forget the progressive-hint level for one problem — the next hint starts gentle again.</summary>

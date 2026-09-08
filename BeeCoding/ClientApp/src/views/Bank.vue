@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { api } from '../lib/api';
 import ProblemEditor from '../components/ProblemEditor.vue';
 import LevelBadge from '../components/LevelBadge.vue';
@@ -20,23 +20,66 @@ const genBusy = ref(false);
 const genError = ref('');
 const gen = ref({ idea: '', level: 'Medium', language: 'cpp', count: 10, lang: 'id' });
 
+// Generation runs as a detached server job; we poll it. The job id is kept in
+// localStorage so a refresh (or navigating away and back) resumes the poll.
+const JOB_KEY = 'beecoding.gen.job';
+let pollStopped = false;
+
 async function generate() {
   genError.value = ''; genBusy.value = true;
   try {
-    const p = await api.post('/api/ai/generate-problem', {
+    const { jobId } = await api.post('/api/ai/generate-problem', {
       idea: gen.value.idea.trim(),
       level: gen.value.level,
       language: gen.value.language,
       count: Number(gen.value.count),
       lang: gen.value.lang,
     });
-    genOpen.value = false;
-    gen.value.idea = '';
-    await load();
-    editing.value = p;   // open it for review / tweak / publish
+    try { localStorage.setItem(JOB_KEY, jobId); } catch { /* ignore */ }
+    pollJob(jobId);
   } catch (e) {
-    genError.value = e.message + (e.compilerOutput ? '\n\n' + e.compilerOutput : '') + (e.stderr ? '\n\n' + e.stderr : '');
-  } finally { genBusy.value = false; }
+    genError.value = e.message;
+    genBusy.value = false;
+  }
+}
+
+async function pollJob(jobId) {
+  pollStopped = false;
+  genBusy.value = true;
+  for (let n = 0; n < 240 && !pollStopped; n++) {   // ~8 min ceiling
+    await new Promise((r) => setTimeout(r, 2000));
+    if (pollStopped) return;
+    let r;
+    try {
+      r = await api.get(`/api/ai/generate-problem/${jobId}`);
+    } catch (e) {
+      if (e.status === 404) { finishJob(); genError.value = 'The generation job expired.'; return; }
+      continue;   // transient — keep polling
+    }
+    if (r.status === 'running') continue;
+    finishJob();
+    if (r.status === 'done') {
+      genOpen.value = false;
+      gen.value.idea = '';
+      await load();
+      editing.value = r.problem;
+    } else {
+      genError.value = (r.message || 'Generation failed.') +
+        (r.compilerOutput ? '\n\n' + r.compilerOutput : '') +
+        (r.stderr ? '\n\n' + r.stderr : '');
+    }
+    return;
+  }
+  if (!pollStopped) {
+    finishJob();
+    genError.value = 'Still generating — check the bank in a minute; the draft may appear on its own.';
+  }
+}
+
+function finishJob() {
+  pollStopped = true;
+  genBusy.value = false;
+  try { localStorage.removeItem(JOB_KEY); } catch { /* ignore */ }
 }
 
 async function load() {
@@ -51,7 +94,12 @@ async function load() {
 onMounted(async () => {
   load();
   try { aiEnabled.value = (await api.get('/api/ai/enabled'))?.enabled === true; } catch { /* ignore */ }
+  // resume a generation that was running when we last left the page
+  let pending = null;
+  try { pending = localStorage.getItem(JOB_KEY); } catch { /* ignore */ }
+  if (pending && aiEnabled.value) { genOpen.value = true; pollJob(pending); }
 });
+onBeforeUnmount(() => { pollStopped = true; });
 
 async function openEdit(item) {
   editError.value = '';
@@ -119,15 +167,17 @@ async function remove() {
       <p class="text-[11px] text-slate-400 dark:text-slate-500">
         The AI writes the statement + a reference solution; the judge runs that solution against the
         inputs, so the stored expected outputs are the real program output. Saved to your bank as a
-        private draft — review and publish it yourself.
+        private draft — review and publish it yourself. This runs in the background — you can leave
+        this page and it will still finish.
       </p>
       <pre v-if="genError" class="text-xs text-red-600 dark:text-red-400 whitespace-pre-wrap max-h-40 overflow-auto">{{ genError }}</pre>
-      <div class="flex gap-2">
+      <div class="flex gap-2 items-center">
         <button @click="generate" :disabled="genBusy || !gen.idea.trim()"
                 class="bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
           {{ genBusy ? 'Writing & checking…' : 'Generate' }}
         </button>
-        <button @click="genOpen = false" class="text-slate-500 dark:text-slate-400 text-sm px-3">Cancel</button>
+        <button v-if="genBusy" @click="finishJob" class="text-slate-500 dark:text-slate-400 text-sm px-3">Stop watching</button>
+        <button v-else @click="genOpen = false" class="text-slate-500 dark:text-slate-400 text-sm px-3">Cancel</button>
       </div>
     </div>
 

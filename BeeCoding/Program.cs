@@ -56,6 +56,7 @@ builder.Services.AddSingleton<LspEndpoint>();
 // own CancellationTokenSource (Ai:TimeoutSeconds / Ai:GenerateTimeoutSeconds) be the limit.
 builder.Services.AddHttpClient<AiTutorService>(c => c.Timeout = Timeout.InfiniteTimeSpan);
 builder.Services.AddScoped<AiUsageService>();
+builder.Services.AddSingleton<AiGenerationJobs>();
 builder.Services.AddScoped<AiHintProgressService>();
 
 builder.Services.AddSingleton<PasswordService>();
