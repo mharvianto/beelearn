@@ -6,6 +6,7 @@ using BeeCoding.Services.Judge;
 using BeeCoding.Services.Lsp;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -29,6 +30,20 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
+
+// Brotli + gzip for text-ish payloads (the Monaco bundle is ~3.3 MB -> ~0.86 MB).
+// Safe over HTTPS here: the compressible responses are static assets / non-secret JSON,
+// and auth lives in an httpOnly cookie, not response bodies.
+builder.Services.AddResponseCompression(o =>
+{
+    o.EnableForHttps = true;
+    o.Providers.Add<BrotliCompressionProvider>();
+    o.Providers.Add<GzipCompressionProvider>();
+    o.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(
+        new[] { "image/svg+xml", "application/wasm", "application/manifest+json" });
+});
+builder.Services.Configure<BrotliCompressionProviderOptions>(o => o.Level = System.IO.Compression.CompressionLevel.Fastest);
+builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = System.IO.Compression.CompressionLevel.Fastest);
 
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseSqlite(builder.Configuration.GetConnectionString("Default") ?? "Data Source=beecoding.db"));
@@ -143,11 +158,26 @@ app.Use(async (ctx, next) =>
     await next();
 });
 
+app.UseResponseCompression();
+
 if (app.Environment.IsDevelopment())
     app.UseCors(DevCors);
 
 app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        // Vite writes content-hashed names under /assets — safe to cache forever.
+        // Everything else (index.html, theme-init.js, favicon) must revalidate so a
+        // deploy is picked up; ETag/Last-Modified still give cheap 304s.
+        var dir = ctx.Context.Request.Path.Value ?? "";
+        ctx.Context.Response.Headers["Cache-Control"] =
+            dir.StartsWith("/assets/", StringComparison.OrdinalIgnoreCase)
+                ? "public, max-age=31536000, immutable"
+                : "no-cache";
+    },
+});
 
 app.UseWebSockets();
 app.UseRouting();
