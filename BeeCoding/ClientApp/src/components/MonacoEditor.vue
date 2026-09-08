@@ -30,6 +30,34 @@ let selfEmit = false;   // true while we're emitting our own change — don't ec
 const coarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
 const hasEditContext = typeof window !== 'undefined' && 'EditContext' in window;
 
+// ---- per-browser editor prefs (font size, LSP on/off) -----------------------
+const FONT_KEY = 'beecoding.editor.fontSize';
+const LSP_KEY = 'beecoding.editor.lsp';
+const DEFAULT_FONT = coarse ? 14 : 13;
+
+function readFont() {
+  try {
+    const n = parseInt(localStorage.getItem(FONT_KEY), 10);
+    return Number.isFinite(n) ? Math.min(28, Math.max(9, n)) : DEFAULT_FONT;
+  } catch { return DEFAULT_FONT; }
+}
+const fontSize = ref(readFont());
+const lspEnabled = ref((() => { try { return localStorage.getItem(LSP_KEY) !== '0'; } catch { return true; } })());
+
+// this editor can talk to clangd at all?
+const lspCapable = () => props.lsp === true || props.lsp === 'c' || props.lsp === 'cpp';
+
+function applyFont(px) {
+  fontSize.value = Math.min(28, Math.max(9, Math.round(px)));
+  editor?.updateOptions({ fontSize: fontSize.value });
+  try { localStorage.setItem(FONT_KEY, String(fontSize.value)); } catch { /* ignore */ }
+}
+function toggleLsp() {
+  lspEnabled.value = !lspEnabled.value;
+  try { localStorage.setItem(LSP_KEY, lspEnabled.value ? '1' : '0'); } catch { /* ignore */ }
+  if (lspEnabled.value) initLsp(); else disposeLsp();
+}
+
 // ---- clangd LSP wiring --------------------------------------------------------
 let lspClient = null;
 let lspDisposables = [];
@@ -68,6 +96,7 @@ function toMonacoCompletion(it, fallbackRange) {
 }
 
 async function initLsp() {
+  if (!lspEnabled.value || props.readOnly) return;
   const lang = props.lsp === true ? props.language : props.lsp;
   if (lang !== 'c' && lang !== 'cpp') return;
 
@@ -160,7 +189,7 @@ onMounted(() => {
     value: props.modelValue,
     language: props.language,
     theme: editorTheme(),
-    fontSize: coarse ? 14 : 13,
+    fontSize: fontSize.value,
     minimap: { enabled: false },
     scrollBeyondLastLine: false,
     automaticLayout: true,
@@ -183,6 +212,34 @@ onMounted(() => {
     emit('update:modelValue', editor.getValue());
     selfEmit = false;
   });
+
+  // right-click menu / shortcuts: font size + LSP toggle
+  editor.addAction({
+    id: 'beecoding.fontInc', label: 'Editor: Increase font size',
+    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Equal],
+    contextMenuGroupId: 'zz_beecoding', contextMenuOrder: 1,
+    run: () => applyFont(fontSize.value + 1),
+  });
+  editor.addAction({
+    id: 'beecoding.fontDec', label: 'Editor: Decrease font size',
+    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Minus],
+    contextMenuGroupId: 'zz_beecoding', contextMenuOrder: 2,
+    run: () => applyFont(fontSize.value - 1),
+  });
+  editor.addAction({
+    id: 'beecoding.fontReset', label: 'Editor: Reset font size',
+    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Digit0],
+    contextMenuGroupId: 'zz_beecoding', contextMenuOrder: 3,
+    run: () => applyFont(DEFAULT_FONT),
+  });
+  if (lspCapable() && !props.readOnly) {
+    editor.addAction({
+      id: 'beecoding.toggleLsp', label: 'Editor: Toggle C/C++ IntelliSense (LSP)',
+      contextMenuGroupId: 'zz_beecoding', contextMenuOrder: 4,
+      run: () => toggleLsp(),
+    });
+  }
+
   if (!props.readOnly) initLsp();
 });
 
@@ -206,8 +263,27 @@ watch(() => props.language, (l) => {
 watch(appTheme, () => monaco.editor.setTheme(editorTheme()));
 
 onBeforeUnmount(() => { disposeLsp(); editor?.dispose(); });
+
+const showLspBtn = lspCapable() && !props.readOnly;
+const btnCls =
+  'px-1.5 py-0.5 rounded bg-white/85 dark:bg-slate-800/85 border border-slate-300 dark:border-slate-600 ' +
+  'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 shadow-sm leading-none';
 </script>
 
 <template>
-  <div ref="el" class="h-full w-full"></div>
+  <div class="relative h-full w-full">
+    <div ref="el" class="h-full w-full"></div>
+    <div class="absolute top-1 right-4 z-10 flex items-center gap-1 text-[11px] font-mono transition-opacity
+                opacity-30 hover:opacity-100 focus-within:opacity-100"
+         :class="{ '!opacity-90': coarse }">
+      <button type="button" :class="btnCls" title="Decrease font size (Ctrl -)" @click="applyFont(fontSize - 1)">A&minus;</button>
+      <span class="text-slate-400 dark:text-slate-500 tabular-nums w-4 text-center">{{ fontSize }}</span>
+      <button type="button" :class="btnCls" title="Increase font size (Ctrl +)" @click="applyFont(fontSize + 1)">A+</button>
+      <button v-if="showLspBtn" type="button" :class="btnCls"
+              :title="lspEnabled ? 'C/C++ IntelliSense on — click to disable' : 'C/C++ IntelliSense off — click to enable'"
+              @click="toggleLsp()">
+        LSP&nbsp;{{ lspEnabled ? 'on' : 'off' }}
+      </button>
+    </div>
+  </div>
 </template>
