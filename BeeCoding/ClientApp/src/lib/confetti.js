@@ -3,10 +3,13 @@
 
 let running = false;
 
-export function celebrate({ count = 150, duration = 2800 } = {}) {
-  if (typeof window === 'undefined' || running) return;
+// `force` runs even if a burst is already on screen (e.g. a level-up landing on
+// the same solve that already popped a smaller burst).
+export function celebrate({ count = 150, duration = 2800, force = false } = {}) {
+  if (typeof window === 'undefined') return;
+  if (running && !force) return;
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
-  running = true;
+  if (!force) running = true;
 
   const canvas = document.createElement('canvas');
   canvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9999';
@@ -60,7 +63,7 @@ export function celebrate({ count = 150, duration = 2800 } = {}) {
       ctx.restore();
     }
     if (t < duration) requestAnimationFrame(frame);
-    else { window.removeEventListener('resize', resize); canvas.remove(); running = false; }
+    else { window.removeEventListener('resize', resize); canvas.remove(); if (!force) running = false; }
   };
   requestAnimationFrame(frame);
 }

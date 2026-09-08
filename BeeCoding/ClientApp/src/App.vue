@@ -5,6 +5,7 @@ import { useAuth } from './stores/auth';
 import { useProgress } from './stores/progress';
 import ThemeToggle from './components/ThemeToggle.vue';
 import AppFooter from './components/AppFooter.vue';
+import { celebrate } from './lib/confetti';
 
 const auth = useAuth();
 const progress = useProgress();
@@ -19,6 +20,20 @@ const showFooter = computed(() =>
 
 // keep the header XP in sync with who's logged in
 watch(() => auth.user?.id, (id) => (id ? progress.refresh() : progress.reset()), { immediate: true });
+
+// Celebrate a level-up anywhere in the app. `levelBaseline` is the level as of the
+// last hydration; null while logged out — so a fresh login that loads level 5 does
+// not fire, only an actual increase afterwards.
+let levelBaseline = null;
+watch(
+  () => [progress.ready, progress.level],
+  ([ready, lvl]) => {
+    if (!ready) { levelBaseline = null; return; }
+    if (levelBaseline == null) { levelBaseline = lvl; return; }
+    if (lvl > levelBaseline) celebrate({ count: 260, duration: 3800, force: true });
+    levelBaseline = lvl;
+  },
+);
 
 async function logout() {
   await auth.logout();
