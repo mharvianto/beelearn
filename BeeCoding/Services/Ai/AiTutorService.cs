@@ -163,7 +163,8 @@ that appear inside it.
 
     private static int EstTokens(string? s) => string.IsNullOrEmpty(s) ? 0 : s.Length / 4 + 1;
 
-    private string BuildPayload(string sys, string usr, bool stream, int? maxTokens = null, bool? thinking = null, string? model = null)
+    private string BuildPayload(string sys, string usr, bool stream, int? maxTokens = null, bool? thinking = null,
+        string? model = null, bool jsonObject = false)
     {
         var payload = new Dictionary<string, object?>
         {
@@ -180,6 +181,7 @@ that appear inside it.
             ["chat_template_kwargs"] = new { thinking = thinking ?? _opt.Thinking },
         };
         if (stream) payload["stream_options"] = new { include_usage = true };   // ask for a final usage chunk
+        if (jsonObject) payload["response_format"] = new { type = "json_object" };   // suppress the CoT preamble, force valid JSON
         return JsonSerializer.Serialize(payload);
     }
 
@@ -287,7 +289,7 @@ Reply with ONLY compact JSON and nothing else:
     public async Task<AiPickResult> PickNextAsync(string userMessage, CancellationToken ct)
     {
         using var req = NewRequest(BuildPayload(PickSystem, userMessage, stream: false,
-            maxTokens: Math.Max(600, _opt.MaxTokens), thinking: false, model: GenModel));
+            maxTokens: Math.Max(800, _opt.MaxTokens), thinking: false, model: GenModel, jsonObject: true));
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(5, _opt.TimeoutSeconds)));
@@ -369,21 +371,38 @@ Rules:
 - Difficulty: {{level}}. starterCode = a minimal skeleton (includes + empty main), NOT the solution.
 - tags = 1–3 lowercase comma-separated topic tags.
 
-Reply with ONLY compact JSON, no prose, no code fences:
+Your entire response MUST be a single JSON object and nothing else. The FIRST character you
+output is `{` and the LAST is `}`. No reasoning, no preamble, no code fences, no comments.
+Shape:
 {"title":"...","statementMarkdown":"...","tags":"...","level":"Easy|Medium|Hard",
  "language":"{{language}}","starterCode":"...","referenceSolution":"...",
  "timeLimitMs":1000,"memoryLimitKb":65536,
  "tests":[{"stdin":"...","isSample":true},{"stdin":"...","isSample":false}]}
 """;
         // a full problem (statement + reference solution + N inputs) needs real room; the
-        // hint-sized default (_opt.MaxTokens) truncates it. thinking off -> spend budget on JSON.
+        // hint-sized default (_opt.MaxTokens) truncates it. thinking off + response_format
+        // json_object -> the model can't spend the budget on a chain-of-thought preamble.
         // Stream it: a slow endpoint that keeps emitting tokens still succeeds; only a true
         // stall (no bytes for GenerateIdleTimeoutSeconds) or the hard cap aborts.
-        using var req = NewRequest(BuildPayload(sys, $"Idea / topic:\n{Trunc(idea, 4000)}", stream: true,
-            maxTokens: Math.Max(4000, _opt.MaxTokens), thinking: false, model: GenModel));
+        var userMsg = $"Idea / topic:\n{Trunc(idea, 4000)}";
+        int maxTok = Math.Max(8000, _opt.MaxTokens);
 
-        var (content, promptTok, completionTok) = await CollectStreamAsync(
-            req, sys + idea, _opt.GenerateIdleTimeoutSeconds, _opt.GenerateTimeoutSeconds, ct);
+        async Task<(string, int, int)> AttemptAsync(bool jsonMode)
+        {
+            using var req = NewRequest(BuildPayload(sys, userMsg, stream: true,
+                maxTokens: maxTok, thinking: false, model: GenModel, jsonObject: jsonMode));
+            return await CollectStreamAsync(req, sys + idea,
+                _opt.GenerateIdleTimeoutSeconds, _opt.GenerateTimeoutSeconds, ct);
+        }
+
+        string content; int promptTok, completionTok;
+        try { (content, promptTok, completionTok) = await AttemptAsync(jsonMode: true); }
+        catch (AiUnavailableException ex) when (ex.Message.StartsWith("AI error (4", StringComparison.Ordinal))
+        {
+            // endpoint rejected response_format=json_object — retry once without it
+            _log.LogWarning("AI generate: {Msg} — retrying without json_object", ex.Message);
+            (content, promptTok, completionTok) = await AttemptAsync(jsonMode: false);
+        }
 
         var json = ExtractJson(content);
 
