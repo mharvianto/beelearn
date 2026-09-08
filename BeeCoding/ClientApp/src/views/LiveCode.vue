@@ -72,6 +72,13 @@ function loadTeacherCode() {
   code.value = lecture.value.code || '';
   if (lecture.value.language === 'c' || lecture.value.language === 'cpp') liveLang.value = lecture.value.language;
 }
+const stdinCopied = ref(false);
+function useTeacherStdin() {
+  if (!lecture.value?.stdin) return;
+  stdin.value = lecture.value.stdin;
+  stdinCopied.value = true;
+  setTimeout(() => (stdinCopied.value = false), 1500);
+}
 
 async function toggleLecturing() {
   try { board.value = await api.patch(`/api/boards/${props.slug}`, { lecturingMode: !lecturingOn.value }); }
@@ -274,7 +281,13 @@ onBeforeUnmount(async () => {
             <template #b>
               <div class="h-full overflow-y-auto bg-white dark:bg-slate-900 p-3 space-y-2 border-r border-slate-200 dark:border-slate-800">
                 <div v-if="lecture && lecture.stdin">
-                  <label class="text-xs text-slate-400 dark:text-slate-500">teacher's stdin</label>
+                  <div class="flex items-center gap-2">
+                    <label class="text-xs text-slate-400 dark:text-slate-500">teacher's stdin</label>
+                    <button @click="useTeacherStdin"
+                            class="ml-auto text-[11px] px-2 py-0.5 rounded-lg border border-sky-300 dark:border-sky-500/40 text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-500/10">
+                      {{ stdinCopied ? 'Copied ✓' : 'Use this stdin' }}
+                    </button>
+                  </div>
                   <pre class="w-full max-h-20 overflow-auto bg-slate-100 dark:bg-slate-800 rounded-lg px-2 py-1 font-mono text-xs whitespace-pre-wrap">{{ lecture.stdin }}</pre>
                 </div>
                 <AiHint :board-slug="props.slug" :teacher-code="lecture?.code || ''"
