@@ -79,16 +79,17 @@ public class BoardHub : Hub
     /// Lecturing mode: a teacher streams their own editor buffer so students can follow along.
     /// Staff-only, and only while the board has LecturingMode on.
     /// </summary>
-    public async Task PushLecture(int boardId, int problemId, string code, string language)
+    public async Task PushLecture(int boardId, int problemId, string code, string language, string? stdin = null)
     {
         var m = await _db.BoardMemberships
             .FirstOrDefaultAsync(x => x.BoardId == boardId && x.UserId == UserId);
         if (m is null || m.Role is not (MembershipRole.Owner or MembershipRole.Teacher)) return;
         if (!await _db.Boards.Where(b => b.Id == boardId).Select(b => b.LecturingMode).FirstAsync()) return;
         if (code is { Length: > 200_000 }) code = code[..200_000];
+        if (stdin is { Length: > 20_000 }) stdin = stdin[..20_000];
 
         var name = Context.User!.FindFirstValue(ClaimTypes.Name) ?? "teacher";
-        var lec = _lectures.Set(boardId, problemId, code ?? "", language is "c" or "cpp" ? language : "cpp", name);
+        var lec = _lectures.Set(boardId, problemId, code ?? "", language is "c" or "cpp" ? language : "cpp", name, stdin ?? "");
         await Clients.Group(BoardGroup(boardId)).SendAsync("lectureUpdated", lec);
     }
 

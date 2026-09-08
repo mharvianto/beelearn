@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 
 namespace BeeCoding.Services;
 
-public record Lecture(int BoardId, int ProblemId, string Code, string Language, string TeacherName, DateTime UpdatedAt);
+public record Lecture(int BoardId, int ProblemId, string Code, string Language, string TeacherName, DateTime UpdatedAt, string Stdin = "");
 
 /// <summary>
 /// In-memory, ephemeral store of the teacher's live editor buffer per (board, problem) while
@@ -12,9 +12,9 @@ public class LectureStore
 {
     private readonly ConcurrentDictionary<(int boardId, int problemId), Lecture> _lectures = new();
 
-    public Lecture Set(int boardId, int problemId, string code, string language, string teacherName)
+    public Lecture Set(int boardId, int problemId, string code, string language, string teacherName, string stdin = "")
     {
-        var l = new Lecture(boardId, problemId, code, language, teacherName, DateTime.UtcNow);
+        var l = new Lecture(boardId, problemId, code, language, teacherName, DateTime.UtcNow, stdin);
         _lectures[(boardId, problemId)] = l;
         return l;
     }

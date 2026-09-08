@@ -28,7 +28,6 @@ const liveLang = ref('cpp');
 
 // student view of the teacher's buffer
 const lecture = ref(null);
-const showTeacher = ref(true);
 
 // teacher view of students' buffers
 const studentDrafts = reactive({});   // userId -> { authorName, code, updatedAt }
@@ -58,7 +57,7 @@ function pushNow() {
   if (!conn || conn.state !== 'Connected') return;
   if (isStaff.value) {
     if (lecturingOn.value)
-      conn.invoke('PushLecture', board.value.id, SCRATCH, code.value, liveLang.value).catch(() => {});
+      conn.invoke('PushLecture', board.value.id, SCRATCH, code.value, liveLang.value, stdin.value).catch(() => {});
   } else {
     conn.invoke('PushDraft', board.value.id, SCRATCH, code.value).catch(() => {});
   }
@@ -102,6 +101,7 @@ watch(code, () => {
   }, 400);
 });
 watch(liveLang, pushSoon);
+watch(stdin, () => { if (isStaff.value) pushSoon(); });
 watch(lecturingOn, (on) => { if (on) pushNow(); });
 
 function ingestDraft(d) {
@@ -246,66 +246,82 @@ onBeforeUnmount(async () => {
       </SplitPane>
     </div>
 
-    <!-- Student: follow along in their own editor + AI tutor -->
-    <div v-else class="flex-1 min-h-0 flex flex-col">
-      <div class="border-b border-slate-200 dark:border-slate-800">
-        <div class="flex items-center gap-2 px-4 py-1.5 text-xs"
-             :class="lecturingOn && lecture
-               ? 'bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300'
-               : 'bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500'">
-          <template v-if="lecturingOn && lecture">
-            <span>👨‍🏫 {{ lecture.teacherName }} · live · {{ lecture.language === 'c' ? 'C' : 'C++' }} · {{ ago(lecture.updatedAt) }} ago</span>
-            <button @click="loadTeacherCode" class="ml-auto bg-sky-600 hover:bg-sky-700 text-white rounded-lg px-2.5 py-0.5">Load into my editor</button>
-            <button @click="showTeacher = !showTeacher" class="rounded-lg px-2 py-0.5 border border-sky-300 dark:border-sky-500/40">
-              {{ showTeacher ? 'Hide' : 'Show' }}
-            </button>
-          </template>
-          <span v-else>{{ lecturingOn ? 'Waiting for the teacher to start typing…' : 'The teacher hasn’t started a live session yet.' }}</span>
-        </div>
-        <pre v-if="lecturingOn && lecture && showTeacher"
-             class="bg-slate-900 text-slate-100 dark:bg-black px-4 py-2 font-mono text-xs overflow-auto max-h-56 whitespace-pre">{{ lecture.code || '(empty)' }}</pre>
-      </div>
-
-      <div class="flex-1 min-h-0">
-        <SplitPane direction="vertical" storage-key="beecoding.split.livecode-student" :initial="58" :min="110">
-          <template #a>
-            <MonacoEditor v-model="code" :language="liveLang" :lsp="liveLang" />
-          </template>
-          <template #b>
-            <div class="h-full overflow-y-auto bg-white dark:bg-slate-900 p-3 space-y-2">
-              <div class="flex gap-2 items-center">
-                <button @click="run" :disabled="running"
-                        class="bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
-                  {{ running ? 'Running…' : 'Run' }}
-                </button>
-                <span class="text-xs text-slate-400 dark:text-slate-500">Your own scratch editor — nothing is graded.</span>
-              </div>
-              <div class="grid grid-cols-2 gap-2">
-                <div>
-                  <label class="text-xs text-slate-400 dark:text-slate-500">stdin</label>
-                  <textarea v-model="stdin"
-                            class="w-full h-20 resize-y border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1 font-mono text-xs"></textarea>
+    <!-- Student: left = teacher's code + stdin + AI tutor, right = my own editor -->
+    <div v-else class="flex-1 min-h-0">
+      <SplitPane direction="horizontal" storage-key="beecoding.split.livecode-student-main"
+                 :initial="48" :initial-stacked="45" :min="300">
+        <template #a>
+          <SplitPane direction="vertical" storage-key="beecoding.split.livecode-student-left" :initial="58" :min="110">
+            <template #a>
+              <div class="h-full flex flex-col border-r border-slate-200 dark:border-slate-800">
+                <div class="flex items-center gap-2 px-3 py-1.5 text-xs shrink-0"
+                     :class="lecturingOn && lecture
+                       ? 'bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300'
+                       : 'bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500'">
+                  <template v-if="lecturingOn && lecture">
+                    <span class="truncate">👨‍🏫 {{ lecture.teacherName }} · {{ lecture.language === 'c' ? 'C' : 'C++' }} · {{ ago(lecture.updatedAt) }} ago</span>
+                    <button @click="loadTeacherCode" class="ml-auto shrink-0 bg-sky-600 hover:bg-sky-700 text-white rounded-lg px-2.5 py-0.5">Load into my editor</button>
+                  </template>
+                  <span v-else>{{ lecturingOn ? 'Waiting for the teacher to start typing…' : 'The teacher hasn’t started a live session yet.' }}</span>
                 </div>
-                <div>
-                  <label class="text-xs text-slate-400 dark:text-slate-500">output</label>
-                  <pre class="w-full h-20 bg-slate-900 text-slate-100 dark:bg-black dark:border dark:border-slate-800 rounded-lg px-2 py-1 font-mono text-xs overflow-auto whitespace-pre-wrap">{{
-                    runOut
-                      ? (runOut.compileOk
-                          ? (runOut.stdout || '') + (runOut.stderr ? '\n[stderr] ' + runOut.stderr : '') +
-                            `\n— ${runOut.runtimeMs}ms, ${runOut.memoryKb}KB${runOut.timedOut ? ', TIMED OUT' : ''}`
-                          : '[compile error]\n' + runOut.compilerOutput)
-                      : ''
-                  }}</pre>
+                <MonacoEditor v-if="lecture" :model-value="lecture.code" :language="lecture.language || 'cpp'"
+                              :read-only="true" class="flex-1 min-h-0" />
+                <div v-else class="flex-1 grid place-items-center text-sm text-slate-400 dark:text-slate-500 p-6 text-center">
+                  The teacher’s code will show here.
                 </div>
               </div>
+            </template>
+            <template #b>
+              <div class="h-full overflow-y-auto bg-white dark:bg-slate-900 p-3 space-y-2 border-r border-slate-200 dark:border-slate-800">
+                <div v-if="lecture && lecture.stdin">
+                  <label class="text-xs text-slate-400 dark:text-slate-500">teacher's stdin</label>
+                  <pre class="w-full max-h-20 overflow-auto bg-slate-100 dark:bg-slate-800 rounded-lg px-2 py-1 font-mono text-xs whitespace-pre-wrap">{{ lecture.stdin }}</pre>
+                </div>
+                <AiHint :board-slug="props.slug" :teacher-code="lecture?.code || ''"
+                        :language="liveLang" :code="code" :stdin="stdin"
+                        :compiler-output="compilerOutput" :stderr="runOut?.stderr || ''" />
+              </div>
+            </template>
+          </SplitPane>
+        </template>
 
-              <AiHint :board-slug="props.slug" :teacher-code="lecture?.code || ''"
-                      :language="liveLang" :code="code" :stdin="stdin"
-                      :compiler-output="compilerOutput" :stderr="runOut?.stderr || ''" />
-            </div>
-          </template>
-        </SplitPane>
-      </div>
+        <template #b>
+          <SplitPane direction="vertical" storage-key="beecoding.split.livecode-student" :initial="58" :min="110">
+            <template #a>
+              <MonacoEditor v-model="code" :language="liveLang" :lsp="liveLang" />
+            </template>
+            <template #b>
+              <div class="h-full overflow-y-auto bg-white dark:bg-slate-900 p-3 space-y-2">
+                <div class="flex gap-2 items-center">
+                  <button @click="run" :disabled="running"
+                          class="bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
+                    {{ running ? 'Running…' : 'Run' }}
+                  </button>
+                  <span class="text-xs text-slate-400 dark:text-slate-500">Your own editor — nothing is graded.</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="text-xs text-slate-400 dark:text-slate-500">stdin</label>
+                    <textarea v-model="stdin"
+                              class="w-full h-20 resize-y border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1 font-mono text-xs"></textarea>
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-400 dark:text-slate-500">output</label>
+                    <pre class="w-full h-20 bg-slate-900 text-slate-100 dark:bg-black dark:border dark:border-slate-800 rounded-lg px-2 py-1 font-mono text-xs overflow-auto whitespace-pre-wrap">{{
+                      runOut
+                        ? (runOut.compileOk
+                            ? (runOut.stdout || '') + (runOut.stderr ? '\n[stderr] ' + runOut.stderr : '') +
+                              `\n— ${runOut.runtimeMs}ms, ${runOut.memoryKb}KB${runOut.timedOut ? ', TIMED OUT' : ''}`
+                            : '[compile error]\n' + runOut.compilerOutput)
+                        : ''
+                    }}</pre>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </SplitPane>
+        </template>
+      </SplitPane>
     </div>
   </div>
 </template>
