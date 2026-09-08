@@ -333,6 +333,9 @@ Rules:
   solution, so the reference MUST be right.
 - Statement in {{(lang == "en" ? "English" : "Bahasa Indonesia")}}, with clear "Input",
   "Output" and "Contoh"/"Example" sections and stated constraints.
+- The statement is shown as plain Markdown with NO math engine. NEVER use LaTeX / MathJax
+  ($...$, \frac, \cdot, \times, \le, ^{}, \left \right, ...). Write every formula in plain
+  ASCII as it would look in C, e.g. `S = m * pow(1 + r / (12 * 100), n)`, `a <= b`, `x^2`.
 - Difficulty: {{level}}. starterCode = a minimal skeleton (includes + empty main), NOT the solution.
 - tags = 1–3 lowercase comma-separated topic tags.
 

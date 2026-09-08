@@ -69,7 +69,7 @@ public class StatementImageService
 
         var g = new Gfx(canvas, t, reg, bold, mono, monoSmall, text, muted, codeBg, rule) { Y = Margin };
 
-        foreach (var block in Markdown.Parse(markdown ?? "")) RenderBlock(g, block, Margin);
+        foreach (var block in Markdown.Parse(PlainMath(markdown) ?? "")) RenderBlock(g, block, Margin);
 
         if (samples.Count > 0)
         {
@@ -130,6 +130,27 @@ public class StatementImageService
                 g.Y += 8; g.HLine(); g.Y += 8;
                 break;
         }
+    }
+
+    // There is no math typesetting in the PNG renderer (or the plain Markdown view).
+    // Downgrade the common LaTeX bits to ASCII so a formula stays legible.
+    internal static string? PlainMath(string? s)
+    {
+        if (string.IsNullOrEmpty(s) || (!s.Contains('\\') && !s.Contains('$'))) return s;
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\\\[|\\\]|\\\(|\\\)", "");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\$\$?([^$]+?)\$\$?", "$1");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\\d?frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}", "($1)/($2)");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\\sqrt\s*\{([^{}]+)\}", "sqrt($1)");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\\left|\\right|\\displaystyle|\\,|\\;|\\!|\\quad|\\qquad", "");
+        s = s.Replace(@"\cdot", "*").Replace(@"\times", "x").Replace(@"\div", "/");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\\leq|\\le\b", "<=");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\\geq|\\ge\b", ">=");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\\neq|\\ne\b", "!=");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\^\s*\{([^{}]+)\}", "^($1)");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"_\s*\{([^{}]+)\}", "_($1)");
+        s = s.Replace(@"\%", "%");
+        s = System.Text.RegularExpressions.Regex.Replace(s, @"\\[a-zA-Z]+", m => m.Value.Substring(1));
+        return s;
     }
 
     private static string LinesText(Markdig.Helpers.StringLineGroup lines)
