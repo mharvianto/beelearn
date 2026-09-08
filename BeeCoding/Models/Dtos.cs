@@ -93,7 +93,9 @@ public record PracticePageDto(
 
 public record TopicProgressDto(string Tag, int Total, int Solved, int Attempted);
 public record RecommendationDto(int Id, string Title, string Language, string Level, string Tags, string Reason);
-public record PracticeGuideDto(List<TopicProgressDto> Topics, List<RecommendationDto> Recommended);
+public record PracticeGuideDto(
+    List<TopicProgressDto> Topics, List<RecommendationDto> Recommended,
+    string Source, bool AiAvailable);   // Source: "heuristic" | "ai"
 
 public record PracticeProblemDto(
     int Id, string Title, string StatementMarkdown, string Language, string StarterCode,

@@ -17,13 +17,18 @@ const pageSize = ref(25);
 const total = ref(0);
 const solvedTotal = ref(0);
 
-const guide = ref({ topics: [], recommended: [] });
+const guide = ref({ topics: [], recommended: [], source: 'heuristic', aiAvailable: false });
 const showAllTopics = ref(false);
+const aiBusy = ref(false);
 const shownTopics = computed(() =>
   showAllTopics.value ? guide.value.topics : guide.value.topics.slice(0, 6));
 
-async function loadGuide() {
-  try { guide.value = await api.get('/api/practice/guide'); } catch { /* non-critical */ }
+async function loadGuide(useAi = false) {
+  if (useAi) aiBusy.value = true;
+  try {
+    guide.value = await api.get('/api/practice/guide' + (useAi ? '?ai=true' : ''));
+  } catch { /* non-critical */ }
+  finally { aiBusy.value = false; }
 }
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)));
@@ -69,7 +74,17 @@ onMounted(() => { load(); loadGuide(); progress.refresh(); });
 
     <!-- what to do next -->
     <div v-if="guide.recommended.length" class="mb-5">
-      <h2 class="text-sm font-semibold text-slate-500 dark:text-slate-400 mb-2">Recommended for you</h2>
+      <div class="flex items-center gap-2 mb-2">
+        <h2 class="text-sm font-semibold text-slate-500 dark:text-slate-400">Recommended for you</h2>
+        <span v-if="guide.source === 'ai'" class="text-[10px] px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">✨ AI-picked</span>
+        <span class="ml-auto"></span>
+        <button v-if="guide.aiAvailable && guide.source !== 'ai'" @click="loadGuide(true)" :disabled="aiBusy"
+                class="text-xs text-violet-600 dark:text-violet-400 disabled:opacity-50">
+          {{ aiBusy ? 'Thinking…' : '✨ Let AI pick' }}
+        </button>
+        <button v-else-if="guide.source === 'ai'" @click="loadGuide(false)"
+                class="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600">use heuristic</button>
+      </div>
       <div class="grid gap-2 sm:grid-cols-3">
         <RouterLink v-for="r in guide.recommended" :key="r.id" :to="`/practice/${r.id}`"
                     class="border border-amber-200 dark:border-amber-500/30 bg-amber-50/50 dark:bg-amber-500/5 rounded-xl p-3

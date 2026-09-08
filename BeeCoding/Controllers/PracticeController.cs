@@ -20,12 +20,18 @@ public class PracticeController : ApiControllerBase
     private readonly AppDbContext _db;
     private readonly JudgeQueue _queue;
     private readonly RateLimiter _rate;
+    private readonly Services.Ai.AiTutorService _ai;
 
-    public PracticeController(AppDbContext db, JudgeQueue queue, RateLimiter rate)
+    // per-user cache of AI picks (they cost a model call); short TTL.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, (long Ts, List<RecommendationDto> Recs)> _aiCache = new();
+    private static readonly long AiTtlTicks = TimeSpan.FromMinutes(10).Ticks;
+
+    public PracticeController(AppDbContext db, JudgeQueue queue, RateLimiter rate, Services.Ai.AiTutorService ai)
     {
         _db = db;
         _queue = queue;
         _rate = rate;
+        _ai = ai;
     }
 
     private IQueryable<BankProblem> Pool() => _db.BankProblems.Where(b => b.IsPublic);
@@ -108,12 +114,12 @@ public class PracticeController : ApiControllerBase
     /// you've started, one step up in difficulty, avoid problems you've bounced off).
     /// </summary>
     [HttpGet("guide")]
-    public async Task<ActionResult<PracticeGuideDto>> Guide()
+    public async Task<ActionResult<PracticeGuideDto>> Guide([FromQuery] bool ai = false)
     {
         var problems = await Pool()
             .Select(b => new { b.Id, b.Title, b.Language, b.Level, b.Tags })
             .ToListAsync();
-        if (problems.Count == 0) return new PracticeGuideDto(new(), new());
+        if (problems.Count == 0) return new PracticeGuideDto(new(), new(), "heuristic", _ai.Available);
 
         var ids = problems.Select(p => p.Id).ToHashSet();
         var subs = await _db.BankSubmissions
@@ -192,7 +198,63 @@ public class PracticeController : ApiControllerBase
                 x.p.Id, x.p.Title, x.p.Language, x.p.Level.ToString(), x.p.Tags, x.reason))
             .ToList();
 
-        return new PracticeGuideDto(topics, recommended);
+        var source = "heuristic";
+        if (ai && _ai.Available)
+        {
+            var cached = _aiCache.GetValueOrDefault(UserId);
+            if (cached.Recs is { Count: > 0 } && DateTime.UtcNow.Ticks - cached.Ts < AiTtlTicks)
+            {
+                recommended = cached.Recs;
+                source = "ai";
+            }
+            else
+            {
+                var byId = problems.ToDictionary(p => p.Id);
+                var unsolved = problems.Where(p => !solvedSet.Contains(p.Id))
+                    .OrderBy(p => (int)p.Level).ThenBy(p => p.Title).Take(150).ToList();
+
+                var msg = new System.Text.StringBuilder();
+                msg.AppendLine("## Topic progress (tag: solved/total, attempted)");
+                foreach (var t in topics)
+                    msg.AppendLine($"- {t.Tag}: {t.Solved}/{t.Total}, attempted {t.Attempted}");
+                var recentFails = fails.Where(kv => kv.Value >= 2).Select(kv => kv.Key).ToList();
+                if (recentFails.Count > 0)
+                    msg.AppendLine($"\nProblems the student has failed 2+ times (avoid piling on): {string.Join(", ", recentFails)}");
+                msg.AppendLine("\n## Unsolved catalog (id | title | level | tags)");
+                foreach (var p in unsolved)
+                    msg.AppendLine($"{p.Id} | {p.Title} | {p.Level} | {p.Tags}");
+
+                try
+                {
+                    var picks = await _ai.PickNextAsync(msg.ToString(), HttpContext.RequestAborted);
+                    var chosen = picks
+                        .Where(x => byId.ContainsKey(x.Id) && !solvedSet.Contains(x.Id))
+                        .DistinctBy(x => x.Id).Take(3)
+                        .Select(x =>
+                        {
+                            var p = byId[x.Id];
+                            return new RecommendationDto(p.Id, p.Title, p.Language, p.Level.ToString(), p.Tags,
+                                string.IsNullOrWhiteSpace(x.Reason) ? "AI pick" : x.Reason);
+                        }).ToList();
+
+                    if (chosen.Count > 0)
+                    {
+                        // top up to 3 from the heuristic list if the model gave fewer
+                        foreach (var h in recommended)
+                            if (chosen.Count < 3 && chosen.All(c => c.Id != h.Id)) chosen.Add(h);
+                        recommended = chosen;
+                        source = "ai";
+                        _aiCache[UserId] = (DateTime.UtcNow.Ticks, chosen);
+                    }
+                }
+                catch (Services.Ai.AiUnavailableException)
+                {
+                    // fall back to the heuristic list silently
+                }
+            }
+        }
+
+        return new PracticeGuideDto(topics, recommended, source, _ai.Available);
     }
 
     [HttpGet("{id:int}")]
