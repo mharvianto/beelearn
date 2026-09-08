@@ -99,7 +99,7 @@ async function remove() {
     <div v-if="genOpen" class="mb-4 border border-violet-200 dark:border-violet-500/30 rounded-xl p-4 space-y-3 bg-violet-50/40 dark:bg-violet-500/5">
       <p class="text-sm font-semibold text-violet-700 dark:text-violet-300">✨ Generate a problem from an idea</p>
       <textarea v-model="gen.idea" rows="3"
-                placeholder="e.g. 'jumlah elemen array yang habis dibagi k', 'cek graf bipartit', 'prefix sum kueri rentang'"
+                placeholder="e.g. 'count array elements divisible by k', 'check if a graph is bipartite', 'prefix-sum range queries'"
                 class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-2 text-sm"></textarea>
       <div class="flex flex-wrap gap-2 text-sm">
         <select v-model="gen.level" class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1">
@@ -113,7 +113,7 @@ async function remove() {
                  class="w-14 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1" />
         </label>
         <select v-model="gen.lang" class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1">
-          <option value="id">Statement: Indonesia</option><option value="en">Statement: English</option>
+          <option value="id">Statement: Indonesian</option><option value="en">Statement: English</option>
         </select>
       </div>
       <p class="text-[11px] text-slate-400 dark:text-slate-500">

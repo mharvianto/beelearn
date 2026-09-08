@@ -27,7 +27,7 @@ const error = ref('');
 const level = ref(0);   // progressive hint level for this problem (1..4)
 const LEVEL_LABEL = ['', 'a small nudge', 'more specific', 'step-by-step', 'detailed walkthrough'];
 
-const LANGS = { id: 'Bahasa Indonesia', en: 'English' };
+const LANGS = { id: 'Indonesian', en: 'English' };
 const lang = ref('id');
 try { lang.value = localStorage.getItem('beecoding.aiLang') || 'id'; } catch { /* ignore */ }
 function setLang(l) {
