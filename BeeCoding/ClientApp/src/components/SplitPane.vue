@@ -8,6 +8,7 @@ const props = defineProps({
   min: { type: Number, default: 120 },                  // px min for either pane
   storageKey: { type: String, default: '' },
   collapseBelow: { type: Number, default: 1024 },       // a horizontal split lays out stacked under this width (still draggable)
+  hideB: { type: Boolean, default: false },             // collapse pane B entirely — pane A fills, no divider
 });
 
 const el = ref(null);
@@ -76,11 +77,12 @@ onBeforeUnmount(() => {
 <template>
   <div ref="el" class="min-h-0 min-w-0 h-full w-full flex" :class="isRow ? 'flex-row' : 'flex-col'">
     <div class="min-h-0 min-w-0 overflow-hidden"
-         :style="isRow ? { width: pct + '%' } : { height: pct + '%' }">
+         :class="hideB ? 'flex-1' : ''"
+         :style="hideB ? null : (isRow ? { width: pct + '%' } : { height: pct + '%' })">
       <slot name="a" />
     </div>
 
-    <div @pointerdown.prevent="onDown"
+    <div v-if="!hideB" @pointerdown.prevent="onDown"
          class="group shrink-0 z-10 flex items-center justify-center touch-none select-none
                 bg-slate-200 dark:bg-slate-800 hover:bg-amber-400 dark:hover:bg-amber-500 active:bg-amber-400 transition-colors"
          :class="isRow ? 'w-1.5 cursor-col-resize' : 'h-3 md:h-1.5 cursor-row-resize'"
@@ -89,7 +91,7 @@ onBeforeUnmount(() => {
             :class="isRow ? 'w-0.5 h-8' : 'h-0.5 w-10'"></span>
     </div>
 
-    <div class="flex-1 min-h-0 min-w-0 overflow-hidden">
+    <div v-if="!hideB" class="flex-1 min-h-0 min-w-0 overflow-hidden">
       <slot name="b" />
     </div>
   </div>

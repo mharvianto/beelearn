@@ -32,6 +32,12 @@ const lecture = ref(null);
 // teacher view of students' buffers
 const studentDrafts = reactive({});   // userId -> { authorName, code, updatedAt }
 const selectedUid = ref(null);
+const showStudents = ref(true);       // teacher: show/hide the whole "Student code" panel
+const stKey = computed(() => (board.value ? `beecoding.livecode.showstudents.${board.value.id}` : ''));
+function toggleStudentsPanel() {
+  showStudents.value = !showStudents.value;
+  try { localStorage.setItem(stKey.value, showStudents.value ? '1' : '0'); } catch { /* ignore */ }
+}
 const studentList = computed(() =>
   Object.entries(studentDrafts)
     .map(([uid, d]) => ({ uid, ...d }))
@@ -125,6 +131,7 @@ onMounted(async () => {
     const saved = localStorage.getItem(storeKey.value);
     if (saved && saved.trim()) code.value = saved;
   } catch { /* ignore */ }
+  try { showStudents.value = localStorage.getItem(stKey.value) !== '0'; } catch { /* ignore */ }
 
   conn = createBoardConnection();
   conn.on('boardSettingsChanged', async () => {
@@ -170,6 +177,13 @@ onBeforeUnmount(async () => {
         {{ lecturingOn ? 'students are watching' : 'not broadcasting' }}
       </span>
       <div class="ml-auto flex items-center gap-2">
+        <button v-if="isStaff" @click="toggleStudentsPanel"
+                class="text-xs px-2.5 py-1 rounded-lg font-medium border"
+                :class="showStudents
+                  ? 'bg-slate-800 text-white border-slate-800 dark:bg-slate-600 dark:border-slate-600'
+                  : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'">
+          👀 Student panel {{ showStudents ? 'on' : 'off' }}
+        </button>
         <button v-if="isStaff" @click="toggleLecturing"
                 class="text-xs px-2.5 py-1 rounded-lg font-medium"
                 :class="lecturingOn
@@ -191,7 +205,7 @@ onBeforeUnmount(async () => {
     <!-- Teacher: left = my code + stdin + AI tutor, right = a student's code -->
     <div v-if="isStaff" class="flex-1 min-h-0">
       <SplitPane direction="horizontal" storage-key="beecoding.split.livecode-main"
-                 :initial="55" :initial-stacked="50" :min="320">
+                 :initial="55" :initial-stacked="50" :min="320" :hide-b="!showStudents">
         <template #a>
           <SplitPane direction="vertical" storage-key="beecoding.split.livecode" :initial="60" :min="110">
             <template #a>
@@ -237,11 +251,14 @@ onBeforeUnmount(async () => {
               <span class="font-semibold">👀 Student code</span>
               <span class="text-[11px] text-slate-400 dark:text-slate-500">{{ studentList.length }} live</span>
               <select v-if="studentList.length" v-model="selectedUid"
-                      class="ml-auto text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1 max-w-[55%]">
+                      class="ml-auto text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1 max-w-[50%]">
                 <option v-for="s in studentList" :key="s.uid" :value="s.uid">
                   {{ s.authorName }} · {{ ago(s.updatedAt) }} ago
                 </option>
               </select>
+              <button @click="toggleStudentsPanel" title="Hide this panel"
+                      class="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
+                      :class="{ 'ml-auto': !studentList.length }">✕</button>
             </div>
             <MonacoEditor v-if="selectedStudent" :model-value="selectedStudent.code"
                           :language="liveLang" :read-only="true" class="flex-1 min-h-0" />
