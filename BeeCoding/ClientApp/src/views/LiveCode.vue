@@ -32,30 +32,12 @@ const lecture = ref(null);
 // teacher view of students' buffers
 const studentDrafts = reactive({});   // userId -> { authorName, code, updatedAt }
 const selectedUid = ref(null);
-const hiddenUids = ref(new Set());    // students the teacher dismissed from the monitor (local)
-const showHidden = ref(false);
-const allStudents = computed(() =>
-  Object.entries(studentDrafts)
-    .map(([uid, d]) => ({ uid, ...d, hidden: hiddenUids.value.has(String(uid)) }))
-    .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '')));
 const studentList = computed(() =>
-  showHidden.value ? allStudents.value : allStudents.value.filter((s) => !s.hidden));
-const hiddenCount = computed(() => allStudents.value.filter((s) => s.hidden).length);
+  Object.entries(studentDrafts)
+    .map(([uid, d]) => ({ uid, ...d }))
+    .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '')));
 const selectedStudent = computed(() =>
   studentList.value.find((s) => String(s.uid) === String(selectedUid.value)) || studentList.value[0] || null);
-
-const hiddenKey = computed(() => (board.value ? `beecoding.livecode.hidden.${board.value.id}` : ''));
-function persistHidden() {
-  try { localStorage.setItem(hiddenKey.value, JSON.stringify([...hiddenUids.value])); } catch { /* ignore */ }
-}
-function toggleHideStudent(uid) {
-  const k = String(uid);
-  const next = new Set(hiddenUids.value);
-  next.has(k) ? next.delete(k) : next.add(k);
-  hiddenUids.value = next;
-  if (next.has(k) && String(selectedUid.value) === k) selectedUid.value = null;
-  persistHidden();
-}
 
 // run panel
 const stdin = ref('');
@@ -132,7 +114,7 @@ watch(lecturingOn, (on) => { if (on) pushNow(); });
 function ingestDraft(d) {
   if (!d || d.problemId !== SCRATCH || d.userId === auth.user?.id) return;
   studentDrafts[d.userId] = { authorName: d.authorName, code: d.code, updatedAt: d.updatedAt };
-  if (selectedUid.value == null && !hiddenUids.value.has(String(d.userId))) selectedUid.value = d.userId;
+  if (selectedUid.value == null) selectedUid.value = d.userId;
 }
 
 onMounted(async () => {
@@ -142,10 +124,6 @@ onMounted(async () => {
   try {
     const saved = localStorage.getItem(storeKey.value);
     if (saved && saved.trim()) code.value = saved;
-  } catch { /* ignore */ }
-  try {
-    const h = JSON.parse(localStorage.getItem(hiddenKey.value) || '[]');
-    if (Array.isArray(h)) hiddenUids.value = new Set(h.map(String));
   } catch { /* ignore */ }
 
   conn = createBoardConnection();
@@ -255,29 +233,20 @@ onBeforeUnmount(async () => {
 
         <template #b>
           <div class="h-full flex flex-col bg-white dark:bg-slate-900">
-            <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-800 text-sm flex-wrap">
+            <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-200 dark:border-slate-800 text-sm">
               <span class="font-semibold">👀 Student code</span>
-              <span class="text-[11px] text-slate-400 dark:text-slate-500">{{ studentList.filter((s) => !s.hidden).length }} live</span>
-              <button v-if="hiddenCount" @click="showHidden = !showHidden"
-                      class="text-[11px] text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline">
-                {{ showHidden ? 'hide dismissed' : `${hiddenCount} dismissed` }}
-              </button>
+              <span class="text-[11px] text-slate-400 dark:text-slate-500">{{ studentList.length }} live</span>
               <select v-if="studentList.length" v-model="selectedUid"
-                      class="ml-auto text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1 max-w-[45%]">
+                      class="ml-auto text-xs border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-2 py-1 max-w-[55%]">
                 <option v-for="s in studentList" :key="s.uid" :value="s.uid">
-                  {{ s.hidden ? '(dismissed) ' : '' }}{{ s.authorName }} · {{ ago(s.updatedAt) }} ago
+                  {{ s.authorName }} · {{ ago(s.updatedAt) }} ago
                 </option>
               </select>
-              <button v-if="selectedStudent" @click="toggleHideStudent(selectedStudent.uid)"
-                      class="text-[11px] px-2 py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-slate-400"
-                      :class="{ 'ml-auto': !studentList.length }">
-                {{ selectedStudent.hidden ? 'Unhide' : 'Hide' }}
-              </button>
             </div>
             <MonacoEditor v-if="selectedStudent" :model-value="selectedStudent.code"
                           :language="liveLang" :read-only="true" class="flex-1 min-h-0" />
             <div v-else class="flex-1 grid place-items-center text-sm text-slate-400 dark:text-slate-500 p-6 text-center">
-              {{ hiddenCount ? 'All students are dismissed — “' + hiddenCount + ' dismissed” to bring them back.' : 'No student is typing yet.' }}
+              No student is typing yet.
             </div>
           </div>
         </template>
