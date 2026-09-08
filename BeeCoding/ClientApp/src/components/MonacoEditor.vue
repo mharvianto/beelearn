@@ -15,6 +15,7 @@ const props = defineProps({
   language: { type: String, default: 'cpp' },
   // when set to 'c' | 'cpp', connect the clangd LSP bridge for this editor
   lsp: { type: [String, Boolean], default: false },
+  readOnly: { type: Boolean, default: false },
 });
 const emit = defineEmits(['update:modelValue']);
 
@@ -156,10 +157,13 @@ onMounted(() => {
     scrollBeyondLastLine: false,
     automaticLayout: true,
     tabSize: 4,
+    readOnly: props.readOnly,
   });
   editor.onDidChangeModelContent(() => emit('update:modelValue', editor.getValue()));
-  initLsp();
+  if (!props.readOnly) initLsp();
 });
+
+watch(() => props.readOnly, (ro) => editor?.updateOptions({ readOnly: ro }));
 
 watch(() => props.modelValue, (v) => {
   if (editor && v !== editor.getValue()) editor.setValue(v || '');

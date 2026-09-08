@@ -14,7 +14,8 @@ const route = useRoute();
 // The footer flows at the end of the page content (not pinned). Skip it on the
 // full-height editor views where there is no natural page bottom.
 const showFooter = computed(() =>
-  !/\/problems\/\d+/.test(route.path) && !/^\/practice\/\d+/.test(route.path));
+  !/\/problems\/\d+/.test(route.path) && !/^\/practice\/\d+/.test(route.path)
+  && !/^\/boards\/[^/]+\/live$/.test(route.path));
 
 // keep the header XP in sync with who's logged in
 watch(() => auth.user?.id, (id) => (id ? progress.refresh() : progress.reset()), { immediate: true });

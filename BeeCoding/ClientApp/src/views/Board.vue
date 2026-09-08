@@ -169,6 +169,10 @@ onBeforeUnmount(async () => {
                 : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700'">
         {{ board.lecturingMode ? '👨‍🏫 Lecturing ON — students see your code' : 'Lecturing mode' }}
       </button>
+      <RouterLink :to="`/boards/${board.slug}/live`"
+                  class="px-3 py-1.5 rounded-lg text-sm font-medium border bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700">
+        🎥 Live code
+      </RouterLink>
       <button @click="editing = {}" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500 text-white">
         + Add problem
       </button>
@@ -194,6 +198,12 @@ onBeforeUnmount(async () => {
     <div v-else-if="progress.examMode" class="my-4 text-sm bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-300 rounded-lg px-3 py-2">
       🔒 Exam mode is on — you can’t see other students’ progress.
     </div>
+
+    <!-- Student: live-coding session running -->
+    <RouterLink v-if="!isStaff && board.lecturingMode" :to="`/boards/${board.slug}/live`"
+                class="my-4 flex items-center gap-2 text-sm bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300 rounded-lg px-3 py-2 hover:bg-sky-100 dark:hover:bg-sky-500/15">
+      🎥 The teacher is live-coding now — open the shared editor →
+    </RouterLink>
 
     <!-- Problem list -->
     <div class="grid gap-2 my-4">
