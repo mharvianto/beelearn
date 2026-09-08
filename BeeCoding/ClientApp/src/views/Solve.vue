@@ -14,6 +14,7 @@ import AiHint from '../components/AiHint.vue';
 import SplitPane from '../components/SplitPane.vue';
 import { CODE_TEMPLATES, isPristine } from '../lib/templates';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draft';
+import { celebrate } from '../lib/confetti';
 
 const props = defineProps({ slug: { type: String, required: true }, problemId: [String, Number] });
 const auth = useAuth();
@@ -174,7 +175,7 @@ onMounted(async () => {
   conn.on('submissionResult', (dto) => {
     if (dto.problemId === Number(props.problemId)) { loadSubs(); progress.refresh(); }
   });
-  conn.on('progressBumped', (p) => progress.$patch({ ...p, ready: true }));
+  conn.on('progressBumped', (p) => { progress.$patch({ ...p, ready: true }); celebrate(); });
   conn.on('boardSettingsChanged', async () => {
     try { board.value = await api.get(`/api/boards/${props.slug}`); } catch { /* ignore */ }
   });

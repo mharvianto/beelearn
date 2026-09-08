@@ -13,6 +13,7 @@ import AiHint from '../components/AiHint.vue';
 import SplitPane from '../components/SplitPane.vue';
 import { CODE_TEMPLATES, isPristine } from '../lib/templates';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draft';
+import { celebrate } from '../lib/confetti';
 
 const props = defineProps({ id: { type: [String, Number], required: true } });
 const auth = useAuth();
@@ -108,6 +109,7 @@ watch(code, () => {
   saveTimer = setTimeout(saveDraftNow, 500);
 });
 watch(solveLang, saveDraftNow);
+watch(gained, (v) => { if (v > 0) celebrate(); });
 
 onMounted(async () => {
   try { await load(); } catch (e) { error.value = e.message; return; }
