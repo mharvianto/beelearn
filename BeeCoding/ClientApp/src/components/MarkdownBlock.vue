@@ -5,10 +5,30 @@ import DOMPurify from 'dompurify';
 
 const props = defineProps({ text: String });
 
+// There is no math engine here. Models (and the odd pasted statement) still emit LaTeX,
+// which renders as unreadable "\frac{r}{12\cdot100}". Downgrade the common bits to plain
+// ASCII so a formula stays legible.
+function deLatex(s) {
+  if (!s || (!s.includes('\\') && !s.includes('$'))) return s;
+  return s
+    .replace(/\\\[|\\\]|\\\(|\\\)/g, '')                       // \[ \] \( \)
+    .replace(/\$\$?([^$]+?)\$\$?/g, '$1')                       // $...$  $$...$$
+    .replace(/\\(d?frac|tfrac)\s*\{([^{}]+)\}\s*\{([^{}]+)\}/g, '($2)/($3)')
+    .replace(/\\sqrt\s*\{([^{}]+)\}/g, 'sqrt($1)')
+    .replace(/\\left|\\right|\\displaystyle|\\,|\\;|\\!|\\quad|\\qquad/g, '')
+    .replace(/\\cdot/g, '*').replace(/\\times/g, 'x').replace(/\\div/g, '/')
+    .replace(/\\leq|\\le\b/g, '<=').replace(/\\geq|\\ge\b/g, '>=')
+    .replace(/\\neq|\\ne\b/g, '!=').replace(/\\approx/g, '~=')
+    .replace(/\\pmod\s*\{([^{}]+)\}/g, '(mod $1)').replace(/\\bmod/g, 'mod')
+    .replace(/\^\s*\{([^{}]+)\}/g, '^($1)').replace(/_\s*\{([^{}]+)\}/g, '_($1)')
+    .replace(/\\%/g, '%')
+    .replace(/\\[a-zA-Z]+/g, m => m.slice(1));                  // any leftover \command
+}
+
 // Problem statements are authored by teachers (and the admin ingest endpoint), i.e.
 // not fully trusted. marked emits raw HTML as-is, so sanitise before v-html.
 const html = computed(() =>
-  DOMPurify.sanitize(marked.parse(props.text || '', { breaks: true }), {
+  DOMPurify.sanitize(marked.parse(deLatex(props.text || ''), { breaks: true }), {
     ALLOWED_TAGS: [
       'p', 'br', 'hr', 'span', 'div',
       'strong', 'b', 'em', 'i', 'del', 's', 'mark', 'sub', 'sup',
