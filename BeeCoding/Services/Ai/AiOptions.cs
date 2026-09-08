@@ -11,6 +11,11 @@ public class AiOptions
     public string BaseUrl { get; set; } = "https://integrate.api.nvidia.com/v1/chat/completions";
     public string Model { get; set; } = "deepseek-ai/deepseek-v4-flash-0731";
 
+    /// <summary>Model for the heavier one-shot JSON tasks (generate-problem, next-problem
+    /// pick). Falls back to <see cref="Model"/> when empty. Point this at a fast model if the
+    /// default is slow to write a whole problem.</summary>
+    public string GenerateModel { get; set; } = "";
+
     public double Temperature { get; set; } = 0.3;
     public int MaxTokens { get; set; } = 700;
     public int TimeoutSeconds { get; set; } = 60;
