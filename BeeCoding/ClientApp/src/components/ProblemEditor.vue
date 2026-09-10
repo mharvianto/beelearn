@@ -3,7 +3,11 @@ import { ref, watch } from 'vue';
 import MonacoEditor from './MonacoEditor.vue';
 import MarkdownBlock from './MarkdownBlock.vue';
 
-const stmtTab = ref('write');   // 'write' | 'preview'
+// statement: editor + preview side by side, either pane hideable (never both)
+const showWrite = ref(true);
+const showPreview = ref(true);
+function toggleWrite() { if (showPreview.value || !showWrite.value) showWrite.value = !showWrite.value; }
+function togglePreview() { if (showWrite.value || !showPreview.value) showPreview.value = !showPreview.value; }
 
 /**
  * Form for a problem. API-agnostic: the parent decides where `save` writes
@@ -36,26 +40,28 @@ function removeTest(i) { form.value.testCases.splice(i, 1); }
 
 <template>
   <div class="fixed inset-0 bg-black/50 flex items-start justify-center p-4 overflow-y-auto z-50">
-    <div class="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-transparent dark:border-slate-800 rounded-xl w-full max-w-2xl p-5 my-8">
+    <div class="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-transparent dark:border-slate-800 rounded-xl w-full max-w-4xl p-5 my-8">
       <h2 class="font-bold text-lg mb-3">{{ props.problem?.id ? 'Edit' : 'New' }} problem</h2>
       <div class="space-y-3">
         <input v-model="form.title" placeholder="Title" class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-2" />
         <div>
-          <div class="flex items-center gap-1 text-xs mb-1">
-            <span class="text-slate-400 dark:text-slate-500 mr-1">Statement (Markdown)</span>
-            <button type="button" @click="stmtTab = 'write'"
-                    class="px-2 py-0.5 rounded-t border-b-2"
-                    :class="stmtTab === 'write' ? 'border-amber-500 text-slate-700 dark:text-slate-200' : 'border-transparent text-slate-400 dark:text-slate-500'">Write</button>
-            <button type="button" @click="stmtTab = 'preview'"
-                    class="px-2 py-0.5 rounded-t border-b-2"
-                    :class="stmtTab === 'preview' ? 'border-amber-500 text-slate-700 dark:text-slate-200' : 'border-transparent text-slate-400 dark:text-slate-500'">Preview</button>
+          <div class="flex items-center gap-2 text-xs mb-1">
+            <span class="text-slate-400 dark:text-slate-500">Statement (Markdown)</span>
+            <button type="button" @click="toggleWrite"
+                    class="ml-auto px-2 py-0.5 rounded border"
+                    :class="showWrite ? 'border-amber-400 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10' : 'border-slate-300 dark:border-slate-700 text-slate-400 dark:text-slate-500'">✎ Write</button>
+            <button type="button" @click="togglePreview"
+                    class="px-2 py-0.5 rounded border"
+                    :class="showPreview ? 'border-amber-400 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10' : 'border-slate-300 dark:border-slate-700 text-slate-400 dark:text-slate-500'">👁 Preview</button>
           </div>
-          <textarea v-show="stmtTab === 'write'" v-model="form.statementMarkdown" placeholder="Statement (Markdown)" rows="10"
-                    class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-2 font-mono text-sm"></textarea>
-          <div v-show="stmtTab === 'preview'"
-               class="w-full min-h-[10rem] max-h-[28rem] overflow-y-auto border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 bg-slate-50 dark:bg-slate-800/40">
-            <MarkdownBlock v-if="form.statementMarkdown.trim()" :text="form.statementMarkdown" />
-            <p v-else class="text-sm text-slate-400 dark:text-slate-500">Nothing to preview yet.</p>
+          <div class="flex flex-col md:flex-row gap-2">
+            <textarea v-show="showWrite" v-model="form.statementMarkdown" placeholder="Statement (Markdown)" rows="12"
+                      class="flex-1 min-w-0 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-2 font-mono text-sm"></textarea>
+            <div v-show="showPreview"
+                 class="flex-1 min-w-0 h-[19rem] overflow-y-auto border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 bg-slate-50 dark:bg-slate-800/40">
+              <MarkdownBlock v-if="form.statementMarkdown.trim()" :text="form.statementMarkdown" />
+              <p v-else class="text-sm text-slate-400 dark:text-slate-500">Nothing to preview yet.</p>
+            </div>
           </div>
         </div>
         <div class="flex gap-3 flex-wrap text-sm">
