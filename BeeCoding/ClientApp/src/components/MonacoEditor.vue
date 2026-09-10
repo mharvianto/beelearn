@@ -261,13 +261,14 @@ onMounted(() => {
 watch(() => props.readOnly, (ro) => editor?.updateOptions({ readOnly: ro }));
 
 watch(() => props.modelValue, (v) => {
-  // Apply genuinely external changes (template switch, "copy into my editor", and a
-  // read-only editor mirroring live content). Don't yank text out from under someone
-  // who is typing — that's what scrambled input on mobile — but a read-only editor's
-  // user is never typing, so it must always follow modelValue.
   if (!editor || selfEmit) return;
   if (v === editor.getValue()) return;
-  if (!props.readOnly && editor.hasTextFocus()) return;
+  // A read-only editor (live viewer) must always follow modelValue. executeEdits is a
+  // no-op while readOnly is on, so replace the whole buffer with setValue instead.
+  if (props.readOnly) { editor.setValue(v || ''); return; }
+  // Editable: don't yank text out from under someone who is typing (scrambled input on
+  // mobile); apply as a scoped edit so the undo stack survives.
+  if (editor.hasTextFocus()) return;
   const model = editor.getModel();
   editor.executeEdits('external', [{ range: model.getFullModelRange(), text: v || '' }]);
   editor.pushUndoStop();
