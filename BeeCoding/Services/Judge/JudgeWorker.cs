@@ -68,8 +68,11 @@ public class JudgeWorker : BackgroundService
     private async Task<(bool compiled, string compilerOutput, TestOutcome outcome)> JudgeAsync(
         string dir, string language, string code,
         IReadOnlyList<(string Stdin, string Expected, int Points)> tests,
-        int timeLimitMs, int memoryLimitKb, CancellationToken ct)
+        int timeLimitMs, int memoryLimitKb, string? bannedHeaders, CancellationToken ct)
     {
+        if (SourcePolicy.Violation(code, bannedHeaders) is { } denied)
+            return (false, denied, new TestOutcome(Verdict.CompileError, 0, 0, 0));
+
         var compile = await _compiler.CompileAsync(dir, language, code, ct);
         if (!compile.Ok)
             return (false, compile.Output, new TestOutcome(Verdict.CompileError, 0, 0, 0));
@@ -163,7 +166,7 @@ public class JudgeWorker : BackgroundService
                 .ToList();
             var (compiled, compilerOut, o) = await JudgeAsync(
                 dir, string.IsNullOrEmpty(sub.Language) ? problem.Language : sub.Language!, sub.Code,
-                tests, problem.TimeLimitMs, problem.MemoryLimitKb, ct);
+                tests, problem.TimeLimitMs, problem.MemoryLimitKb, problem.BannedHeaders, ct);
             Finish(sub, o.Verdict, o.Score, o.MaxMs, o.MaxKb, compiled ? "" : compilerOut);
             await db.SaveChangesAsync(ct);
         }
@@ -210,7 +213,7 @@ public class JudgeWorker : BackgroundService
                 .ToList();
             var (compiled, compilerOut, o) = await JudgeAsync(
                 dir, string.IsNullOrEmpty(sub.Language) ? problem.Language : sub.Language!, sub.Code,
-                tests, problem.TimeLimitMs, problem.MemoryLimitKb, ct);
+                tests, problem.TimeLimitMs, problem.MemoryLimitKb, problem.BannedHeaders, ct);
 
             sub.Status = SubmissionStatus.Done;
             sub.Verdict = o.Verdict;

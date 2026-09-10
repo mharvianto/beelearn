@@ -130,6 +130,7 @@ public class AdminController : ControllerBase
                 b.Level = Mapping.ParseLevel(p.Level);
                 b.Tags = Mapping.NormalizeTags(p.Tags);
                 b.StarterCode = p.StarterCode ?? "";
+                b.BannedHeaders = SourcePolicy.Normalize(p.BannedHeaders);
                 b.TimeLimitMs = Math.Clamp((p.TimeLimitMs ?? 0) <= 0 ? 1000 : p.TimeLimitMs!.Value, 100, 10_000);
                 b.MemoryLimitKb = Math.Clamp((p.MemoryLimitKb ?? 0) <= 0 ? 32_768 : p.MemoryLimitKb!.Value, 4_096, 512_000);
                 b.IsPublic = p.IsPublic ?? true;

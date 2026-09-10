@@ -236,6 +236,10 @@ function ago(ts) {
       <div class="text-xs text-slate-400 dark:text-slate-500 mb-3">
         {{ solveLang === 'c' ? 'C' : 'C++' }} · limit {{ problem.timeLimitMs }} ms · {{ problem.memoryLimitKb }} KB
       </div>
+      <p v-if="problem.bannedHeaders" class="mb-3 text-xs bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 rounded-lg px-3 py-2">
+        🚫 This problem bans these headers: <span class="font-mono">{{ problem.bannedHeaders }}</span>
+        (and <span class="font-mono">bits/stdc++.h</span>). Implement it yourself — a banned <span class="font-mono">#include</span> fails as a Compile Error.
+      </p>
 
       <div v-if="restored" class="mb-3 text-xs bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-200 rounded-lg px-3 py-2 flex items-center gap-2 flex-wrap">
         <span>↩︎ Restored your unsaved code from {{ restoredAt }}.</span>

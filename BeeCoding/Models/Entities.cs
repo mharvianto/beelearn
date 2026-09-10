@@ -120,6 +120,11 @@ public class Problem
 
     public string StarterCode { get; set; } = "";
 
+    /// <summary>Comma-separated header names a submission may NOT #include, e.g.
+    /// "algorithm,numeric". When set, umbrella headers (bits/stdc++.h) are also blocked.</summary>
+    [MaxLength(300)]
+    public string? BannedHeaders { get; set; }
+
     public int TimeLimitMs { get; set; } = 1000;
 
     public int MemoryLimitKb { get; set; } = 32768;
@@ -154,6 +159,10 @@ public class BankProblem
     public string Language { get; set; } = "cpp";
 
     public string StarterCode { get; set; } = "";
+
+    /// <summary>Comma-separated header names a submission may NOT #include (see Problem).</summary>
+    [MaxLength(300)]
+    public string? BannedHeaders { get; set; }
 
     public int TimeLimitMs { get; set; } = 1000;
 

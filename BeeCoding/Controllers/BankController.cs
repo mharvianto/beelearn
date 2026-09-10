@@ -147,6 +147,7 @@ public class BankController : ApiControllerBase
             Tags = bank.Tags,
             Level = bank.Level,
             StarterCode = bank.StarterCode,
+            BannedHeaders = bank.BannedHeaders,
             TimeLimitMs = bank.TimeLimitMs,
             MemoryLimitKb = bank.MemoryLimitKb,
             Position = nextPos,
@@ -190,6 +191,7 @@ public class BankController : ApiControllerBase
             Tags = p.Tags,
             Level = p.Level,
             StarterCode = p.StarterCode,
+            BannedHeaders = p.BannedHeaders,
             TimeLimitMs = p.TimeLimitMs,
             MemoryLimitKb = p.MemoryLimitKb,
         };
@@ -217,6 +219,7 @@ public class BankController : ApiControllerBase
         b.Language = NativeCompiler.Normalize(dto.Language);
         b.Level = Mapping.ParseLevel(dto.Level);
         b.StarterCode = dto.StarterCode ?? "";
+        b.BannedHeaders = SourcePolicy.Normalize(dto.BannedHeaders);
         b.TimeLimitMs = Math.Clamp(dto.TimeLimitMs <= 0 ? 1000 : dto.TimeLimitMs, 100, 10_000);
         b.MemoryLimitKb = Math.Clamp(dto.MemoryLimitKb <= 0 ? 32_768 : dto.MemoryLimitKb, 4_096, 512_000);
         b.Tags = Mapping.NormalizeTags(dto.Tags);

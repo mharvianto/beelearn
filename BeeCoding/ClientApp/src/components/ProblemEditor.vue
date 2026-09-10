@@ -24,7 +24,7 @@ const emit = defineEmits(['save', 'delete', 'cancel']);
 const blank = () => ({
   title: '', statementMarkdown: '', language: 'cpp', starterCode: '',
   timeLimitMs: 1000, memoryLimitKb: 32768, position: 0,
-  level: 'Medium', tags: '', isPublic: false, testCases: [],
+  level: 'Medium', tags: '', isPublic: false, bannedHeaders: '', testCases: [],
 });
 const form = ref(blank());
 
@@ -84,6 +84,17 @@ function removeTest(i) { form.value.testCases.splice(i, 1); }
           <label v-if="!showBankFields" class="flex items-center gap-1">Position
             <input v-model.number="form.position" type="number" class="w-16 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1" />
           </label>
+        </div>
+
+        <div>
+          <label class="flex items-center gap-1 text-sm">Banned headers
+            <input v-model="form.bannedHeaders" placeholder="e.g. algorithm, numeric"
+                   class="flex-1 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1" />
+          </label>
+          <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+            Comma-separated header names a submission may not <code>#include</code>. When set,
+            <code>&lt;bits/stdc++.h&gt;</code> is blocked too. A violation is reported as a Compile Error.
+          </p>
         </div>
 
         <div class="flex gap-3 flex-wrap text-sm items-center">
