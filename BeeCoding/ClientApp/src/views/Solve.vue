@@ -123,7 +123,7 @@ async function loadSubs() {
 async function run() {
   error.value = ''; running.value = true; runOut.value = null;
   try {
-    runOut.value = await api.post('/api/run', { language: solveLang.value, code: code.value, stdin: stdin.value });
+    runOut.value = await api.post('/api/run', { language: solveLang.value, code: code.value, stdin: stdin.value, problemId: Number(props.problemId) });
   } catch (e) { error.value = e.message; }
   finally { running.value = false; }
 }

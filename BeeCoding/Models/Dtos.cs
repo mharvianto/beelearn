@@ -176,7 +176,8 @@ public record ReactDto(string Emoji);
 public record CommentBodyDto(string Body);
 
 // ---- Ad-hoc run ----
-public record RunDto(string Language, string Code, string Stdin);
+public record RunDto(string Language, string Code, string Stdin,
+    int? ProblemId = null, int? BankProblemId = null);   // for per-problem header restrictions
 public record RunResultDto(
     bool CompileOk, string CompilerOutput,
     string Stdout, string Stderr,

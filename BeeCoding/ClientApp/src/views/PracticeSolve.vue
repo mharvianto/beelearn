@@ -82,7 +82,7 @@ async function loadSubs() {
 async function run() {
   error.value = ''; running.value = true; runOut.value = null;
   try {
-    runOut.value = await api.post('/api/run', { language: solveLang.value, code: code.value, stdin: stdin.value });
+    runOut.value = await api.post('/api/run', { language: solveLang.value, code: code.value, stdin: stdin.value, bankProblemId: Number(props.id) });
   } catch (e) { error.value = e.message; }
   finally { running.value = false; }
 }
