@@ -10,30 +10,20 @@ namespace BeeCoding.Controllers;
 
 [ApiController]
 [Authorize]
-public class SubmissionsController : ApiControllerBase
+public class SubmissionsController(AppDbContext db, BoardService boards, VisibilityService vis,
+    IJudgeQueue queue, RateLimiter rate, IBoardNotifier notifier) : ApiControllerBase
 {
-    private readonly AppDbContext _db;
-    private readonly BoardService _boards;
-    private readonly VisibilityService _vis;
-    private readonly IJudgeQueue _queue;
-    private readonly RateLimiter _rate;
-    private readonly IBoardNotifier _notifier;
-
-    public SubmissionsController(AppDbContext db, BoardService boards, VisibilityService vis,
-        IJudgeQueue queue, RateLimiter rate, IBoardNotifier notifier)
-    {
-        _db = db;
-        _boards = boards;
-        _vis = vis;
-        _queue = queue;
-        _rate = rate;
-        _notifier = notifier;
-    }
+    private readonly AppDbContext _db = db;
+    private readonly BoardService _boards = boards;
+    private readonly VisibilityService _vis = vis;
+    private readonly IJudgeQueue _queue = queue;
+    private readonly RateLimiter _rate = rate;
+    private readonly IBoardNotifier _notifier = notifier;
 
     [HttpPost("api/problems/{problemId:int}/submit")]
     public async Task<ActionResult<object>> Submit(int problemId, SubmitDto dto)
     {
-        var problem = await _db.Problems.FirstOrDefaultAsync(p => p.Id == problemId);
+        var problem = await _db.Problems.Include(p => p.TestCases).FirstOrDefaultAsync(p => p.Id == problemId);
         if (problem is null) return NotFound();
 
         var membership = await _boards.GetMembershipAsync(problem.BoardId, UserId);
@@ -60,7 +50,12 @@ public class SubmissionsController : ApiControllerBase
             post.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        await _queue.EnqueueAsync(new SubmissionJob(sub.Id));
+        var tests = problem.TestCases.OrderBy(t => t.Position).ThenBy(t => t.Id)
+            .Select(t => new TestSpec(t.Stdin, t.ExpectedStdout, t.Points)).ToList();
+        await _queue.EnqueueGradeAsync(new GradeJob(
+            "board", sub.Id,
+            string.IsNullOrEmpty(sub.Language) ? problem.Language : sub.Language!, sub.Code,
+            problem.TimeLimitMs, problem.MemoryLimitKb, problem.BannedHeaders, problem.BannedSymbols, tests));
         return Accepted(new { submissionId = sub.Id });
     }
 

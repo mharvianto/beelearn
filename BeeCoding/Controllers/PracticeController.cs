@@ -15,27 +15,18 @@ namespace BeeCoding.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/practice")]
-public class PracticeController : ApiControllerBase
+public class PracticeController(AppDbContext db, IJudgeQueue queue, RateLimiter rate,
+    Services.Ai.AiTutorService ai, Services.Ai.AiUsageService aiUsage) : ApiControllerBase
 {
-    private readonly AppDbContext _db;
-    private readonly IJudgeQueue _queue;
-    private readonly RateLimiter _rate;
-    private readonly Services.Ai.AiTutorService _ai;
-    private readonly Services.Ai.AiUsageService _aiUsage;
+    private readonly AppDbContext _db = db;
+    private readonly IJudgeQueue _queue = queue;
+    private readonly RateLimiter _rate = rate;
+    private readonly Services.Ai.AiTutorService _ai = ai;
+    private readonly Services.Ai.AiUsageService _aiUsage = aiUsage;
 
     // per-user cache of AI picks (they cost a model call); short TTL.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, (long Ts, List<RecommendationDto> Recs)> _aiCache = new();
     private static readonly long AiTtlTicks = TimeSpan.FromMinutes(10).Ticks;
-
-    public PracticeController(AppDbContext db, IJudgeQueue queue, RateLimiter rate,
-        Services.Ai.AiTutorService ai, Services.Ai.AiUsageService aiUsage)
-    {
-        _db = db;
-        _queue = queue;
-        _rate = rate;
-        _ai = ai;
-        _aiUsage = aiUsage;
-    }
 
     private IQueryable<BankProblem> Pool() => _db.BankProblems.Where(b => b.IsPublic);
 
@@ -274,8 +265,8 @@ public class PracticeController : ApiControllerBase
     [HttpPost("{id:int}/submit")]
     public async Task<ActionResult<object>> Submit(int id, SubmitDto dto)
     {
-        var problemLang = await Pool().Where(b => b.Id == id).Select(b => b.Language).FirstOrDefaultAsync();
-        if (problemLang is null) return NotFound();
+        var problem = await Pool().Include(b => b.TestCases).FirstOrDefaultAsync(b => b.Id == id);
+        if (problem is null) return NotFound();
         if (string.IsNullOrWhiteSpace(dto.Code)) return BadRequest("Code is empty.");
         if (dto.Code.Length > 200_000) return BadRequest("Code is too large.");
         if (!_rate.TryAcquire(UserId)) return StatusCode(429, "Slow down a moment and try again.");
@@ -285,12 +276,17 @@ public class PracticeController : ApiControllerBase
             BankProblemId = id,
             UserId = UserId,
             Code = dto.Code,
-            Language = dto.Language is "c" or "cpp" ? dto.Language : problemLang,
+            Language = dto.Language is "c" or "cpp" ? dto.Language : problem.Language,
         };
         _db.BankSubmissions.Add(sub);
         await _db.SaveChangesAsync();
 
-        await _queue.EnqueueAsync(new BankSubmissionJob(sub.Id));
+        var tests = problem.TestCases.OrderBy(t => t.Position).ThenBy(t => t.Id)
+            .Select(t => new TestSpec(t.Stdin, t.ExpectedStdout, t.Points)).ToList();
+        await _queue.EnqueueGradeAsync(new GradeJob(
+            "practice", sub.Id,
+            string.IsNullOrEmpty(sub.Language) ? problem.Language : sub.Language!, sub.Code,
+            problem.TimeLimitMs, problem.MemoryLimitKb, problem.BannedHeaders, problem.BannedSymbols, tests));
         return Accepted(new { submissionId = sub.Id });
     }
 

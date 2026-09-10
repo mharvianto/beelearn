@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="BeeCoding.Core/BeeCoding.Core.csproj" />
+  <Project Path="BeeCoding.Judge/BeeCoding.Judge.csproj" />
+  <Project Path="BeeCoding/BeeCoding.csproj" />
+</Solution>

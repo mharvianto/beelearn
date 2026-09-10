@@ -5,16 +5,10 @@ namespace BeeCoding.Services.Judge;
 
 public record CompileResult(bool Ok, string Output, string? ExePath);
 
-public class NativeCompiler
+public class NativeCompiler(NativeToolchain tc, ILogger<NativeCompiler> log)
 {
-    private readonly NativeToolchain _tc;
-    private readonly ILogger<NativeCompiler> _log;
-
-    public NativeCompiler(NativeToolchain tc, ILogger<NativeCompiler> log)
-    {
-        _tc = tc;
-        _log = log;
-    }
+    private readonly NativeToolchain _tc = tc;
+    private readonly ILogger<NativeCompiler> _log = log;
 
     public static string SourceName(string language) => Normalize(language) == "c" ? "main.c" : "main.cpp";
 

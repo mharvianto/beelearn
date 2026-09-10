@@ -1,6 +1,6 @@
 using BeeCoding.Models;
 
-namespace BeeCoding.Data;
+namespace BeeCoding.Services;
 
 /// <summary>Curated starter set of 20 problems (Input, Output, Operator, Selection, Loop, Array).</summary>
 public static class BankSeed

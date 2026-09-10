@@ -1,8 +1,9 @@
+using BeeCoding.Data;
 using BeeCoding.Models;
 using BeeCoding.Services;
 using Microsoft.EntityFrameworkCore;
 
-namespace BeeCoding.Data;
+namespace BeeCoding.Services;
 
 public static class DbSeeder
 {

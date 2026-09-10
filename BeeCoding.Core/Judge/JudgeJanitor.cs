@@ -7,19 +7,13 @@ namespace BeeCoding.Services.Judge;
 /// Each job normally deletes its own dir in a finally block; this catches the ones left
 /// behind when the process was killed mid-run.
 /// </summary>
-public sealed class JudgeJanitor : BackgroundService
+public sealed class JudgeJanitor(IOptions<JudgeOptions> opt, ILogger<JudgeJanitor> log) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan MaxAge = TimeSpan.FromHours(1);
 
-    private readonly JudgeOptions _opt;
-    private readonly ILogger<JudgeJanitor> _log;
-
-    public JudgeJanitor(IOptions<JudgeOptions> opt, ILogger<JudgeJanitor> log)
-    {
-        _opt = opt.Value;
-        _log = log;
-    }
+    private readonly JudgeOptions _opt = opt.Value;
+    private readonly ILogger<JudgeJanitor> _log = log;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

@@ -1,0 +1,103 @@
+using BeeCoding.Data;
+using BeeCoding.Models;
+using BeeCoding.Services.Judge;
+using Microsoft.EntityFrameworkCore;
+
+namespace BeeCoding.Services;
+
+/// <summary>
+/// Web-tier side of the judge split: takes verdicts the judge computed (over an in-process
+/// channel, or a Redis pub/sub in the split deployment), writes them to the submission row,
+/// and fires the SignalR notifications + XP award. The judge process itself never touches
+/// the database or SignalR.
+/// </summary>
+public sealed class GradeResultConsumer(
+    IGradeResultStream stream, IServiceScopeFactory scopes, ILogger<GradeResultConsumer> log) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+        await foreach (var r in stream.ReadResultsAsync(ct))
+        {
+            try
+            {
+                if (r.Kind == "practice") await ApplyPracticeAsync(r, ct);
+                else await ApplyBoardAsync(r, ct);
+            }
+            catch (Exception ex)
+            {
+                log.LogError(ex, "failed to apply grade result for {Kind} #{Id}", r.Kind, r.SubmissionId);
+            }
+        }
+    }
+
+    private static Verdict Parse(string s) =>
+        Enum.TryParse<Verdict>(s, out var v) ? v : Verdict.RuntimeError;
+
+    private async Task ApplyBoardAsync(GradeResult r, CancellationToken ct)
+    {
+        using var scope = scopes.CreateScope();
+        var sp = scope.ServiceProvider;
+        var db = sp.GetRequiredService<AppDbContext>();
+        var notifier = sp.GetRequiredService<IBoardNotifier>();
+        var progress = sp.GetRequiredService<ProgressService>();
+
+        var sub = await db.Submissions.Include(s => s.Problem).Include(s => s.User)
+            .FirstOrDefaultAsync(s => s.Id == r.SubmissionId, ct);
+        if (sub is null || sub.Problem is null) return;
+
+        var problem = sub.Problem;
+        var authorName = sub.User?.DisplayName ?? "student";
+
+        sub.Status = SubmissionStatus.Done;
+        sub.Verdict = Parse(r.Verdict);
+        sub.Score = r.Score;
+        sub.RuntimeMs = r.RuntimeMs;
+        sub.MemoryKb = r.MemoryKb;
+        sub.CompilerOutput = r.CompilerOutput;
+        sub.JudgedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        int xp = 0;
+        if (sub.Verdict == Verdict.Accepted && sub.Score >= 1.0)
+            xp = await progress.AwardSolveAsync(sub.UserId, ProgressService.KeyForBoardProblem(problem), problem.Level, ct);
+
+        await notifier.ProgressChangedAsync(problem.BoardId, problem.Id, sub.UserId);
+        await notifier.WallChangedAsync(problem.BoardId);
+        await notifier.SubmissionResultAsync(sub.UserId,
+            Mapping.ToDto(sub, sub.UserId, canSeeCode: true, authorName));
+        if (xp > 0)
+            await notifier.ProgressBumpedAsync(sub.UserId, await progress.GetAsync(sub.UserId, ct));
+    }
+
+    private async Task ApplyPracticeAsync(GradeResult r, CancellationToken ct)
+    {
+        using var scope = scopes.CreateScope();
+        var sp = scope.ServiceProvider;
+        var db = sp.GetRequiredService<AppDbContext>();
+        var notifier = sp.GetRequiredService<IBoardNotifier>();
+        var progress = sp.GetRequiredService<ProgressService>();
+
+        var sub = await db.BankSubmissions.Include(s => s.BankProblem)
+            .FirstOrDefaultAsync(s => s.Id == r.SubmissionId, ct);
+        if (sub is null || sub.BankProblem is null) return;
+
+        var problem = sub.BankProblem;
+
+        sub.Status = SubmissionStatus.Done;
+        sub.Verdict = Parse(r.Verdict);
+        sub.Score = r.Score;
+        sub.RuntimeMs = r.RuntimeMs;
+        sub.MemoryKb = r.MemoryKb;
+        sub.CompilerOutput = r.CompilerOutput;
+        sub.JudgedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        int xp = 0;
+        if (sub.Verdict == Verdict.Accepted && sub.Score >= 1.0)
+            xp = await progress.AwardSolveAsync(sub.UserId, ProgressService.BankKey(problem.Id), problem.Level, ct);
+
+        await notifier.PracticeResultAsync(sub.UserId, Mapping.ToDto(sub));
+        if (xp > 0)
+            await notifier.ProgressBumpedAsync(sub.UserId, await progress.GetAsync(sub.UserId, ct));
+    }
+}

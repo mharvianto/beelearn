@@ -68,11 +68,20 @@ Konfigurasi sudah bisa lewat **environment variable** (`Section__Key`, mis. `Ai_
 
 Arahnya: **pecah jadi dua tier** dan pindahkan semua state ke layanan bersama.
 
-### 2.1 Tier
+### 2.1 Tier — **sudah dipecah jadi 3 project di repo**
 
-- **`beecoding-web`** — Deployment N replika, **stateless**. Serve SPA + REST + hub SignalR.
-- **`beecoding-judge`** — Deployment terpisah. Satu-satunya yang butuh `gcc`/`g++` + sandbox
-  kuat. Ambil job dari broker, kembalikan hasil lewat broker.
+| Project | Isi | Deploy |
+|---|---|---|
+| **`BeeCoding.Core`** | shared lib: `Models/`, `Data/AppDbContext` + `Migrations/`, judge compute (`Native*`, `VerdictEvaluator`, `SourcePolicy`), `IJudgeQueue`/`IJudgeJobSource`/`IGradeResultStream` + `InProcess`/`Redis`, `JudgeWorker` (pure compute), `JudgeJanitor` | — (referenced) |
+| **`BeeCoding`** (web) | SPA + REST + hub SignalR + AI + `GradeResultConsumer` (menulis verdict + notify). Menjalankan `JudgeWorker` di dalam prosesnya **hanya** kalau `Judge:Queue:Backend != redis` | `beecoding-web`, N replika |
+| **`BeeCoding.Judge`** | host console minimal: broker (redis) + `Native*` + `JudgeWorker`. **Tanpa** `AppDbContext`, SignalR, cookie auth, `Ai:ApiKey`, `Admin:Token` | `beecoding-judge`, Deployment terpisah, `RuntimeClass: gvisor`, `egress: deny-all` kecuali broker |
+
+Alur: web `POST /submit` → tulis row `Queued` + **`EnqueueGradeAsync(GradeJob)`** (job membawa
+code + semua testcase + limit) → broker → `BeeCoding.Judge` compile+run → publish `GradeResult`
+(verdict saja) → `GradeResultConsumer` di web menulis verdict + XP + SignalR. Judge tidak
+pernah menyentuh DB.
+
+`dotnet ef` sekarang: `--project BeeCoding.Core --startup-project BeeCoding`.
 
 ### 2.2 Database → PostgreSQL
 

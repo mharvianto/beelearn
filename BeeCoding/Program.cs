@@ -116,25 +116,33 @@ else
 }
 
 // Judge queue (see DEPLOY.md §2.6): in-process Channel, or a Redis broker so the judge can
-// be a separate deployment. One singleton implements both the producer and consumer side.
+// be its own low-privilege deployment (BeeCoding.Judge). One singleton implements the
+// producer side, the job-source side, and the grade-result stream the web tier reads.
 if (judgeOpt.Queue.UseRedis)
 {
     builder.Services.AddSingleton<RedisJudgeQueue>();
     builder.Services.AddSingleton<IJudgeQueue>(sp => sp.GetRequiredService<RedisJudgeQueue>());
     builder.Services.AddSingleton<IJudgeJobSource>(sp => sp.GetRequiredService<RedisJudgeQueue>());
+    builder.Services.AddSingleton<IGradeResultStream>(sp => sp.GetRequiredService<RedisJudgeQueue>());
 }
 else
 {
     builder.Services.AddSingleton<InProcessJudgeQueue>();
     builder.Services.AddSingleton<IJudgeQueue>(sp => sp.GetRequiredService<InProcessJudgeQueue>());
     builder.Services.AddSingleton<IJudgeJobSource>(sp => sp.GetRequiredService<InProcessJudgeQueue>());
+    builder.Services.AddSingleton<IGradeResultStream>(sp => sp.GetRequiredService<InProcessJudgeQueue>());
 }
 
 builder.Services.AddSingleton<StatementImageService>();
 builder.Services.AddSingleton<RateLimiter>();
 builder.Services.AddSingleton<LoginThrottle>();
 builder.Services.AddSingleton<IBoardNotifier, BoardNotifier>();
-builder.Services.AddHostedService<JudgeWorker>();
+
+// The web tier always applies verdicts + notifies. It runs the compute worker itself only
+// in the in-process setup; with the Redis broker, BeeCoding.Judge does the compiling/running.
+builder.Services.AddHostedService<GradeResultConsumer>();
+if (!judgeOpt.Queue.UseRedis)
+    builder.Services.AddHostedService<JudgeWorker>();
 builder.Services.AddHostedService<JudgeJanitor>();
 
 builder.Services.AddScoped<VisibilityService>();

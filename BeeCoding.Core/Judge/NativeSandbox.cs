@@ -17,16 +17,10 @@ public record ExecResult(
 /// Executes a compiled program under the C "runner" helper (rlimits + wait4),
 /// optionally wrapped in bubblewrap for filesystem isolation when available.
 /// </summary>
-public class NativeSandbox
+public class NativeSandbox(NativeToolchain tc, ILogger<NativeSandbox> log)
 {
-    private readonly NativeToolchain _tc;
-    private readonly ILogger<NativeSandbox> _log;
-
-    public NativeSandbox(NativeToolchain tc, ILogger<NativeSandbox> log)
-    {
-        _tc = tc;
-        _log = log;
-    }
+    private readonly NativeToolchain _tc = tc;
+    private readonly ILogger<NativeSandbox> _log = log;
 
     public async Task<ExecResult> ExecuteAsync(
         string workDir, string exePath, string stdin,

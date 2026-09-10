@@ -7,22 +7,16 @@ namespace BeeCoding.Services.Judge;
 /// Locates gcc/g++, builds the small C "runner" helper (fork + setrlimit + wait4),
 /// and probes whether bubblewrap can create namespaces in this environment.
 /// </summary>
-public class NativeToolchain
+public class NativeToolchain(IOptions<JudgeOptions> options, ILogger<NativeToolchain> log)
 {
-    private readonly ILogger<NativeToolchain> _log;
-    public JudgeOptions Options { get; }
+    private readonly ILogger<NativeToolchain> _log = log;
+    public JudgeOptions Options { get; } = options.Value;
 
     public string GccPath { get; private set; } = "gcc";
     public string GppPath { get; private set; } = "g++";
     public string RunnerPath { get; private set; } = "";
     public bool BwrapUsable { get; private set; }
     public string BwrapPath { get; private set; } = "bwrap";
-
-    public NativeToolchain(IOptions<JudgeOptions> options, ILogger<NativeToolchain> log)
-    {
-        Options = options.Value;
-        _log = log;
-    }
 
     private bool _initialized;
 
