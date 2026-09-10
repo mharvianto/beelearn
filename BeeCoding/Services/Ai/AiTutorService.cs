@@ -360,12 +360,16 @@ Rules:
 - The problem must be solvable in {{language}} and read a clearly specified stdin format.
 - Provide a CORRECT reference solution in {{language}} that reads exactly that format and
   prints exactly the required output. It must run in well under 1 second on every test.
-- Provide EXACTLY {{count}} tests. Mark the first 1–2 as isSample:true (small, will be shown
-  to students); the rest hidden, deliberately covering edge cases (minimum / empty, maximum
-  bounds within the stated constraints, negatives, zeros, ties, all-same, ...).
-- This is for teaching, NOT stress-testing: keep constraints modest (e.g. array length
-  <= 200, values fit in int) and EVERY test's stdin under ~1 KB. Never emit thousands of
-  numbers.
+- Provide EXACTLY {{count}} tests. Mark the first 1–2 as isSample:true (small, shown to
+  students); the rest hidden.
+- The tests must be DISTINCT and each cover a DIFFERENT situation — no two may have the same
+  stdin, and don't just resize the same shape. Span cases like: the stated minimum / empty,
+  a single element, the stated maximum size, already in the target order, reverse order,
+  random order, all values equal, negatives mixed with positives, zeros, duplicates, the
+  extreme values allowed by the constraints. AT MOST ONE "all the same value" test.
+- This is for teaching, NOT stress-testing: keep sizes modest (e.g. array length <= 50 for
+  most tests, the largest maybe near the stated bound) and EVERY test's stdin under ~1 KB.
+  Never emit hundreds of identical numbers.
 - Do NOT include expected outputs — the judge computes them by running your reference
   solution, so the reference MUST be right.
 - Statement in {{(lang == "en" ? "English" : "Bahasa Indonesia")}}, with clear "Input",

@@ -139,11 +139,14 @@ public class AiController : ApiControllerBase
             var built = new List<(string Stdin, string Expected, bool IsSample)>();
 
             int i = 0;
+            var seenStdin = new HashSet<string>();
             foreach (var t in gp.Tests.Take(15))
             {
-                // teaching data, not a stress test — drop any oversized input the model slipped in
-                if ((t.Stdin ?? "").Length > 16_000) continue;
-                var run = new RunJob(refLang, gp.ReferenceSolution, t.Stdin ?? "", gp.TimeLimitMs, gp.MemoryLimitKb,
+                var stdin = t.Stdin ?? "";
+                // teaching data, not a stress test — drop oversized inputs and exact duplicates
+                if (stdin.Length > 16_000) continue;
+                if (!seenStdin.Add(stdin.Replace("\r\n", "\n").Trim())) continue;
+                var run = new RunJob(refLang, gp.ReferenceSolution, stdin, gp.TimeLimitMs, gp.MemoryLimitKb,
                     new TaskCompletionSource<RunResultDto>(TaskCreationOptions.RunContinuationsAsynchronously));
                 RunResultDto res;
                 try { res = await queue.EnqueueRunAsync(run, ct); }
@@ -154,7 +157,7 @@ public class AiController : ApiControllerBase
                 if (res.TimedOut || res.Signal != 0 || res.ExitCode != 0)
                 { Fail($"The AI's reference solution failed on test #{i + 1} (signal {res.Signal}, exit {res.ExitCode}) — try again or rephrase.", stderr: res.Stderr); return; }
 
-                built.Add((t.Stdin ?? "", res.Stdout ?? "", t.IsSample));
+                built.Add((stdin, res.Stdout ?? "", t.IsSample));
                 i++;
             }
             if (built.Count < 2) { Fail("The AI didn't produce enough usable tests — try again."); return; }
