@@ -8,7 +8,7 @@ namespace BeeCoding.Services.Judge;
 
 public class JudgeWorker : BackgroundService
 {
-    private readonly JudgeQueue _queue;
+    private readonly IJudgeJobSource _source;
     private readonly IServiceScopeFactory _scopes;
     private readonly NativeCompiler _compiler;
     private readonly NativeSandbox _sandbox;
@@ -18,11 +18,11 @@ public class JudgeWorker : BackgroundService
     private readonly ILogger<JudgeWorker> _log;
 
     public JudgeWorker(
-        JudgeQueue queue, IServiceScopeFactory scopes, NativeCompiler compiler,
+        IJudgeJobSource source, IServiceScopeFactory scopes, NativeCompiler compiler,
         NativeSandbox sandbox, IBoardNotifier notifier, NativeToolchain toolchain,
         IOptions<JudgeOptions> opt, ILogger<JudgeWorker> log)
     {
-        _queue = queue;
+        _source = source;
         _scopes = scopes;
         _compiler = compiler;
         _sandbox = sandbox;
@@ -37,7 +37,7 @@ public class JudgeWorker : BackgroundService
         _toolchain.Initialize();
         using var slots = new SemaphoreSlim(_opt.MaxConcurrent);
 
-        await foreach (var job in _queue.Reader.ReadAllAsync(stoppingToken))
+        await foreach (var job in _source.ReadAllAsync(stoppingToken))
         {
             await slots.WaitAsync(stoppingToken);
             _ = Task.Run(async () =>
@@ -47,7 +47,7 @@ public class JudgeWorker : BackgroundService
                 {
                     _log.LogError(ex, "judge job crashed");
                     if (job is RunJob rj)
-                        rj.Completion.TrySetResult(new RunResultDto(false, "internal judge error", "", "", 0, 0, false, 0, 0));
+                        await _source.ReportRunResultAsync(rj, new RunResultDto(false, "internal judge error", "", "", 0, 0, false, 0, 0));
                 }
                 finally { slots.Release(); }
             }, stoppingToken);
@@ -118,7 +118,7 @@ public class JudgeWorker : BackgroundService
             var compile = await _compiler.CompileAsync(dir, job.Language, job.Code, ct);
             if (!compile.Ok)
             {
-                job.Completion.TrySetResult(new RunResultDto(false, compile.Output, "", "", 0, 0, false, 0, 0));
+                await _source.ReportRunResultAsync(job, new RunResultDto(false, compile.Output, "", "", 0, 0, false, 0, 0));
                 return;
             }
 
@@ -126,7 +126,7 @@ public class JudgeWorker : BackgroundService
                 dir, compile.ExePath!, job.Stdin ?? "", job.TimeLimitMs, job.MemoryLimitKb, ct);
             var verdict = VerdictEvaluator.ClassifyRun(exec, job.TimeLimitMs, job.MemoryLimitKb);
 
-            job.Completion.TrySetResult(new RunResultDto(
+            await _source.ReportRunResultAsync(job, new RunResultDto(
                 true, compile.Output,
                 exec.Stdout, exec.Stderr,
                 exec.WallMs, exec.PeakKb,

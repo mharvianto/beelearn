@@ -36,7 +36,7 @@ public class AiController : ApiControllerBase
     private readonly AiTutorService _ai;
     private readonly AiUsageService _usage;
     private readonly AiHintProgressService _prog;
-    private readonly JudgeQueue _queue;
+    private readonly IJudgeQueue _queue;
     private readonly AiOptions _opt;
     private readonly AiGenerationJobs _jobs;
     private readonly IServiceScopeFactory _scopes;
@@ -45,7 +45,7 @@ public class AiController : ApiControllerBase
     private static readonly ConcurrentDictionary<int, long> _last = new();
 
     public AiController(AppDbContext db, BoardService boards, AiTutorService ai,
-        AiUsageService usage, AiHintProgressService prog, JudgeQueue queue, IOptions<AiOptions> opt,
+        AiUsageService usage, AiHintProgressService prog, IJudgeQueue queue, IOptions<AiOptions> opt,
         AiGenerationJobs jobs, IServiceScopeFactory scopes, ILogger<AiController> log)
     {
         _db = db;
@@ -126,7 +126,7 @@ public class AiController : ApiControllerBase
             var db = sp.GetRequiredService<AppDbContext>();
             var ai = sp.GetRequiredService<AiTutorService>();
             var usage = sp.GetRequiredService<AiUsageService>();
-            var queue = sp.GetRequiredService<JudgeQueue>();
+            var queue = sp.GetRequiredService<IJudgeQueue>();
             var ct = CancellationToken.None;   // detached from the original request
 
             AiTutorService.AiGenResult gen;
@@ -146,10 +146,8 @@ public class AiController : ApiControllerBase
                 // teaching data, not a stress test — drop oversized inputs and exact duplicates
                 if (stdin.Length > 16_000) continue;
                 if (!seenStdin.Add(stdin.Replace("\r\n", "\n").Trim())) continue;
-                var run = new RunJob(refLang, gp.ReferenceSolution, stdin, gp.TimeLimitMs, gp.MemoryLimitKb,
-                    new TaskCompletionSource<RunResultDto>(TaskCreationOptions.RunContinuationsAsynchronously));
                 RunResultDto res;
-                try { res = await queue.EnqueueRunAsync(run, ct); }
+                try { res = await queue.EnqueueRunAsync(refLang, gp.ReferenceSolution, stdin, gp.TimeLimitMs, gp.MemoryLimitKb, ct); }
                 catch { Fail("Timed out validating the generated problem."); return; }
 
                 if (!res.CompileOk)
@@ -242,7 +240,7 @@ public class AiController : ApiControllerBase
             var db = sp.GetRequiredService<AppDbContext>();
             var ai = sp.GetRequiredService<AiTutorService>();
             var usage = sp.GetRequiredService<AiUsageService>();
-            var queue = sp.GetRequiredService<JudgeQueue>();
+            var queue = sp.GetRequiredService<IJudgeQueue>();
             var ct = CancellationToken.None;
 
             var problem = await db.BankProblems.Include(b => b.TestCases).Include(b => b.Owner)
@@ -264,10 +262,8 @@ public class AiController : ApiControllerBase
             // 1) the new reference must reproduce every existing sample
             foreach (var (sIn, sExp) in samples)
             {
-                var chk = new RunJob(refLang, gen.ReferenceSolution, sIn, problem.TimeLimitMs, problem.MemoryLimitKb,
-                    new TaskCompletionSource<RunResultDto>(TaskCreationOptions.RunContinuationsAsynchronously));
                 RunResultDto r;
-                try { r = await queue.EnqueueRunAsync(chk, ct); }
+                try { r = await queue.EnqueueRunAsync(refLang, gen.ReferenceSolution, sIn, problem.TimeLimitMs, problem.MemoryLimitKb, ct); }
                 catch { Fail("Timed out validating the new tests."); return; }
                 if (!r.CompileOk) { Fail("The AI's reference solution didn't compile — try again.", compilerOutput: r.CompilerOutput); return; }
                 if (r.TimedOut || r.Signal != 0 || r.ExitCode != 0)
@@ -283,10 +279,8 @@ public class AiController : ApiControllerBase
             {
                 if (inp.Length > 16_000) continue;
                 if (!seen.Add(inp.Replace("\r\n", "\n").Trim())) continue;
-                var run = new RunJob(refLang, gen.ReferenceSolution, inp, problem.TimeLimitMs, problem.MemoryLimitKb,
-                    new TaskCompletionSource<RunResultDto>(TaskCreationOptions.RunContinuationsAsynchronously));
                 RunResultDto r;
-                try { r = await queue.EnqueueRunAsync(run, ct); }
+                try { r = await queue.EnqueueRunAsync(refLang, gen.ReferenceSolution, inp, problem.TimeLimitMs, problem.MemoryLimitKb, ct); }
                 catch { Fail("Timed out validating the new tests."); return; }
                 if (!r.CompileOk) { Fail("The AI's reference solution didn't compile — try again.", compilerOutput: r.CompilerOutput); return; }
                 if (r.TimedOut || r.Signal != 0 || r.ExitCode != 0) continue;   // skip an input the reference can't handle

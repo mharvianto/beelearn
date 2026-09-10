@@ -21,7 +21,7 @@ tiga pertanyaan:
 | Realtime | **SignalR** in-memory (tanpa backplane) | Pesan dari pod A tidak sampai ke klien di pod B |
 | Live draft / lecture / presence | `DraftStore`, `LectureStore`, `PresenceTracker` — singleton memori | Murid di pod A & guru di pod B tidak saling lihat |
 | Job generate/regenerate soal AI | `AiGenerationJobs` — `ConcurrentDictionary` memori | Polling `GET /api/ai/generate-problem/{id}` bisa kena pod yang tidak punya job itu |
-| Judge | `JudgeQueue` = `Channel<JudgeJob>` in-process, `JudgeWorker` `BackgroundService` | Kode murid jalan di container web; tiap pod web butuh toolchain + sandbox |
+| Judge | `IJudgeQueue` — `inproc` (`Channel<JudgeJob>`) default, `redis` broker opsional; `JudgeWorker` `BackgroundService` | Dengan `inproc`, kode murid jalan di container web & tiap pod butuh toolchain; `redis` memungkinkan judge jadi Deployment terpisah |
 | Throttle / cache | `LoginThrottle`, `RateLimiter`, throttle AI, cache rekomendasi — memori | Limit jadi per-pod (lebih longgar); cache tidak dibagi |
 | Cookie auth | Data Protection keys **default** (folder efemeral per proses) | Restart pod / pod baru → semua logout; cookie pod A ditolak pod B |
 | clangd LSP | 1 proses clangd per koneksi `/lsp/cpp`, ~1–2 GB RAM | Stateful, rakus memori; perlu routing sticky |
@@ -148,9 +148,37 @@ Jangan jalankan binary murid di pod biasa.
   lepas bwrap.
 - **NetworkPolicy**: pod judge `egress: deny-all`.
 - **Scratch**: `Judge__WorkRoot` → `emptyDir` (boleh `medium: Memory`), **bukan** PVC.
-- **Antrian**: ganti `JudgeQueue` (`Channel<JudgeJob>`) dengan broker — **Redis Streams**,
-  RabbitMQ, atau **Azure Service Bus**. `JudgeWorker` consume dari broker; hasil di-publish
-  balik → `beecoding-web` relay lewat SignalR.
+- **Antrian — abstraksinya sudah ada di repo.** `IJudgeQueue` (produser: controller) +
+  `IJudgeJobSource` (konsumer: `JudgeWorker`), dua implementasi:
+
+  | `Judge:Queue:Backend` | Implementasi | |
+  |---|---|---|
+  | `inproc` (default) | `InProcessJudgeQueue` — `Channel<JudgeJob>` + registry `CorrelationId → TaskCompletionSource` untuk balasan Run | Single node |
+  | `redis` | `RedisJudgeQueue` — job di **Redis list** (`RPUSH`/`LPOP`), balasan Run lewat **pub/sub** channel `{prefix}run-results` yang di-korelasikan `CorrelationId` | Judge sebagai Deployment terpisah |
+
+  ```jsonc
+  "Judge": { "Queue": {
+    "Backend": "redis",
+    "RedisConnectionString": null,   // null = pakai multiplexer milik Realtime
+    "KeyPrefix": "bc:judge:",
+    "RunReplyTimeoutSeconds": 60,
+    "PollMs": 200
+  } }
+  ```
+
+  `RunJob` tidak lagi membawa `TaskCompletionSource` (diganti `CorrelationId`) supaya bisa
+  melewati broker. Balasan hasil Submit tetap lewat `IBoardNotifier` (SignalR) di sisi yang
+  memproses.
+
+  **Catatan operasional (belum dikeraskan):**
+  - `LPOP` = *at-most-once* — job yang sudah di-pop lalu pod judge crash **hilang**. Untuk
+    produksi ganti ke **Redis Streams + consumer group** (`XREADGROUP`/`XACK`) — antarmukanya
+    tidak berubah.
+  - Job Submit harus **idempotent** (aman kalau ter-judge dua kali) — `ProcessSubmissionAsync`
+    menimpa verdict, jadi aman.
+  - Kalau judge jadi proses terpisah, ia butuh `AppDbContext` (koneksi Postgres) **dan**
+    `IBoardNotifier` → yang berarti terhubung ke **SignalR backplane** (§2.3), atau judge
+    mem-publish pesan "notify" yang di-relay `beecoding-web`.
 - **Autoscale**: HPA/**KEDA** berdasarkan panjang antrian broker. `Judge__MaxConcurrent` per
   pod = jumlah core yang dialokasikan.
 - **Graceful shutdown**: `preStop` + `IHostApplicationLifetime` untuk menuntaskan job
@@ -240,8 +268,8 @@ Urutan prioritas — **tanpa 1–4, replika kedua langsung merusak data / memutu
 3. **Data Protection keys** shared (Redis / Blob+Key Vault) + `SetApplicationName`.
 4. **Externalisasi state memori** ke Redis: draft/lecture/presence (**sudah** — set
    `Realtime:Backend=redis`), lalu `AiGenerationJobs`, throttle & cache.
-5. **Judge → broker + worker pool terpisah** dengan isolasi gVisor/Kata; hasil dikembalikan
-   lewat broker.
+5. **Judge → broker** (`Judge:Queue:Backend=redis` — **sudah ada**) + worker pool terpisah
+   dengan isolasi gVisor/Kata. (Upgrade: list → Redis Streams untuk at-least-once.)
 6. **Sticky session OFF** setelah backplane ada (atau `skipNegotiation` + WS).
 7. **clangd**: `Lsp__Enabled=false`, atau pool khusus dengan routing sticky.
 8. **Health checks** (`/health`, `/health/ready` — sudah ada) + probe + graceful shutdown (drain job judge in-flight).
@@ -251,7 +279,7 @@ Urutan prioritas — **tanpa 1–4, replika kedua langsung merusak data / memutu
 ### Tambahan kode yang diperlukan (belum ada di repo)
 
 - ~~Abstraksi `IDraftStore`/`ILectureStore`/`IPresenceTracker` + implementasi Redis~~ — **selesai** (`Realtime:Backend`).
-- `IJudgeQueue` di atas broker (publish job + subscribe hasil) menggantikan `Channel<>`.
+- ~~`IJudgeQueue` di atas broker menggantikan `Channel<>`~~ — **selesai** (`Judge:Queue:Backend`); upgrade list → Streams untuk at-least-once.
 - `IAiJobStore` di atas Redis menggantikan `AiGenerationJobs`.
 - Migrasi mode "run-and-exit" (`dotnet BeeCoding.dll migrate`).
 

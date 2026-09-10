@@ -18,7 +18,7 @@ namespace BeeCoding.Controllers;
 public class PracticeController : ApiControllerBase
 {
     private readonly AppDbContext _db;
-    private readonly JudgeQueue _queue;
+    private readonly IJudgeQueue _queue;
     private readonly RateLimiter _rate;
     private readonly Services.Ai.AiTutorService _ai;
     private readonly Services.Ai.AiUsageService _aiUsage;
@@ -27,7 +27,7 @@ public class PracticeController : ApiControllerBase
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, (long Ts, List<RecommendationDto> Recs)> _aiCache = new();
     private static readonly long AiTtlTicks = TimeSpan.FromMinutes(10).Ticks;
 
-    public PracticeController(AppDbContext db, JudgeQueue queue, RateLimiter rate,
+    public PracticeController(AppDbContext db, IJudgeQueue queue, RateLimiter rate,
         Services.Ai.AiTutorService ai, Services.Ai.AiUsageService aiUsage)
     {
         _db = db;

@@ -31,4 +31,27 @@ public class JudgeOptions
 
     /// <summary>Per-user minimum spacing between run/submit requests.</summary>
     public int RateLimitMs { get; set; } = 1500;
+
+    /// <summary>Where judge jobs travel (see DEPLOY.md §2.6).</summary>
+    public JudgeQueueOptions Queue { get; set; } = new();
+}
+
+public sealed class JudgeQueueOptions
+{
+    /// <summary>"inproc" (default, single node) | "redis" (jobs on a broker; judge can be a
+    /// separate deployment).</summary>
+    public string Backend { get; set; } = "inproc";
+
+    /// <summary>StackExchange.Redis connection string. If null, reuses Realtime's multiplexer.</summary>
+    public string? RedisConnectionString { get; set; }
+
+    public string KeyPrefix { get; set; } = "bc:judge:";
+
+    /// <summary>How long a producer waits for an ad-hoc Run's result before giving up.</summary>
+    public int RunReplyTimeoutSeconds { get; set; } = 60;
+
+    /// <summary>Poll interval when the job list is empty (redis backend).</summary>
+    public int PollMs { get; set; } = 200;
+
+    public bool UseRedis => string.Equals(Backend, "redis", StringComparison.OrdinalIgnoreCase);
 }

@@ -13,13 +13,13 @@ namespace BeeCoding.Controllers;
 [Route("api/run")]
 public class RunController : ApiControllerBase
 {
-    private readonly JudgeQueue _queue;
+    private readonly IJudgeQueue _queue;
     private readonly RateLimiter _rate;
     private readonly JudgeOptions _opt;
     private readonly AppDbContext _db;
     private readonly BoardService _boards;
 
-    public RunController(JudgeQueue queue, RateLimiter rate, IOptions<JudgeOptions> opt,
+    public RunController(IJudgeQueue queue, RateLimiter rate, IOptions<JudgeOptions> opt,
         AppDbContext db, BoardService boards)
     {
         _queue = queue;
@@ -44,16 +44,12 @@ public class RunController : ApiControllerBase
         if (SourcePolicy.Violation(dto.Code, bh, bs) is { } denied)
             return new RunResultDto(false, denied, "", "", 0, 0, false, 0, 0);
 
-        var job = new RunJob(
-            dto.Language, dto.Code, dto.Stdin ?? "",
-            _opt.RunTimeLimitMs, _opt.RunMemoryLimitKb,
-            new TaskCompletionSource<RunResultDto>(TaskCreationOptions.RunContinuationsAsynchronously));
-
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
         try
         {
-            return await _queue.EnqueueRunAsync(job, timeout.Token);
+            return await _queue.EnqueueRunAsync(
+                dto.Language, dto.Code, dto.Stdin ?? "", _opt.RunTimeLimitMs, _opt.RunMemoryLimitKb, timeout.Token);
         }
         catch (OperationCanceledException)
         {

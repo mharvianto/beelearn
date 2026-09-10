@@ -15,12 +15,12 @@ public class SubmissionsController : ApiControllerBase
     private readonly AppDbContext _db;
     private readonly BoardService _boards;
     private readonly VisibilityService _vis;
-    private readonly JudgeQueue _queue;
+    private readonly IJudgeQueue _queue;
     private readonly RateLimiter _rate;
     private readonly IBoardNotifier _notifier;
 
     public SubmissionsController(AppDbContext db, BoardService boards, VisibilityService vis,
-        JudgeQueue queue, RateLimiter rate, IBoardNotifier notifier)
+        IJudgeQueue queue, RateLimiter rate, IBoardNotifier notifier)
     {
         _db = db;
         _boards = boards;

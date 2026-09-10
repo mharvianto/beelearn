@@ -86,18 +86,23 @@ builder.Services.AddSingleton<PasswordService>();
 builder.Services.AddSingleton<NativeToolchain>();
 builder.Services.AddSingleton<NativeCompiler>();
 builder.Services.AddSingleton<NativeSandbox>();
-builder.Services.AddSingleton<JudgeQueue>();
 
-// Ephemeral realtime stores: per-process by default, Redis when Realtime:Backend=redis
-// (shared across web replicas — see DEPLOY.md §2.4).
+// --- Redis: shared by the realtime stores and (optionally) the judge queue ---
 builder.Services.Configure<RealtimeStoreOptions>(builder.Configuration.GetSection("Realtime"));
 var realtimeOpt = builder.Configuration.GetSection("Realtime").Get<RealtimeStoreOptions>() ?? new RealtimeStoreOptions();
+var judgeOpt = builder.Configuration.GetSection("Judge").Get<JudgeOptions>() ?? new JudgeOptions();
+
+string? redisConn = realtimeOpt.UseRedis ? realtimeOpt.RedisConnectionString
+    : judgeOpt.Queue.UseRedis ? judgeOpt.Queue.RedisConnectionString
+    : null;
+if ((realtimeOpt.UseRedis || judgeOpt.Queue.UseRedis) && string.IsNullOrWhiteSpace(redisConn))
+    throw new InvalidOperationException("A 'redis' backend needs a connection string (Realtime:RedisConnectionString or Judge:Queue:RedisConnectionString).");
+if (redisConn is not null)
+    builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConn));
+
+// Ephemeral realtime stores (see DEPLOY.md §2.4)
 if (realtimeOpt.UseRedis)
 {
-    if (string.IsNullOrWhiteSpace(realtimeOpt.RedisConnectionString))
-        throw new InvalidOperationException("Realtime:Backend=redis requires Realtime:RedisConnectionString.");
-    builder.Services.AddSingleton<IConnectionMultiplexer>(
-        _ => ConnectionMultiplexer.Connect(realtimeOpt.RedisConnectionString!));
     builder.Services.AddSingleton<IPresenceTracker, RedisPresenceTracker>();
     builder.Services.AddSingleton<IDraftStore, RedisDraftStore>();
     builder.Services.AddSingleton<ILectureStore, RedisLectureStore>();
@@ -107,6 +112,21 @@ else
     builder.Services.AddSingleton<IPresenceTracker, InMemoryPresenceTracker>();
     builder.Services.AddSingleton<IDraftStore, InMemoryDraftStore>();
     builder.Services.AddSingleton<ILectureStore, InMemoryLectureStore>();
+}
+
+// Judge queue (see DEPLOY.md §2.6): in-process Channel, or a Redis broker so the judge can
+// be a separate deployment. One singleton implements both the producer and consumer side.
+if (judgeOpt.Queue.UseRedis)
+{
+    builder.Services.AddSingleton<RedisJudgeQueue>();
+    builder.Services.AddSingleton<IJudgeQueue>(sp => sp.GetRequiredService<RedisJudgeQueue>());
+    builder.Services.AddSingleton<IJudgeJobSource>(sp => sp.GetRequiredService<RedisJudgeQueue>());
+}
+else
+{
+    builder.Services.AddSingleton<InProcessJudgeQueue>();
+    builder.Services.AddSingleton<IJudgeQueue>(sp => sp.GetRequiredService<InProcessJudgeQueue>());
+    builder.Services.AddSingleton<IJudgeJobSource>(sp => sp.GetRequiredService<InProcessJudgeQueue>());
 }
 
 builder.Services.AddSingleton<StatementImageService>();
