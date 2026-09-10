@@ -38,7 +38,7 @@ public class AiController : ApiControllerBase
     private readonly AiHintProgressService _prog;
     private readonly IJudgeQueue _queue;
     private readonly AiOptions _opt;
-    private readonly AiGenerationJobs _jobs;
+    private readonly IAiJobStore _jobs;
     private readonly IServiceScopeFactory _scopes;
     private readonly ILogger<AiController> _log;
 
@@ -46,7 +46,7 @@ public class AiController : ApiControllerBase
 
     public AiController(AppDbContext db, BoardService boards, AiTutorService ai,
         AiUsageService usage, AiHintProgressService prog, IJudgeQueue queue, IOptions<AiOptions> opt,
-        AiGenerationJobs jobs, IServiceScopeFactory scopes, ILogger<AiController> log)
+        IAiJobStore jobs, IServiceScopeFactory scopes, ILogger<AiController> log)
     {
         _db = db;
         _boards = boards;
@@ -74,13 +74,13 @@ public class AiController : ApiControllerBase
     /// private, returned for review/editing.
     /// </summary>
     [HttpPost("generate-problem")]
-    public IActionResult GenerateProblem(AiGenerateDto dto)
+    public async Task<IActionResult> GenerateProblem(AiGenerateDto dto)
     {
         if (!_ai.Available) return NotFound();
         if (CurrentRole != "Teacher") return StatusCode(StatusCodes.Status403Forbidden, "Teachers only.");
         if (string.IsNullOrWhiteSpace(dto.Idea)) return BadRequest("Describe the idea or topic.");
         if (RateLimited()) return StatusCode(StatusCodes.Status429TooManyRequests, "Give the AI a few seconds.");
-        if (_jobs.RunningFor(UserId) >= 2)
+        if (await _jobs.RunningForAsync(UserId) >= 2)
             return StatusCode(StatusCodes.Status429TooManyRequests, "You already have generations running — wait for those to finish.");
 
         var wantLang = dto.Language is "c" ? "c" : "cpp";
@@ -90,15 +90,15 @@ public class AiController : ApiControllerBase
 
         // The AI call + compiling & running the reference against N tests takes minutes, far
         // longer than a request should hang. Run it detached; the client polls the job id.
-        var job = _jobs.Create(UserId);
+        var job = await _jobs.CreateAsync(UserId);
         _ = Task.Run(() => RunGenerateAsync(job.Id, UserId, dto.Idea!, level, wantLang, count, lang));
         return Accepted(new { jobId = job.Id });
     }
 
     [HttpGet("generate-problem/{id:guid}")]
-    public IActionResult GenerateProblemStatus(Guid id)
+    public async Task<IActionResult> GenerateProblemStatus(Guid id)
     {
-        var job = _jobs.Get(id);
+        var job = await _jobs.GetAsync(id.ToString("N"));
         if (job is null || job.UserId != UserId) return NotFound();
         return job.Status switch
         {
@@ -108,16 +108,10 @@ public class AiController : ApiControllerBase
         };
     }
 
-    private async Task RunGenerateAsync(Guid jobId, int userId, string idea, string level, string wantLang, int count, string lang)
+    private async Task RunGenerateAsync(string jobId, int userId, string idea, string level, string wantLang, int count, string lang)
     {
-        var job = _jobs.Get(jobId);
-        if (job is null) return;
-
-        void Fail(string msg, string? compilerOutput = null, string? stderr = null)
-        {
-            job.Message = msg; job.CompilerOutput = compilerOutput; job.Stderr = stderr;
-            job.Status = "error"; job.Finished = DateTime.UtcNow;
-        }
+        Task Fail(string msg, string? compilerOutput = null, string? stderr = null) =>
+            _jobs.FailAsync(jobId, msg, compilerOutput, stderr);
 
         try
         {
@@ -131,7 +125,7 @@ public class AiController : ApiControllerBase
 
             AiTutorService.AiGenResult gen;
             try { gen = await ai.GenerateProblemAsync(idea, level, wantLang, count, lang, ct); }
-            catch (AiUnavailableException ex) { Fail(ex.Message); return; }
+            catch (AiUnavailableException ex) { await Fail(ex.Message); return; }
             await usage.RecordAsync(userId, gen.PromptTokens, gen.CompletionTokens, ct);
 
             var gp = gen.Problem;
@@ -148,17 +142,17 @@ public class AiController : ApiControllerBase
                 if (!seenStdin.Add(stdin.Replace("\r\n", "\n").Trim())) continue;
                 RunResultDto res;
                 try { res = await queue.EnqueueRunAsync(refLang, gp.ReferenceSolution, stdin, gp.TimeLimitMs, gp.MemoryLimitKb, ct); }
-                catch { Fail("Timed out validating the generated problem."); return; }
+                catch { await Fail("Timed out validating the generated problem."); return; }
 
                 if (!res.CompileOk)
-                { Fail("The AI's reference solution didn't compile — try again or rephrase the idea.", compilerOutput: res.CompilerOutput); return; }
+                { await Fail("The AI's reference solution didn't compile — try again or rephrase the idea.", compilerOutput: res.CompilerOutput); return; }
                 if (res.TimedOut || res.Signal != 0 || res.ExitCode != 0)
-                { Fail($"The AI's reference solution failed on test #{i + 1} (signal {res.Signal}, exit {res.ExitCode}) — try again or rephrase.", stderr: res.Stderr); return; }
+                { await Fail($"The AI's reference solution failed on test #{i + 1} (signal {res.Signal}, exit {res.ExitCode}) — try again or rephrase.", stderr: res.Stderr); return; }
 
                 built.Add((stdin, res.Stdout ?? "", t.IsSample));
                 i++;
             }
-            if (built.Count < 2) { Fail("The AI didn't produce enough usable tests — try again."); return; }
+            if (built.Count < 2) { await Fail("The AI didn't produce enough usable tests — try again."); return; }
 
             if (!built.Any(x => x.IsSample)) built[0] = (built[0].Stdin, built[0].Expected, true);
             if (built.All(x => x.IsSample)) built[^1] = (built[^1].Stdin, built[^1].Expected, false);
@@ -188,14 +182,12 @@ public class AiController : ApiControllerBase
             await db.SaveChangesAsync(ct);
             await db.Entry(problem).Reference(x => x.Owner).LoadAsync(ct);
 
-            job.Result = Mapping.ToDto(problem, userId);
-            job.Status = "done";
-            job.Finished = DateTime.UtcNow;
+            await _jobs.CompleteAsync(jobId, Mapping.ToDto(problem, userId));
         }
         catch (Exception ex)
         {
             _log.LogError(ex, "generate-problem job {Job} failed", jobId);
-            if (job.Status == "running") Fail("Generation failed unexpectedly — try again.");
+            await Fail("Generation failed unexpectedly — try again.");
         }
     }
 
@@ -210,28 +202,22 @@ public class AiController : ApiControllerBase
         if (!_ai.Available) return NotFound();
         if (CurrentRole != "Teacher") return StatusCode(StatusCodes.Status403Forbidden, "Teachers only.");
         if (RateLimited()) return StatusCode(StatusCodes.Status429TooManyRequests, "Give the AI a few seconds.");
-        if (_jobs.RunningFor(UserId) >= 2)
+        if (await _jobs.RunningForAsync(UserId) >= 2)
             return StatusCode(StatusCodes.Status429TooManyRequests, "You already have generations running — wait for those to finish.");
 
         var owns = await _db.BankProblems.AnyAsync(b => b.Id == bankProblemId && b.OwnerId == UserId);
         if (!owns) return NotFound();
 
-        var job = _jobs.Create(UserId);
+        var job = await _jobs.CreateAsync(UserId);
         var n = count is >= 3 and <= 15 ? count.Value : 0;
         _ = Task.Run(() => RunRegenerateAsync(job.Id, UserId, bankProblemId, n));
         return Accepted(new { jobId = job.Id });
     }
 
-    private async Task RunRegenerateAsync(Guid jobId, int userId, int bankProblemId, int count)
+    private async Task RunRegenerateAsync(string jobId, int userId, int bankProblemId, int count)
     {
-        var job = _jobs.Get(jobId);
-        if (job is null) return;
-
-        void Fail(string msg, string? compilerOutput = null, string? stderr = null)
-        {
-            job.Message = msg; job.CompilerOutput = compilerOutput; job.Stderr = stderr;
-            job.Status = "error"; job.Finished = DateTime.UtcNow;
-        }
+        Task Fail(string msg, string? compilerOutput = null, string? stderr = null) =>
+            _jobs.FailAsync(jobId, msg, compilerOutput, stderr);
 
         try
         {
@@ -245,7 +231,7 @@ public class AiController : ApiControllerBase
 
             var problem = await db.BankProblems.Include(b => b.TestCases).Include(b => b.Owner)
                 .FirstOrDefaultAsync(b => b.Id == bankProblemId && b.OwnerId == userId, ct);
-            if (problem is null) { Fail("Problem not found."); return; }
+            if (problem is null) { await Fail("Problem not found."); return; }
 
             var refLang = problem.Language is "c" ? "c" : "cpp";
             var samples = problem.TestCases.Where(t => t.IsSample)
@@ -256,7 +242,7 @@ public class AiController : ApiControllerBase
 
             AiTutorService.AiRegenResult gen;
             try { gen = await ai.RegenerateTestsAsync(problem.StatementMarkdown, refLang, samples, want, ct); }
-            catch (AiUnavailableException ex) { Fail(ex.Message); return; }
+            catch (AiUnavailableException ex) { await Fail(ex.Message); return; }
             await usage.RecordAsync(userId, gen.PromptTokens, gen.CompletionTokens, ct);
 
             // 1) the new reference must reproduce every existing sample
@@ -264,12 +250,12 @@ public class AiController : ApiControllerBase
             {
                 RunResultDto r;
                 try { r = await queue.EnqueueRunAsync(refLang, gen.ReferenceSolution, sIn, problem.TimeLimitMs, problem.MemoryLimitKb, ct); }
-                catch { Fail("Timed out validating the new tests."); return; }
-                if (!r.CompileOk) { Fail("The AI's reference solution didn't compile — try again.", compilerOutput: r.CompilerOutput); return; }
+                catch { await Fail("Timed out validating the new tests."); return; }
+                if (!r.CompileOk) { await Fail("The AI's reference solution didn't compile — try again.", compilerOutput: r.CompilerOutput); return; }
                 if (r.TimedOut || r.Signal != 0 || r.ExitCode != 0)
-                { Fail("The AI's reference solution crashed on a sample — try again.", stderr: r.Stderr); return; }
+                { await Fail("The AI's reference solution crashed on a sample — try again.", stderr: r.Stderr); return; }
                 if (!VerdictEvaluator.OutputMatches(r.Stdout ?? "", sExp))
-                { Fail("The AI's reference disagrees with your sample tests — the statement may be ambiguous. Tighten it and retry."); return; }
+                { await Fail("The AI's reference disagrees with your sample tests — the statement may be ambiguous. Tighten it and retry."); return; }
             }
 
             // 2) run the new inputs through the (now trusted) reference for expected output
@@ -281,12 +267,12 @@ public class AiController : ApiControllerBase
                 if (!seen.Add(inp.Replace("\r\n", "\n").Trim())) continue;
                 RunResultDto r;
                 try { r = await queue.EnqueueRunAsync(refLang, gen.ReferenceSolution, inp, problem.TimeLimitMs, problem.MemoryLimitKb, ct); }
-                catch { Fail("Timed out validating the new tests."); return; }
-                if (!r.CompileOk) { Fail("The AI's reference solution didn't compile — try again.", compilerOutput: r.CompilerOutput); return; }
+                catch { await Fail("Timed out validating the new tests."); return; }
+                if (!r.CompileOk) { await Fail("The AI's reference solution didn't compile — try again.", compilerOutput: r.CompilerOutput); return; }
                 if (r.TimedOut || r.Signal != 0 || r.ExitCode != 0) continue;   // skip an input the reference can't handle
                 fresh.Add((inp, r.Stdout ?? ""));
             }
-            if (fresh.Count < 2) { Fail("The AI didn't produce enough usable new tests — try again."); return; }
+            if (fresh.Count < 2) { await Fail("The AI didn't produce enough usable new tests — try again."); return; }
 
             // replace only the hidden tests; keep samples untouched
             db.BankTestCases.RemoveRange(problem.TestCases.Where(t => !t.IsSample));
@@ -299,14 +285,12 @@ public class AiController : ApiControllerBase
             problem.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
 
-            job.Result = Mapping.ToDto(problem, userId);
-            job.Status = "done";
-            job.Finished = DateTime.UtcNow;
+            await _jobs.CompleteAsync(jobId, Mapping.ToDto(problem, userId));
         }
         catch (Exception ex)
         {
             _log.LogError(ex, "regenerate-tests job {Job} failed", jobId);
-            if (job.Status == "running") Fail("Regenerating tests failed unexpectedly — try again.");
+            await Fail("Regenerating tests failed unexpectedly — try again.");
         }
     }
 

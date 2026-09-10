@@ -8,10 +8,9 @@ public record AiUsageBucketDto(int Calls, long PromptTokens, long CompletionToke
 public record AiUsageDto(AiUsageBucketDto Today, AiUsageBucketDto Month, AiUsageBucketDto AllTime);
 
 /// <summary>Per-user, per-day rollup of AI token consumption.</summary>
-public class AiUsageService
+public class AiUsageService(AppDbContext db)
 {
-    private readonly AppDbContext _db;
-    public AiUsageService(AppDbContext db) => _db = db;
+    private readonly AppDbContext _db = db;
 
     public async Task RecordAsync(int userId, int promptTokens, int completionTokens, CancellationToken ct = default)
     {

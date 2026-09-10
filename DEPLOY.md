@@ -20,7 +20,7 @@ tiga pertanyaan:
 | Database | **SQLite** file `app.db`, migrasi otomatis saat boot | File lock, korupsi kalau ditulis banyak pod; migrasi balapan saat pod boot bareng |
 | Realtime | **SignalR** in-memory (tanpa backplane) | Pesan dari pod A tidak sampai ke klien di pod B |
 | Live draft / lecture / presence | `DraftStore`, `LectureStore`, `PresenceTracker` — singleton memori | Murid di pod A & guru di pod B tidak saling lihat |
-| Job generate/regenerate soal AI | `AiGenerationJobs` — `ConcurrentDictionary` memori | Polling `GET /api/ai/generate-problem/{id}` bisa kena pod yang tidak punya job itu |
+| Job generate/regenerate soal AI | `IAiJobStore` — `InMemory` (default) atau `Redis` (ikut `Realtime:Backend`) | Dengan `memory`, polling `GET /api/ai/generate-problem/{id}` bisa kena pod yang tidak punya job itu |
 | Judge | `IJudgeQueue` — `inproc` (`Channel<JudgeJob>`) default, `redis` broker opsional; `JudgeWorker` `BackgroundService` | Dengan `inproc`, kode murid jalan di container web & tiap pod butuh toolchain; `redis` memungkinkan judge jadi Deployment terpisah |
 | Throttle / cache | `LoginThrottle`, `RateLimiter`, throttle AI, cache rekomendasi — memori | Limit jadi per-pod (lebih longgar); cache tidak dibagi |
 | Cookie auth | Data Protection keys **default** (folder efemeral per proses) | Restart pod / pod baru → semua logout; cookie pod A ditolak pod B |
@@ -116,11 +116,15 @@ Salah satu:
 ```
 
 Kalau `Backend=redis`, `Program.cs` mendaftarkan `IConnectionMultiplexer` singleton
-(`StackExchange.Redis`). Gunakan **Azure Cache for Redis**.
+(`StackExchange.Redis`, dibagi juga ke judge queue). Gunakan **Azure Cache for Redis**.
+
+**Job generate/regenerate soal AI — ikut `Realtime:Backend` yang sama.** `IAiJobStore`:
+`InMemoryAiJobStore` (default) atau `RedisAiJobStore` (blob job `SET` + TTL 30 mnt, set
+`{prefix}aijob:user:{id}` untuk cek batas concurrency per user). Jadi polling
+`GET /api/ai/generate-problem/{id}` kena pod mana pun.
 
 **Belum diabstraksi (kalau butuh > 1 replika):**
 
-- `AiGenerationJobs` → key Redis (atau tabel `ai_jobs`) supaya polling job kena pod mana pun.
 - `LoginThrottle`, `RateLimiter`, throttle AI (`AiController._last`), cache rekomendasi
   (`PracticeController._aiCache`) → Redis, atau terima jadi per-pod (limit lebih longgar).
 
@@ -267,7 +271,8 @@ Urutan prioritas — **tanpa 1–4, replika kedua langsung merusak data / memutu
 2. **SignalR backplane** — Azure SignalR Service (paling mudah) atau Redis.
 3. **Data Protection keys** shared (Redis / Blob+Key Vault) + `SetApplicationName`.
 4. **Externalisasi state memori** ke Redis: draft/lecture/presence (**sudah** — set
-   `Realtime:Backend=redis`), lalu `AiGenerationJobs`, throttle & cache.
+   `Realtime:Backend=redis` — mencakup draft/lecture/presence **dan** `IAiJobStore`), lalu
+   throttle & cache.
 5. **Judge → broker** (`Judge:Queue:Backend=redis` — **sudah ada**) + worker pool terpisah
    dengan isolasi gVisor/Kata. (Upgrade: list → Redis Streams untuk at-least-once.)
 6. **Sticky session OFF** setelah backplane ada (atau `skipNegotiation` + WS).
@@ -280,7 +285,6 @@ Urutan prioritas — **tanpa 1–4, replika kedua langsung merusak data / memutu
 
 - ~~Abstraksi `IDraftStore`/`ILectureStore`/`IPresenceTracker` + implementasi Redis~~ — **selesai** (`Realtime:Backend`).
 - ~~`IJudgeQueue` di atas broker menggantikan `Channel<>`~~ — **selesai** (`Judge:Queue:Backend`); upgrade list → Streams untuk at-least-once.
-- `IAiJobStore` di atas Redis menggantikan `AiGenerationJobs`.
 - Migrasi mode "run-and-exit" (`dotnet BeeCoding.dll migrate`).
 
 ---

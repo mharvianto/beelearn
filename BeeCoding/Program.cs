@@ -79,7 +79,6 @@ builder.Services.AddSingleton<LspEndpoint>();
 // own CancellationTokenSource (Ai:TimeoutSeconds / Ai:GenerateTimeoutSeconds) be the limit.
 builder.Services.AddHttpClient<AiTutorService>(c => c.Timeout = Timeout.InfiniteTimeSpan);
 builder.Services.AddScoped<AiUsageService>();
-builder.Services.AddSingleton<AiGenerationJobs>();
 builder.Services.AddScoped<AiHintProgressService>();
 
 builder.Services.AddSingleton<PasswordService>();
@@ -100,17 +99,19 @@ if ((realtimeOpt.UseRedis || judgeOpt.Queue.UseRedis) && string.IsNullOrWhiteSpa
 if (redisConn is not null)
     builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConn));
 
-// Ephemeral realtime stores (see DEPLOY.md §2.4)
+// Ephemeral realtime stores + the AI-job registry (see DEPLOY.md §2.4)
 if (realtimeOpt.UseRedis)
 {
     builder.Services.AddSingleton<IPresenceTracker, RedisPresenceTracker>();
     builder.Services.AddSingleton<IDraftStore, RedisDraftStore>();
     builder.Services.AddSingleton<ILectureStore, RedisLectureStore>();
+    builder.Services.AddSingleton<IAiJobStore, RedisAiJobStore>();
 }
 else
 {
     builder.Services.AddSingleton<IPresenceTracker, InMemoryPresenceTracker>();
     builder.Services.AddSingleton<IDraftStore, InMemoryDraftStore>();
+    builder.Services.AddSingleton<IAiJobStore, InMemoryAiJobStore>();
     builder.Services.AddSingleton<ILectureStore, InMemoryLectureStore>();
 }
 
