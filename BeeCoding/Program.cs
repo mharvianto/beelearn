@@ -4,6 +4,8 @@ using BeeCoding.Services;
 using BeeCoding.Services.Ai;
 using BeeCoding.Services.Judge;
 using BeeCoding.Services.Lsp;
+using BeeCoding.Services.Realtime;
+using StackExchange.Redis;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -85,9 +87,28 @@ builder.Services.AddSingleton<NativeToolchain>();
 builder.Services.AddSingleton<NativeCompiler>();
 builder.Services.AddSingleton<NativeSandbox>();
 builder.Services.AddSingleton<JudgeQueue>();
-builder.Services.AddSingleton<PresenceTracker>();
-builder.Services.AddSingleton<DraftStore>();
-builder.Services.AddSingleton<LectureStore>();
+
+// Ephemeral realtime stores: per-process by default, Redis when Realtime:Backend=redis
+// (shared across web replicas — see DEPLOY.md §2.4).
+builder.Services.Configure<RealtimeStoreOptions>(builder.Configuration.GetSection("Realtime"));
+var realtimeOpt = builder.Configuration.GetSection("Realtime").Get<RealtimeStoreOptions>() ?? new RealtimeStoreOptions();
+if (realtimeOpt.UseRedis)
+{
+    if (string.IsNullOrWhiteSpace(realtimeOpt.RedisConnectionString))
+        throw new InvalidOperationException("Realtime:Backend=redis requires Realtime:RedisConnectionString.");
+    builder.Services.AddSingleton<IConnectionMultiplexer>(
+        _ => ConnectionMultiplexer.Connect(realtimeOpt.RedisConnectionString!));
+    builder.Services.AddSingleton<IPresenceTracker, RedisPresenceTracker>();
+    builder.Services.AddSingleton<IDraftStore, RedisDraftStore>();
+    builder.Services.AddSingleton<ILectureStore, RedisLectureStore>();
+}
+else
+{
+    builder.Services.AddSingleton<IPresenceTracker, InMemoryPresenceTracker>();
+    builder.Services.AddSingleton<IDraftStore, InMemoryDraftStore>();
+    builder.Services.AddSingleton<ILectureStore, InMemoryLectureStore>();
+}
+
 builder.Services.AddSingleton<StatementImageService>();
 builder.Services.AddSingleton<RateLimiter>();
 builder.Services.AddSingleton<LoginThrottle>();

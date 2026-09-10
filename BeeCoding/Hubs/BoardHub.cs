@@ -12,11 +12,11 @@ namespace BeeCoding.Hubs;
 public class BoardHub : Hub
 {
     private readonly AppDbContext _db;
-    private readonly PresenceTracker _presence;
-    private readonly DraftStore _drafts;
-    private readonly LectureStore _lectures;
+    private readonly IPresenceTracker _presence;
+    private readonly IDraftStore _drafts;
+    private readonly ILectureStore _lectures;
 
-    public BoardHub(AppDbContext db, PresenceTracker presence, DraftStore drafts, LectureStore lectures)
+    public BoardHub(AppDbContext db, IPresenceTracker presence, IDraftStore drafts, ILectureStore lectures)
     {
         _db = db;
         _presence = presence;
@@ -41,16 +41,16 @@ public class BoardHub : Hub
         await Groups.AddToGroupAsync(Context.ConnectionId, BoardGroup(boardId));
         if (isStaff) await Groups.AddToGroupAsync(Context.ConnectionId, StaffGroup(boardId));
 
-        _presence.Add(Context.ConnectionId, boardId, UserId, name, isStaff);
-        await Clients.Group(BoardGroup(boardId)).SendAsync("presence", _presence.ForBoard(boardId));
+        await _presence.AddAsync(Context.ConnectionId, boardId, UserId, name, isStaff);
+        await Clients.Group(BoardGroup(boardId)).SendAsync("presence", await _presence.ForBoardAsync(boardId));
     }
 
     public async Task LeaveBoard(int boardId)
     {
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, BoardGroup(boardId));
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, StaffGroup(boardId));
-        _presence.Remove(Context.ConnectionId);
-        await Clients.Group(BoardGroup(boardId)).SendAsync("presence", _presence.ForBoard(boardId));
+        await _presence.RemoveAsync(Context.ConnectionId);
+        await Clients.Group(BoardGroup(boardId)).SendAsync("presence", await _presence.ForBoardAsync(boardId));
     }
 
     /// <summary>
@@ -65,7 +65,7 @@ public class BoardHub : Hub
         if (code is { Length: > 200_000 }) code = code[..200_000];
 
         var name = Context.User!.FindFirstValue(ClaimTypes.Name) ?? "user";
-        var draft = _drafts.Set(boardId, problemId, UserId, name, code ?? "");
+        var draft = await _drafts.SetAsync(boardId, problemId, UserId, name, code ?? "");
 
         // Staff always see live code; peers see it too unless exam mode / teacher-hidden /
         // the student hid this problem's work. (Staff are in BoardGroup, so in the visible
@@ -89,12 +89,12 @@ public class BoardHub : Hub
         if (stdin is { Length: > 20_000 }) stdin = stdin[..20_000];
 
         var name = Context.User!.FindFirstValue(ClaimTypes.Name) ?? "teacher";
-        var lec = _lectures.Set(boardId, problemId, code ?? "", language is "c" or "cpp" ? language : "cpp", name, stdin ?? "");
+        var lec = await _lectures.SetAsync(boardId, problemId, code ?? "", language is "c" or "cpp" ? language : "cpp", name, stdin ?? "");
         await Clients.Group(BoardGroup(boardId)).SendAsync("lectureUpdated", lec);
     }
 
-    public Task<Lecture?> GetLecture(int boardId, int problemId) =>
-        Task.FromResult(_lectures.Get(boardId, problemId));
+    public async Task<Lecture?> GetLecture(int boardId, int problemId) =>
+        await _lectures.GetAsync(boardId, problemId);
 
     private async Task<bool> DraftVisibleToPeersAsync(int boardId, int problemId, BoardMembership me)
     {
@@ -113,7 +113,7 @@ public class BoardHub : Hub
             .FirstOrDefaultAsync(m => m.BoardId == boardId && m.UserId == UserId);
         if (me is null) return Enumerable.Empty<Draft>();
         if (me.Role is MembershipRole.Owner or MembershipRole.Teacher)
-            return _drafts.ForBoard(boardId);
+            return await _drafts.ForBoardAsync(boardId);
 
         if (me.Board!.ExamMode) return Enumerable.Empty<Draft>();
         var hiddenUserIds = await _db.BoardMemberships
@@ -124,7 +124,7 @@ public class BoardHub : Hub
             .Select(p => new { p.ProblemId, p.UserId }).ToListAsync();
         var hiddenPostSet = hiddenPosts.Select(p => (p.ProblemId, p.UserId)).ToHashSet();
 
-        return _drafts.ForBoard(boardId)
+        return (await _drafts.ForBoardAsync(boardId))
             .Where(d => d.UserId != UserId
                         && !hiddenUserIds.Contains(d.UserId)
                         && !hiddenPostSet.Contains((d.ProblemId, d.UserId)));
@@ -132,9 +132,9 @@ public class BoardHub : Hub
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        var boardId = _presence.Remove(Context.ConnectionId);
+        var boardId = await _presence.RemoveAsync(Context.ConnectionId);
         if (boardId is int b)
-            await Clients.Group(BoardGroup(b)).SendAsync("presence", _presence.ForBoard(b));
+            await Clients.Group(BoardGroup(b)).SendAsync("presence", await _presence.ForBoardAsync(b));
         await base.OnDisconnectedAsync(exception);
     }
 }

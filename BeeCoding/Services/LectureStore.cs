@@ -5,26 +5,35 @@ namespace BeeCoding.Services;
 public record Lecture(int BoardId, int ProblemId, string Code, string Language, string TeacherName, DateTime UpdatedAt, string Stdin = "");
 
 /// <summary>
-/// In-memory, ephemeral store of the teacher's live editor buffer per (board, problem) while
-/// lecturing mode is on. Streamed read-only to students. Not persisted.
+/// Ephemeral store of the teacher's live editor buffer per (board, problem) while lecturing
+/// mode is on. Streamed read-only to students. Not durable.
 /// </summary>
-public class LectureStore
+public interface ILectureStore
+{
+    ValueTask<Lecture> SetAsync(int boardId, int problemId, string code, string language, string teacherName, string stdin = "");
+    ValueTask<Lecture?> GetAsync(int boardId, int problemId);
+    ValueTask RemoveForBoardAsync(int boardId);
+}
+
+/// <summary>Per-process implementation.</summary>
+public sealed class InMemoryLectureStore : ILectureStore
 {
     private readonly ConcurrentDictionary<(int boardId, int problemId), Lecture> _lectures = new();
 
-    public Lecture Set(int boardId, int problemId, string code, string language, string teacherName, string stdin = "")
+    public ValueTask<Lecture> SetAsync(int boardId, int problemId, string code, string language, string teacherName, string stdin = "")
     {
         var l = new Lecture(boardId, problemId, code, language, teacherName, DateTime.UtcNow, stdin);
         _lectures[(boardId, problemId)] = l;
-        return l;
+        return ValueTask.FromResult(l);
     }
 
-    public Lecture? Get(int boardId, int problemId) =>
-        _lectures.TryGetValue((boardId, problemId), out var l) ? l : null;
+    public ValueTask<Lecture?> GetAsync(int boardId, int problemId) =>
+        ValueTask.FromResult(_lectures.TryGetValue((boardId, problemId), out var l) ? l : null);
 
-    public void RemoveForBoard(int boardId)
+    public ValueTask RemoveForBoardAsync(int boardId)
     {
         foreach (var key in _lectures.Where(kv => kv.Value.BoardId == boardId).Select(kv => kv.Key).ToList())
             _lectures.TryRemove(key, out _);
+        return ValueTask.CompletedTask;
     }
 }

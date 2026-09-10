@@ -96,9 +96,30 @@ Salah satu:
 
 ### 2.4 State memori → Redis
 
-Ganti singleton berikut dengan implementasi yang didukung Redis (Azure Cache for Redis):
+**Live draft / lecture / presence — sudah ada abstraksinya di repo.**
+`IDraftStore` / `ILectureStore` / `IPresenceTracker` dengan dua implementasi:
 
-- `DraftStore`, `LectureStore`, `PresenceTracker` → hash/key Redis dengan TTL.
+| `Realtime:Backend` | Implementasi | Kapan |
+|---|---|---|
+| `memory` (default) | `InMemory*` — `ConcurrentDictionary` per proses | Single node |
+| `redis` | `Redis*` — hash per board + pointer conn→board, TTL `Realtime:TtlSeconds` (default 12 jam, di-refresh tiap write) | Multi-replika |
+
+```jsonc
+// appsettings.json / env
+"Realtime": {
+  "Backend": "redis",
+  "RedisConnectionString": "your-redis:6380,password=...,ssl=True,abortConnect=False",
+  "KeyPrefix": "bc:",
+  "TtlSeconds": 43200
+}
+// env: Realtime__Backend=redis  Realtime__RedisConnectionString=...
+```
+
+Kalau `Backend=redis`, `Program.cs` mendaftarkan `IConnectionMultiplexer` singleton
+(`StackExchange.Redis`). Gunakan **Azure Cache for Redis**.
+
+**Belum diabstraksi (kalau butuh > 1 replika):**
+
 - `AiGenerationJobs` → key Redis (atau tabel `ai_jobs`) supaya polling job kena pod mana pun.
 - `LoginThrottle`, `RateLimiter`, throttle AI (`AiController._last`), cache rekomendasi
   (`PracticeController._aiCache`) → Redis, atau terima jadi per-pod (limit lebih longgar).
@@ -217,8 +238,8 @@ Urutan prioritas — **tanpa 1–4, replika kedua langsung merusak data / memutu
 1. **DB relasional** (PostgreSQL) + migrasi via Job/init-container.
 2. **SignalR backplane** — Azure SignalR Service (paling mudah) atau Redis.
 3. **Data Protection keys** shared (Redis / Blob+Key Vault) + `SetApplicationName`.
-4. **Externalisasi state memori** ke Redis: `DraftStore`, `LectureStore`, `PresenceTracker`,
-   `AiGenerationJobs`, throttle & cache.
+4. **Externalisasi state memori** ke Redis: draft/lecture/presence (**sudah** — set
+   `Realtime:Backend=redis`), lalu `AiGenerationJobs`, throttle & cache.
 5. **Judge → broker + worker pool terpisah** dengan isolasi gVisor/Kata; hasil dikembalikan
    lewat broker.
 6. **Sticky session OFF** setelah backplane ada (atau `skipNegotiation` + WS).
@@ -229,7 +250,7 @@ Urutan prioritas — **tanpa 1–4, replika kedua langsung merusak data / memutu
 
 ### Tambahan kode yang diperlukan (belum ada di repo)
 
-- Abstraksi `IDraftStore`/`ILectureStore`/`IPresenceTracker` + implementasi Redis.
+- ~~Abstraksi `IDraftStore`/`ILectureStore`/`IPresenceTracker` + implementasi Redis~~ — **selesai** (`Realtime:Backend`).
 - `IJudgeQueue` di atas broker (publish job + subscribe hasil) menggantikan `Channel<>`.
 - `IAiJobStore` di atas Redis menggantikan `AiGenerationJobs`.
 - Migrasi mode "run-and-exit" (`dotnet BeeCoding.dll migrate`).
