@@ -170,6 +170,12 @@ using (var scope = app.Services.CreateScope())
     foreach (var b in slugless) b.Slug = await boardSvc.GenerateSlugAsync();
     if (slugless.Count > 0) await db.SaveChangesAsync();
 
+    // Same for problems / bank problems (the migration seeds these, this is a safety net).
+    var sluglessProblems = await db.Problems.Where(p => p.Slug == null || p.Slug == "").ToListAsync();
+    var sluglessBank = await db.BankProblems.Where(p => p.Slug == null || p.Slug == "").ToListAsync();
+    if (sluglessProblems.Count > 0 || sluglessBank.Count > 0)
+        await db.SaveChangesAsync();   // AppDbContext.SaveChangesAsync assigns the slugs
+
     // Backfill wall posts for submissions made before the wall existed.
     var missing = await db.Submissions
         .Select(s => new { s.UserId, s.ProblemId })

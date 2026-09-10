@@ -122,7 +122,8 @@ async function delComment(post, c) {
 }
 
 function openPost(post) {
-  router.push(`/boards/${props.boardSlug}/problems/${post.problemId}`);
+  const pr = wall.value.problems.find((x) => x.id === post.problemId);
+  if (pr?.slug) router.push(`/boards/${props.boardSlug}/problems/${pr.slug}`);
 }
 
 async function toggleHiddenByStudent(post) {

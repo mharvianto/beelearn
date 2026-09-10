@@ -190,14 +190,93 @@ that appear inside it.
         return text;
     }
 
-    /// <summary>Pull the outermost {...} object out of a possibly chatty / fenced reply.</summary>
-    private static string ExtractJson(string s)
+    /// <summary>
+    /// Parse a JSON object out of a model reply that may carry prose/fences and, when the
+    /// stream was cut short, may be missing its closing braces. Repairs a truncated tail
+    /// (open string / array / object) as a last resort so a mostly-complete payload is still
+    /// usable; throws <see cref="AiUnavailableException"/> if it still can't be parsed.
+    /// </summary>
+    private JsonDocument ParseJsonObjectLoose(string content, string what)
     {
-        int a = s.IndexOf('{');
-        int b = s.LastIndexOf('}');
-        if (a < 0 || b <= a)
-            throw new AiUnavailableException($"AI did not return JSON (got: \"{Trunc(s.Trim(), 200)}\").");
-        return s[a..(b + 1)];
+        int start = content.IndexOf('{');
+        if (start < 0)
+            throw new AiUnavailableException($"AI did not return JSON ({what}); got: \"{Trunc(content.Trim(), 200)}\".");
+        var full = content[start..];
+
+        // 1) straight parse of first '{' .. last '}'
+        int lastBrace = full.LastIndexOf('}');
+        if (lastBrace > 0)
+            try { return JsonDocument.Parse(full[..(lastBrace + 1)]); } catch (JsonException) { }
+
+        // 2) truncated stream: retreat to each earlier structural boundary and close the
+        //    dangling tail, keeping as much of the payload as still parses.
+        int end = full.Length;
+        for (int step = 0; step < 40 && end > start + 1; step++)
+        {
+            if (TryCloseTruncatedJson(full[..end], out var repaired))
+            {
+                try
+                {
+                    var doc = JsonDocument.Parse(repaired);
+                    if (step > 0 || lastBrace <= 0)
+                        _log.LogWarning("AI {What}: reply was truncated — salvaged ~{N} of {Total} chars", what, end, full.Length);
+                    return doc;
+                }
+                catch (JsonException) { }
+            }
+            int p = full.LastIndexOfAny(TailBoundary, end - 2);
+            if (p <= start) break;
+            end = p + 1;
+        }
+        throw new AiUnavailableException($"AI returned malformed or truncated JSON ({what}).");
+    }
+
+    private static readonly char[] TailBoundary = { '}', ']', ',' };
+
+    /// <summary>Best-effort: append the closers a truncated JSON object still needs.</summary>
+    private static bool TryCloseTruncatedJson(string s, out string closed)
+    {
+        closed = "";
+        var stack = new Stack<char>();
+        bool inStr = false, esc = false;
+        foreach (var ch in s)
+        {
+            if (inStr)
+            {
+                if (esc) esc = false;
+                else if (ch == '\\') esc = true;
+                else if (ch == '"') inStr = false;
+                continue;
+            }
+            if (ch == '"') inStr = true;
+            else if (ch is '{' or '[') stack.Push(ch);
+            else if (ch == '}' && stack.Count > 0 && stack.Peek() == '{') stack.Pop();
+            else if (ch == ']' && stack.Count > 0 && stack.Peek() == '[') stack.Pop();
+        }
+        if (stack.Count == 0) return false;   // balanced already — not the truncation case
+
+        var sb = new StringBuilder(s.TrimEnd());
+        if (inStr) sb.Append('"');
+        // drop a dangling tail that can't be closed cleanly: trailing comma, or a
+        // `"key":` whose value never arrived (also removing the orphaned key + its comma).
+        bool trimming = true;
+        while (trimming && sb.Length > 0)
+        {
+            var last = sb[^1];
+            if (char.IsWhiteSpace(last) || last == ',') { sb.Length--; }
+            else if (last == ':')
+            {
+                sb.Length--;
+                var str = sb.ToString();
+                int q2 = str.LastIndexOf('"');
+                int q1 = q2 > 0 ? str.LastIndexOf('"', q2 - 1) : -1;
+                if (q1 >= 0) sb.Length = q1;
+            }
+            else trimming = false;
+        }
+        while (stack.Count > 0) sb.Append(stack.Pop() == '{' ? '}' : ']');
+        closed = sb.ToString();
+        return true;
     }
 
     private HttpRequestMessage NewRequest(string bodyJson)
@@ -312,23 +391,23 @@ Reply with ONLY compact JSON and nothing else:
         catch (AiUnavailableException) { throw; }
         catch (Exception ex) { _log.LogWarning(ex, "AI pick parse failed: {Body}", Trunc(body, 400)); throw new AiUnavailableException("Unexpected AI response."); }
 
-        var json = ExtractJson(content);
-
         var picks = new List<AiPick>();
         try
         {
-            using var doc = JsonDocument.Parse(json);
-            foreach (var el in doc.RootElement.GetProperty("picks").EnumerateArray())
-            {
-                if (!el.TryGetProperty("id", out var idEl)) continue;
-                int id = idEl.ValueKind == JsonValueKind.Number ? idEl.GetInt32()
-                       : int.TryParse(idEl.GetString(), out var pid) ? pid : 0;
-                if (id <= 0) continue;
-                var reason = el.TryGetProperty("reason", out var rEl) ? (rEl.GetString() ?? "") : "";
-                picks.Add(new AiPick(id, reason.Trim()));
-            }
+            using var doc = ParseJsonObjectLoose(content, "pick-next");
+            if (doc.RootElement.TryGetProperty("picks", out var pk) && pk.ValueKind == JsonValueKind.Array)
+                foreach (var el in pk.EnumerateArray())
+                {
+                    if (!el.TryGetProperty("id", out var idEl)) continue;
+                    int id = idEl.ValueKind == JsonValueKind.Number ? idEl.GetInt32()
+                           : int.TryParse(idEl.GetString(), out var pid) ? pid : 0;
+                    if (id <= 0) continue;
+                    var reason = el.TryGetProperty("reason", out var rEl) ? (rEl.GetString() ?? "") : "";
+                    picks.Add(new AiPick(id, reason.Trim()));
+                }
         }
-        catch (Exception ex) { _log.LogWarning(ex, "AI pick JSON invalid: {Json}", Trunc(json, 400)); throw new AiUnavailableException("AI returned malformed JSON."); }
+        catch (AiUnavailableException) { throw; }
+        catch (Exception ex) { _log.LogWarning(ex, "AI pick JSON invalid: {Body}", Trunc(content, 400)); throw new AiUnavailableException("AI returned malformed JSON."); }
 
         return new AiPickResult(picks, promptTok, completionTok);
     }
@@ -388,53 +467,72 @@ Shape:
         // stall (no bytes for GenerateIdleTimeoutSeconds) or the hard cap aborts.
         var userMsg = $"Idea / topic:\n{Trunc(idea, 4000)}";
         int maxTok = Math.Max(8000, _opt.MaxTokens);
+        bool jsonMode = true;
 
-        async Task<(string, int, int)> AttemptAsync(bool jsonMode)
+        // The endpoint (gpt-oss class) sometimes drops the stream mid-object or answers with a
+        // truncated payload. Each unusable reply gets a fresh try; only give up after 3.
+        AiUnavailableException? last = null;
+        for (int attempt = 1; attempt <= 3; attempt++)
         {
-            using var req = NewRequest(BuildPayload(sys, userMsg, stream: true,
-                maxTokens: maxTok, thinking: false, model: GenModel, jsonObject: jsonMode, reasoningEffort: "low"));
-            return await CollectStreamAsync(req, sys + idea,
-                _opt.GenerateIdleTimeoutSeconds, _opt.GenerateTimeoutSeconds, ct);
+            string content; int promptTok, completionTok; bool complete;
+            try
+            {
+                using var req = NewRequest(BuildPayload(sys, userMsg, stream: true,
+                    maxTokens: maxTok, thinking: false, model: GenModel, jsonObject: jsonMode, reasoningEffort: "low"));
+                (content, promptTok, completionTok, complete) = await CollectStreamAsync(
+                    req, sys + idea, _opt.GenerateIdleTimeoutSeconds, _opt.GenerateTimeoutSeconds, ct);
+            }
+            catch (AiUnavailableException ex) when (jsonMode && ex.Message.StartsWith("AI error (4", StringComparison.Ordinal))
+            {
+                // endpoint rejected response_format=json_object — drop it and retry (free)
+                _log.LogWarning("AI generate: {Msg} — retrying without json_object", ex.Message);
+                jsonMode = false;
+                attempt--;
+                continue;
+            }
+
+            try
+            {
+                using var doc = ParseJsonObjectLoose(content, "generate-problem");
+                var r = doc.RootElement;
+                string S(string k) => r.TryGetProperty(k, out var e) && e.ValueKind == JsonValueKind.String ? e.GetString()! : "";
+                int I(string k, int d) => r.TryGetProperty(k, out var e) && e.TryGetInt32(out var v) ? v : d;
+                var tests = new List<GenTest>();
+                if (r.TryGetProperty("tests", out var te) && te.ValueKind == JsonValueKind.Array)
+                    foreach (var t in te.EnumerateArray())
+                        tests.Add(new GenTest(
+                            t.TryGetProperty("stdin", out var se) ? (se.GetString() ?? "") : "",
+                            t.TryGetProperty("isSample", out var ie) && ie.ValueKind == JsonValueKind.True));
+
+                var gp = new AiGeneratedProblem(
+                    S("title"), S("statementMarkdown"), S("tags"), S("level"),
+                    S("language"), S("starterCode"), S("referenceSolution"),
+                    Math.Clamp(I("timeLimitMs", 1000), 100, 10_000),
+                    Math.Clamp(I("memoryLimitKb", 65_536), 4_096, 512_000),
+                    tests);
+
+                if (string.IsNullOrWhiteSpace(gp.Title) || string.IsNullOrWhiteSpace(gp.ReferenceSolution) || gp.Tests.Count < 2)
+                    throw new AiUnavailableException("The AI's problem was incomplete — try again or rephrase the idea.");
+
+                // A truncated stream that happened to salvage into a valid object may still
+                // carry a cut-off reference solution — spend a remaining attempt on a clean one.
+                if (!complete && attempt < 3)
+                {
+                    _log.LogWarning("AI generate attempt {N}/3: stream was truncated but parsed — retrying for a complete reply", attempt);
+                    continue;
+                }
+
+                return new AiGenResult(gp, promptTok, completionTok);
+            }
+            catch (AiUnavailableException ex)
+            {
+                last = ex;
+                _log.LogWarning("AI generate attempt {N}/3 unusable (streamComplete={Done}, {Len} chars): {Msg}",
+                    attempt, complete, content.Length, ex.Message);
+            }
         }
 
-        string content; int promptTok, completionTok;
-        try { (content, promptTok, completionTok) = await AttemptAsync(jsonMode: true); }
-        catch (AiUnavailableException ex) when (ex.Message.StartsWith("AI error (4", StringComparison.Ordinal))
-        {
-            // endpoint rejected response_format=json_object — retry once without it
-            _log.LogWarning("AI generate: {Msg} — retrying without json_object", ex.Message);
-            (content, promptTok, completionTok) = await AttemptAsync(jsonMode: false);
-        }
-
-        var json = ExtractJson(content);
-
-        AiGeneratedProblem gp;
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            var r = doc.RootElement;
-            string S(string k) => r.TryGetProperty(k, out var e) && e.ValueKind == JsonValueKind.String ? e.GetString()! : "";
-            int I(string k, int d) => r.TryGetProperty(k, out var e) && e.TryGetInt32(out var v) ? v : d;
-            var tests = new List<GenTest>();
-            if (r.TryGetProperty("tests", out var te) && te.ValueKind == JsonValueKind.Array)
-                foreach (var t in te.EnumerateArray())
-                    tests.Add(new GenTest(
-                        t.TryGetProperty("stdin", out var se) ? (se.GetString() ?? "") : "",
-                        t.TryGetProperty("isSample", out var ie) && ie.ValueKind == JsonValueKind.True));
-
-            gp = new AiGeneratedProblem(
-                S("title"), S("statementMarkdown"), S("tags"), S("level"),
-                S("language"), S("starterCode"), S("referenceSolution"),
-                Math.Clamp(I("timeLimitMs", 1000), 100, 10_000),
-                Math.Clamp(I("memoryLimitKb", 65_536), 4_096, 512_000),
-                tests);
-        }
-        catch (Exception ex) { _log.LogWarning(ex, "AI generate JSON invalid"); throw new AiUnavailableException("AI returned malformed JSON."); }
-
-        if (string.IsNullOrWhiteSpace(gp.Title) || string.IsNullOrWhiteSpace(gp.ReferenceSolution) || gp.Tests.Count < 2)
-            throw new AiUnavailableException("The AI's problem was incomplete — try again or rephrase the idea.");
-
-        return new AiGenResult(gp, promptTok, completionTok);
+        throw last ?? new AiUnavailableException("The AI couldn't produce a valid problem — try again or rephrase the idea.");
     }
 
     public sealed record AiRegenResult(string ReferenceSolution, List<string> Inputs, int PromptTokens, int CompletionTokens);
@@ -470,29 +568,37 @@ Reply with ONLY one JSON object, first char `{`, last char `}`, no prose:
         foreach (var (inp, exp) in samples.Take(4))
             u.AppendLine($"- stdin:\n```\n{Trunc(inp, 800)}\n```\n  expected stdout:\n```\n{Trunc(exp, 800)}\n```");
 
-        using var req = NewRequest(BuildPayload(sys, u.ToString(), stream: true,
-            maxTokens: Math.Max(6000, _opt.MaxTokens), thinking: false, model: GenModel,
-            jsonObject: true, reasoningEffort: "low"));
-        var (content, pt, ctk) = await CollectStreamAsync(req, sys + u,
-            _opt.GenerateIdleTimeoutSeconds, _opt.GenerateTimeoutSeconds, ct);
-
-        var json = ExtractJson(content);
-        string reference; var inputs = new List<string>();
-        try
+        AiUnavailableException? last = null;
+        for (int attempt = 1; attempt <= 2; attempt++)
         {
-            using var doc = JsonDocument.Parse(json);
-            var r = doc.RootElement;
-            reference = r.TryGetProperty("referenceSolution", out var rs) ? (rs.GetString() ?? "") : "";
-            if (r.TryGetProperty("tests", out var te) && te.ValueKind == JsonValueKind.Array)
-                foreach (var t in te.EnumerateArray())
-                    if (t.TryGetProperty("stdin", out var se) && se.GetString() is { } s)
-                        inputs.Add(s);
-        }
-        catch (Exception ex) { _log.LogWarning(ex, "AI regenerate JSON invalid"); throw new AiUnavailableException("AI returned malformed JSON."); }
+            using var req = NewRequest(BuildPayload(sys, u.ToString(), stream: true,
+                maxTokens: Math.Max(6000, _opt.MaxTokens), thinking: false, model: GenModel,
+                jsonObject: true, reasoningEffort: "low"));
+            var (content, pt, ctk, _) = await CollectStreamAsync(req, sys + u,
+                _opt.GenerateIdleTimeoutSeconds, _opt.GenerateTimeoutSeconds, ct);
 
-        if (string.IsNullOrWhiteSpace(reference) || inputs.Count < 2)
-            throw new AiUnavailableException("The AI didn't return a usable reference + tests — try again.");
-        return new AiRegenResult(reference, inputs, pt, ctk);
+            try
+            {
+                using var doc = ParseJsonObjectLoose(content, "regenerate-tests");
+                var r = doc.RootElement;
+                var reference = r.TryGetProperty("referenceSolution", out var rs) ? (rs.GetString() ?? "") : "";
+                var inputs = new List<string>();
+                if (r.TryGetProperty("tests", out var te) && te.ValueKind == JsonValueKind.Array)
+                    foreach (var t in te.EnumerateArray())
+                        if (t.TryGetProperty("stdin", out var se) && se.GetString() is { } s)
+                            inputs.Add(s);
+
+                if (string.IsNullOrWhiteSpace(reference) || inputs.Count < 2)
+                    throw new AiUnavailableException("The AI didn't return a usable reference + tests — try again.");
+                return new AiRegenResult(reference, inputs, pt, ctk);
+            }
+            catch (AiUnavailableException ex)
+            {
+                last = ex;
+                _log.LogWarning("AI regenerate attempt {N}/2 unusable ({Len} chars): {Msg}", attempt, content.Length, ex.Message);
+            }
+        }
+        throw last ?? new AiUnavailableException("The AI didn't return a usable reference + tests — try again.");
     }
 
     // ---- streaming (SSE) ------------------------------------------------------
@@ -598,7 +704,13 @@ Reply with ONLY one JSON object, first char `{`, last char `}`, no prose:
     /// idle watchdog (reset on every line) plus a hard cap, so a slow-but-steady model
     /// finishes while a stalled one fails fast. Reads reasoning_content as a fallback.
     /// </summary>
-    private async Task<(string Text, int Prompt, int Completion)> CollectStreamAsync(
+    /// <summary>
+    /// Reads an SSE chat-completions stream to the end. <c>Complete</c> is true only when the
+    /// server signalled a real end (<c>[DONE]</c> or a <c>finish_reason</c>); a stream that
+    /// just goes quiet (connection dropped mid-object) returns <c>Complete = false</c> so the
+    /// caller can retry instead of parsing a half-written JSON payload.
+    /// </summary>
+    private async Task<(string Text, int Prompt, int Completion, bool Complete)> CollectStreamAsync(
         HttpRequestMessage req, string estPromptText, int idleSeconds, int hardSeconds, CancellationToken ct)
     {
         idleSeconds = Math.Max(10, idleSeconds);
@@ -626,6 +738,8 @@ Reply with ONLY one JSON object, first char `{`, last char `}`, no prose:
             var full = new StringBuilder();
             var reasoning = new StringBuilder();
             int promptTok = 0, completionTok = 0;
+            bool complete = false;
+            string? finishReason = null;
             await using var stream = await resp.Content.ReadAsStreamAsync(ct);
             using var reader = new StreamReader(stream, Encoding.UTF8);
 
@@ -635,13 +749,13 @@ Reply with ONLY one JSON object, first char `{`, last char `}`, no prose:
                 try { line = await reader.ReadLineAsync(idle.Token); }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                 { throw new AiUnavailableException("The AI stalled while writing the problem."); }
-                if (line is null) break;
+                if (line is null) break;   // stream ended — `complete` says whether that was clean
 
                 idle.CancelAfter(TimeSpan.FromSeconds(idleSeconds));   // got bytes -> reset the idle window
 
                 if (line.Length == 0 || !line.StartsWith("data:", StringComparison.Ordinal)) continue;
                 var data = line["data:".Length..].Trim();
-                if (data == "[DONE]") break;
+                if (data == "[DONE]") { complete = true; break; }
 
                 try
                 {
@@ -653,24 +767,34 @@ Reply with ONLY one JSON object, first char `{`, last char `}`, no prose:
                         if (u.TryGetProperty("completion_tokens", out var cc) && cc.TryGetInt32(out var cv)) completionTok = cv;
                     }
                     if (root.TryGetProperty("choices", out var chs) && chs.ValueKind == JsonValueKind.Array
-                        && chs.GetArrayLength() > 0 && chs[0].TryGetProperty("delta", out var d))
+                        && chs.GetArrayLength() > 0)
                     {
-                        if (d.TryGetProperty("content", out var cEl) && cEl.ValueKind == JsonValueKind.String)
-                            full.Append(cEl.GetString());
-                        else if (d.TryGetProperty("reasoning_content", out var rEl) && rEl.ValueKind == JsonValueKind.String)
-                            reasoning.Append(rEl.GetString());
+                        var c0 = chs[0];
+                        if (c0.TryGetProperty("finish_reason", out var fr) && fr.ValueKind == JsonValueKind.String)
+                        { finishReason = fr.GetString(); complete = true; }
+                        if (c0.TryGetProperty("delta", out var d))
+                        {
+                            if (d.TryGetProperty("content", out var cEl) && cEl.ValueKind == JsonValueKind.String)
+                                full.Append(cEl.GetString());
+                            else if (d.TryGetProperty("reasoning_content", out var rEl) && rEl.ValueKind == JsonValueKind.String)
+                                reasoning.Append(rEl.GetString());
+                        }
                     }
                 }
                 catch { /* keep-alive / partial line */ }
             }
 
             var text = full.Length > 0 ? full.ToString() : reasoning.ToString();
+            if (finishReason == "length")
+                _log.LogWarning("AI stream hit the token cap (finish_reason=length, {Len} chars) — raise Ai:MaxTokens", text.Length);
+            else if (!complete)
+                _log.LogWarning("AI stream ended without [DONE]/finish_reason ({Len} chars) — treating as truncated", text.Length);
             if (promptTok == 0 && completionTok == 0)
             {
                 promptTok = EstTokens(estPromptText);
                 completionTok = EstTokens(text);
             }
-            return (text, promptTok, completionTok);
+            return (text, promptTok, completionTok, complete && finishReason != "length");
         }
     }
 

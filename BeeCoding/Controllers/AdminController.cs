@@ -21,21 +21,15 @@ namespace BeeCoding.Controllers;
 [ApiController]
 [AllowAnonymous]
 [Route("api/admin")]
-public class AdminController : ControllerBase
+public class AdminController(AppDbContext db, IConfiguration cfg) : ControllerBase
 {
-    private readonly AppDbContext _db;
-    private readonly IConfiguration _cfg;
+    private readonly AppDbContext _db = db;
+    private readonly IConfiguration _cfg = cfg;
 
     // per-IP failed-attempt throttle: max 8 misses per 10-minute rolling window.
     private static readonly ConcurrentDictionary<string, (int Count, long WindowTicks)> _fails = new();
     private const int MaxFails = 8;
     private static readonly long WindowTicks = TimeSpan.FromMinutes(10).Ticks;
-
-    public AdminController(AppDbContext db, IConfiguration cfg)
-    {
-        _db = db;
-        _cfg = cfg;
-    }
 
     private ActionResult? Gate()
     {
@@ -115,21 +109,20 @@ public class AdminController : ControllerBase
                 var tests = p.Tests ?? new();
                 if (tests.Count == 0) { errors.Add($"{title}: at least one test is required"); continue; }
                 if (!tests.Any(t => !(t.IsSample ?? false) && (t.Points ?? 1) > 0))
-                    { errors.Add($"{title}: needs at least one scoring (non-sample, points>0) test"); continue; }
+                { errors.Add($"{title}: needs at least one scoring (non-sample, points>0) test"); continue; }
 
                 var existing = await _db.BankProblems.Include(b => b.TestCases)
                     .FirstOrDefaultAsync(b => b.OwnerId == owner.Id && b.Title == title);
 
                 if (existing is not null && !replace)
-                    { errors.Add($"{title}: already exists (replaceExisting=false)"); continue; }
+                { errors.Add($"{title}: already exists (replaceExisting=false)"); continue; }
 
                 var b = existing ?? new BankProblem { OwnerId = owner.Id, CreatedAt = DateTime.UtcNow };
                 b.Title = title;
                 b.StatementMarkdown = p.StatementMarkdown ?? "";
-                b.Language = NativeCompiler.Normalize(p.Language ?? "cpp");
+                b.AllowedLanguages = Languages.Normalize(p.AllowedLanguages);
                 b.Level = Mapping.ParseLevel(p.Level);
                 b.Tags = Mapping.NormalizeTags(p.Tags);
-                b.StarterCode = p.StarterCode ?? "";
                 b.BannedHeaders = SourcePolicy.Normalize(p.BannedHeaders);
                 b.BannedSymbols = SourcePolicy.NormalizeSymbols(p.BannedSymbols);
                 b.TimeLimitMs = Math.Clamp((p.TimeLimitMs ?? 0) <= 0 ? 1000 : p.TimeLimitMs!.Value, 100, 10_000);
@@ -174,6 +167,6 @@ public class AdminController : ControllerBase
     }
 
     private static AdminBankRow Row(BankProblem b) => new(
-        b.Id, b.Title, b.Language, b.Level.ToString(), b.Tags, b.IsPublic,
+        b.Id, b.Title, b.AllowedLanguages, b.Level.ToString(), b.Tags, b.IsPublic,
         b.TestCases.Count, b.TestCases.Count(t => t.IsSample), b.UpdatedAt);
 }

@@ -11,32 +11,34 @@ import ContentGuard from '../components/ContentGuard.vue';
 import StatementImage from '../components/StatementImage.vue';
 import AiHint from '../components/AiHint.vue';
 import SplitPane from '../components/SplitPane.vue';
-import { CODE_TEMPLATES, isPristine } from '../lib/templates';
+import { CODE_TEMPLATES, isPristine, allowedLangs, langLabel } from '../lib/templates';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draft';
 import { celebrate } from '../lib/confetti';
 
-const props = defineProps({ id: { type: [String, Number], required: true } });
+const props = defineProps({ slug: { type: String, required: true } });
 const auth = useAuth();
 const progress = useProgress();
 
 const problem = ref(null);
+// internal id of the loaded problem — for API calls / SignalR that key by int id
+const pid = computed(() => problem.value?.id);
 const code = ref('');
 const stdin = ref('');
 const solveLang = ref('cpp');   // 'c' | 'cpp'
 
-function templateFor(l) {
-  const authored = problem.value?.language === 'c' ? 'c' : 'cpp';
-  return l === authored && problem.value?.starterCode ? problem.value.starterCode : CODE_TEMPLATES[l];
-}
+const langs = computed(() => allowedLangs(problem.value?.allowedLanguages));
+const langNote = computed(() =>
+  problem.value?.allowedLanguages ? langLabel(problem.value.allowedLanguages) : '');
+
 function setLang(l) {
-  if (l === solveLang.value) return;
+  if (l === solveLang.value || !langs.value.includes(l)) return;
   solveLang.value = l;
-  if (isPristine(code.value, problem.value?.starterCode)) code.value = templateFor(l);
+  if (isPristine(code.value)) code.value = CODE_TEMPLATES[l] || '';
   try { localStorage.setItem('beecoding.lang', l); } catch { /* ignore */ }
 }
 
 // local autosave so an accidental refresh doesn't wipe the editor
-const draftScope = computed(() => `bank:${props.id}`);
+const draftScope = computed(() => `bank:${props.slug}`);
 const restored = ref(false);
 const restoredAt = ref('');
 let saveTimer = null;
@@ -44,7 +46,7 @@ function saveDraftNow() {
   if (problem.value) saveDraft(auth.user?.id, draftScope.value, code.value, solveLang.value);
 }
 function useTemplate() {
-  code.value = templateFor(solveLang.value);
+  code.value = CODE_TEMPLATES[solveLang.value] || '';
   clearDraft(auth.user?.id, draftScope.value);
   restored.value = false;
 }
@@ -57,14 +59,15 @@ const gained = ref(0);
 let conn = null;
 
 async function load() {
-  problem.value = await api.get(`/api/practice/${props.id}`);
+  problem.value = await api.get(`/api/practice/${props.slug}`);
   let pref = null;
   try { pref = localStorage.getItem('beecoding.lang'); } catch { /* ignore */ }
-  solveLang.value = pref === 'c' || pref === 'cpp' ? pref : (problem.value.language === 'c' ? 'c' : 'cpp');
-  code.value = templateFor(solveLang.value) || '';
+  const allowed = allowedLangs(problem.value.allowedLanguages);
+  solveLang.value = allowed.includes(pref) ? pref : allowed[0];
+  code.value = CODE_TEMPLATES[solveLang.value] || '';
 
   const d = loadDraft(auth.user?.id, draftScope.value);
-  if (d && d.code.trim() && !isPristine(d.code, problem.value.starterCode)) {
+  if (d && d.code.trim() && !isPristine(d.code)) {
     code.value = d.code;
     if (d.lang === 'c' || d.lang === 'cpp') solveLang.value = d.lang;
     restored.value = true;
@@ -75,14 +78,14 @@ async function load() {
   await loadSubs();
 }
 async function loadSubs() {
-  submissions.value = await api.get(`/api/practice/${props.id}/submissions`);
+  submissions.value = await api.get(`/api/practice/${props.slug}/submissions`);
   problem.value.solved = submissions.value.some((s) => s.verdict === 'Accepted' && s.score >= 1);
 }
 
 async function run() {
   error.value = ''; running.value = true; runOut.value = null;
   try {
-    runOut.value = await api.post('/api/run', { language: solveLang.value, code: code.value, stdin: stdin.value, bankProblemId: Number(props.id) });
+    runOut.value = await api.post('/api/run', { language: solveLang.value, code: code.value, stdin: stdin.value, bankProblemId: pid.value });
   } catch (e) { error.value = e.message; }
   finally { running.value = false; }
 }
@@ -92,7 +95,7 @@ async function submit() {
   try {
     const before = progress.xp;
     const alreadySolved = problem.value.solved;
-    await api.post(`/api/practice/${props.id}/submit`, { code: code.value, language: solveLang.value });
+    await api.post(`/api/practice/${props.slug}/submit`, { code: code.value, language: solveLang.value });
     await loadSubs();
     // give the judge a moment, then reconcile XP
     setTimeout(async () => {
@@ -117,7 +120,7 @@ onMounted(async () => {
   progress.refresh();
   conn = createBoardConnection();
   conn.on('practiceResult', (dto) => {
-    if (dto.bankProblemId === Number(props.id)) loadSubs();
+    if (dto.bankProblemId === pid.value) loadSubs();
   });
   conn.on('progressBumped', (p) => {
     const before = progress.xp;
@@ -148,7 +151,7 @@ onBeforeUnmount(async () => {
               class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{{ t }}</span>
       </div>
       <div class="text-xs text-slate-400 dark:text-slate-500 mb-3">
-        {{ solveLang === 'c' ? 'C' : 'C++' }} · limit {{ problem.timeLimitMs }} ms · {{ problem.memoryLimitKb }} KB
+        {{ langNote || (solveLang === 'c' ? 'C' : 'C++') }} · limit {{ problem.timeLimitMs }} ms · {{ problem.memoryLimitKb }} KB
       </div>
       <p v-if="problem.bannedHeaders || problem.bannedSymbols" class="mb-3 text-xs bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 rounded-lg px-3 py-2 space-y-0.5">
         <span v-if="problem.bannedHeaders" class="block">🚫 Banned headers: <span class="font-mono">{{ problem.bannedHeaders }}</span> (and <span class="font-mono">bits/stdc++.h</span>).</span>
@@ -170,7 +173,7 @@ onBeforeUnmount(async () => {
         🔒 Protected problem — served as an encrypted image watermarked with your identity.
       </p>
       <ContentGuard :active="true" :watermark="''">
-        <StatementImage :bank-id="props.id" />
+        <StatementImage :bank-id="pid" />
       </ContentGuard>
 
       <div v-if="problem.sampleTests?.length" class="mt-3 flex items-center gap-2 flex-wrap">
@@ -181,7 +184,7 @@ onBeforeUnmount(async () => {
         </button>
       </div>
 
-      <AiHint :bank-problem-id="props.id" :language="solveLang" :code="code" :stdin="stdin"
+      <AiHint :bank-problem-id="pid" :language="solveLang" :code="code" :stdin="stdin"
               :verdict="submissions[0]?.status === 'Done' ? submissions[0]?.verdict : ''"
               :compiler-output="runOut && !runOut.compileOk ? runOut.compilerOutput : (submissions[0]?.compilerOutput || '')"
               :stderr="runOut?.stderr || ''" />
@@ -217,8 +220,8 @@ onBeforeUnmount(async () => {
                   class="bg-amber-500 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
             {{ submitting ? 'Submitting…' : 'Submit' }}
           </button>
-          <span class="ml-auto inline-flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden text-xs">
-            <button v-for="l in ['c', 'cpp']" :key="l" @click="setLang(l)"
+          <span v-if="langs.length > 1" class="ml-auto inline-flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden text-xs">
+            <button v-for="l in langs" :key="l" @click="setLang(l)"
                     class="px-2.5 py-1"
                     :class="solveLang === l ? 'bg-slate-800 text-white dark:bg-slate-600' : 'text-slate-500 dark:text-slate-400'">
               {{ l === 'c' ? 'C' : 'C++' }}

@@ -2,6 +2,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '../lib/api';
+import { langLabel } from '../lib/templates';
 import LevelBadge from '../components/LevelBadge.vue';
 
 const router = useRouter();
@@ -60,7 +61,7 @@ async function pollJob(jobId) {
     if (r.status === 'done') {
       genOpen.value = false;
       gen.value.idea = '';
-      router.push(`/bank/${r.problem.id}/edit`);
+      router.push(`/bank/${r.problem.slug}/edit`);
     } else {
       genError.value = (r.message || 'Generation failed.') +
         (r.compilerOutput ? '\n\n' + r.compilerOutput : '') +
@@ -177,13 +178,16 @@ onBeforeUnmount(() => { pollStopped = true; });
            class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3">
         <div class="flex items-start justify-between gap-2">
           <h3 class="font-semibold text-sm">{{ b.title }}</h3>
-          <span v-if="b.isPublic" class="text-[10px] shrink-0 px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-            shared
-          </span>
+          <div class="flex items-center gap-1 shrink-0">
+            <span v-if="b.generatedByAi" class="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">✨ AI</span>
+            <span v-if="b.isPublic" class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+              shared
+            </span>
+          </div>
         </div>
         <div class="mt-1"><LevelBadge :level="b.level" /></div>
         <div class="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-          {{ b.language.toUpperCase() }} · {{ b.testCount }} tests ({{ b.sampleCount }} sample)
+          {{ langLabel(b.allowedLanguages) }} · {{ b.testCount }} tests ({{ b.sampleCount }} sample)
           <span v-if="!b.mine"> · by {{ b.ownerName }}</span>
         </div>
         <div v-if="b.tags" class="flex flex-wrap gap-1 mt-2">
@@ -192,7 +196,7 @@ onBeforeUnmount(() => { pollStopped = true; });
             {{ t }}
           </span>
         </div>
-        <RouterLink v-if="b.mine" :to="`/bank/${b.id}/edit`"
+        <RouterLink v-if="b.mine" :to="`/bank/${b.slug}/edit`"
                     class="mt-3 inline-block text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
           edit
         </RouterLink>

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { api } from '../lib/api';
+import { langLabel } from '../lib/templates';
 import LevelBadge from './LevelBadge.vue';
 
 const props = defineProps({ boardSlug: { type: String, required: true } });
@@ -61,9 +62,10 @@ async function add(item) {
             <div class="flex items-center gap-1.5">
               <span class="font-medium text-sm truncate">{{ b.title }}</span>
               <LevelBadge :level="b.level" />
+              <span v-if="b.generatedByAi" class="text-[10px] px-1 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">✨ AI</span>
             </div>
             <div class="text-[11px] text-slate-400 dark:text-slate-500">
-              {{ b.language.toUpperCase() }} · {{ b.testCount }} tests ({{ b.sampleCount }} sample)
+              {{ langLabel(b.allowedLanguages) }} · {{ b.testCount }} tests ({{ b.sampleCount }} sample)
               <span v-if="!b.mine"> · by {{ b.ownerName }}</span>
               <span v-if="b.tags"> · {{ b.tags }}</span>
             </div>

@@ -86,8 +86,8 @@ public class AdminUiController(AppDbContext db, IConfiguration cfg) : ApiControl
             .OrderBy(b => b.Id).ToListAsync();
 
         var bundle = new AdminProblemBundle(1, DateTime.UtcNow, problems.Select(b => new AdminProblemItem(
-            b.Owner?.Email ?? "", b.Title, b.StatementMarkdown, b.Language, b.Level.ToString(),
-            b.Tags, b.StarterCode, b.TimeLimitMs, b.MemoryLimitKb, b.IsPublic,
+            b.Owner?.Email ?? "", b.Title, b.StatementMarkdown, b.AllowedLanguages, b.Level.ToString(),
+            b.Tags, b.TimeLimitMs, b.MemoryLimitKb, b.IsPublic, b.GeneratedByAi,
             b.BannedHeaders, b.BannedSymbols,
             b.TestCases.OrderBy(t => t.Position).ThenBy(t => t.Id)
                 .Select(t => new AdminProblemTest(t.Stdin, t.ExpectedStdout, t.IsSample, t.Points, t.Position))
@@ -127,15 +127,15 @@ public class AdminUiController(AppDbContext db, IConfiguration cfg) : ApiControl
                 var b = existing ?? new BankProblem { OwnerId = owner.Id, CreatedAt = DateTime.UtcNow };
                 b.Title = title;
                 b.StatementMarkdown = item.StatementMarkdown ?? "";
-                b.Language = NativeCompiler.Normalize(item.Language);
+                b.AllowedLanguages = Languages.Normalize(item.AllowedLanguages);
                 b.Level = Mapping.ParseLevel(item.Level);
                 b.Tags = Mapping.NormalizeTags(item.Tags);
-                b.StarterCode = item.StarterCode ?? "";
                 b.BannedHeaders = SourcePolicy.Normalize(item.BannedHeaders);
                 b.BannedSymbols = SourcePolicy.NormalizeSymbols(item.BannedSymbols);
                 b.TimeLimitMs = Math.Clamp(item.TimeLimitMs <= 0 ? 1000 : item.TimeLimitMs, 100, 10_000);
                 b.MemoryLimitKb = Math.Clamp(item.MemoryLimitKb <= 0 ? 32_768 : item.MemoryLimitKb, 4_096, 512_000);
                 b.IsPublic = item.IsPublic;
+                b.GeneratedByAi = item.GeneratedByAi;
                 b.UpdatedAt = DateTime.UtcNow;
 
                 if (existing is not null) _db.BankTestCases.RemoveRange(existing.TestCases);

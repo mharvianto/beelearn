@@ -10,20 +10,12 @@ namespace BeeCoding.Controllers;
 
 [Authorize]
 [Route("api/boards/{slug}/problems")]
-public class ProblemsController : ApiControllerBase
+public class ProblemsController(AppDbContext db, BoardService boards, VisibilityService vis, IBoardNotifier notifier) : ApiControllerBase
 {
-    private readonly AppDbContext _db;
-    private readonly BoardService _boards;
-    private readonly VisibilityService _vis;
-    private readonly IBoardNotifier _notifier;
-
-    public ProblemsController(AppDbContext db, BoardService boards, VisibilityService vis, IBoardNotifier notifier)
-    {
-        _db = db;
-        _boards = boards;
-        _vis = vis;
-        _notifier = notifier;
-    }
+    private readonly AppDbContext _db = db;
+    private readonly BoardService _boards = boards;
+    private readonly VisibilityService _vis = vis;
+    private readonly IBoardNotifier _notifier = notifier;
 
     [HttpGet]
     public async Task<ActionResult<object>> List(string slug)
@@ -44,8 +36,8 @@ public class ProblemsController : ApiControllerBase
             : problems.Select(Mapping.ToStudentDto).ToList();
     }
 
-    [HttpGet("{problemId:int}")]
-    public async Task<ActionResult<object>> Get(string slug, int problemId)
+    [HttpGet("{problemSlug}")]
+    public async Task<ActionResult<object>> Get(string slug, string problemSlug)
     {
         var boardId = await _boards.ResolveBoardIdAsync(slug);
         if (boardId is null) return NotFound();
@@ -54,7 +46,7 @@ public class ProblemsController : ApiControllerBase
 
         var p = await _db.Problems
             .Include(x => x.TestCases)
-            .FirstOrDefaultAsync(x => x.Id == problemId && x.BoardId == boardId.Value);
+            .FirstOrDefaultAsync(x => x.Slug == problemSlug && x.BoardId == boardId.Value);
         if (p is null) return NotFound();
 
         return _vis.IsStaff(me.Role) ? Mapping.ToOwnerDto(p) : Mapping.ToStudentDto(p);
@@ -75,15 +67,15 @@ public class ProblemsController : ApiControllerBase
         return Mapping.ToOwnerDto(p);
     }
 
-    [HttpPut("{problemId:int}")]
-    public async Task<ActionResult<ProblemDto>> Update(string slug, int problemId, UpsertProblemDto dto)
+    [HttpPut("{problemSlug}")]
+    public async Task<ActionResult<ProblemDto>> Update(string slug, string problemSlug, UpsertProblemDto dto)
     {
         var (boardId, err) = await RequireOwnerAsync(slug);
         if (err is not null) return err;
 
         var p = await _db.Problems
             .Include(x => x.TestCases)
-            .FirstOrDefaultAsync(x => x.Id == problemId && x.BoardId == boardId!.Value);
+            .FirstOrDefaultAsync(x => x.Slug == problemSlug && x.BoardId == boardId!.Value);
         if (p is null) return NotFound();
 
         Apply(p, dto);
@@ -97,17 +89,17 @@ public class ProblemsController : ApiControllerBase
         await _db.SaveChangesAsync();
         await _notifier.ProblemChangedAsync(boardId!.Value);
 
-        var fresh = await _db.Problems.Include(x => x.TestCases).FirstAsync(x => x.Id == problemId);
+        var fresh = await _db.Problems.Include(x => x.TestCases).FirstAsync(x => x.Id == p.Id);
         return Mapping.ToOwnerDto(fresh);
     }
 
-    [HttpDelete("{problemId:int}")]
-    public async Task<IActionResult> Delete(string slug, int problemId)
+    [HttpDelete("{problemSlug}")]
+    public async Task<IActionResult> Delete(string slug, string problemSlug)
     {
         var (boardId, err) = await RequireOwnerAsync(slug);
         if (err is not null) return err;
 
-        var p = await _db.Problems.FirstOrDefaultAsync(x => x.Id == problemId && x.BoardId == boardId!.Value);
+        var p = await _db.Problems.FirstOrDefaultAsync(x => x.Slug == problemSlug && x.BoardId == boardId!.Value);
         if (p is null) return NotFound();
 
         _db.Problems.Remove(p);
@@ -120,10 +112,9 @@ public class ProblemsController : ApiControllerBase
     {
         p.Title = (dto.Title ?? "").Trim();
         p.StatementMarkdown = dto.StatementMarkdown ?? "";
-        p.Language = NativeCompiler.Normalize(dto.Language);
+        p.AllowedLanguages = Languages.Normalize(dto.AllowedLanguages);
         p.Tags = Mapping.NormalizeTags(dto.Tags);
         p.Level = Mapping.ParseLevel(dto.Level);
-        p.StarterCode = dto.StarterCode ?? "";
         p.BannedHeaders = SourcePolicy.Normalize(dto.BannedHeaders);
         p.BannedSymbols = SourcePolicy.NormalizeSymbols(dto.BannedSymbols);
         p.TimeLimitMs = Math.Clamp(dto.TimeLimitMs <= 0 ? 1000 : dto.TimeLimitMs, 100, 10_000);

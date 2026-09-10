@@ -15,16 +15,10 @@ namespace BeeCoding.Controllers;
 /// </summary>
 [ApiController]
 [Authorize(Roles = "Teacher")]
-public class BankController : ApiControllerBase
+public class BankController(AppDbContext db, IBoardNotifier notifier) : ApiControllerBase
 {
-    private readonly AppDbContext _db;
-    private readonly IBoardNotifier _notifier;
-
-    public BankController(AppDbContext db, IBoardNotifier notifier)
-    {
-        _db = db;
-        _notifier = notifier;
-    }
+    private readonly AppDbContext _db = db;
+    private readonly IBoardNotifier _notifier = notifier;
 
     private IQueryable<BankProblem> Readable() =>
         _db.BankProblems.Where(b => b.OwnerId == UserId || b.IsPublic);
@@ -67,13 +61,13 @@ public class BankController : ApiControllerBase
         return rows.Select(b => Mapping.ToSummary(b, UserId)).ToList();
     }
 
-    [HttpGet("api/bank/{id:int}")]
-    public async Task<ActionResult<BankProblemDto>> Get(int id)
+    [HttpGet("api/bank/{slug}")]
+    public async Task<ActionResult<BankProblemDto>> Get(string slug)
     {
         var b = await Readable()
             .Include(x => x.Owner)
             .Include(x => x.TestCases)
-            .FirstOrDefaultAsync(x => x.Id == id);
+            .FirstOrDefaultAsync(x => x.Slug == slug);
         return b is null ? NotFound() : Mapping.ToDto(b, UserId);
     }
 
@@ -89,13 +83,13 @@ public class BankController : ApiControllerBase
         return Mapping.ToDto(b, UserId);
     }
 
-    [HttpPut("api/bank/{id:int}")]
-    public async Task<ActionResult<BankProblemDto>> Update(int id, UpsertBankProblemDto dto)
+    [HttpPut("api/bank/{slug}")]
+    public async Task<ActionResult<BankProblemDto>> Update(string slug, UpsertBankProblemDto dto)
     {
         var b = await _db.BankProblems
             .Include(x => x.Owner)
             .Include(x => x.TestCases)
-            .FirstOrDefaultAsync(x => x.Id == id);
+            .FirstOrDefaultAsync(x => x.Slug == slug);
         if (b is null) return NotFound();
         if (b.OwnerId != UserId) return Forbid();
 
@@ -108,14 +102,14 @@ public class BankController : ApiControllerBase
         await _db.SaveChangesAsync();
 
         var fresh = await _db.BankProblems.Include(x => x.Owner).Include(x => x.TestCases)
-            .FirstAsync(x => x.Id == id);
+            .FirstAsync(x => x.Id == b.Id);
         return Mapping.ToDto(fresh, UserId);
     }
 
-    [HttpDelete("api/bank/{id:int}")]
-    public async Task<IActionResult> Delete(int id)
+    [HttpDelete("api/bank/{slug}")]
+    public async Task<IActionResult> Delete(string slug)
     {
-        var b = await _db.BankProblems.FirstOrDefaultAsync(x => x.Id == id);
+        var b = await _db.BankProblems.FirstOrDefaultAsync(x => x.Slug == slug);
         if (b is null) return NotFound();
         if (b.OwnerId != UserId) return Forbid();
 
@@ -143,10 +137,10 @@ public class BankController : ApiControllerBase
             BoardId = board.Id,
             Title = bank.Title,
             StatementMarkdown = bank.StatementMarkdown,
-            Language = bank.Language,
+            AllowedLanguages = bank.AllowedLanguages,
             Tags = bank.Tags,
             Level = bank.Level,
-            StarterCode = bank.StarterCode,
+            GeneratedByAi = bank.GeneratedByAi,
             BannedHeaders = bank.BannedHeaders,
             BannedSymbols = bank.BannedSymbols,
             TimeLimitMs = bank.TimeLimitMs,
@@ -188,10 +182,10 @@ public class BankController : ApiControllerBase
             OwnerId = UserId,
             Title = p.Title,
             StatementMarkdown = p.StatementMarkdown,
-            Language = p.Language,
+            AllowedLanguages = p.AllowedLanguages,
             Tags = p.Tags,
             Level = p.Level,
-            StarterCode = p.StarterCode,
+            GeneratedByAi = p.GeneratedByAi,
             BannedHeaders = p.BannedHeaders,
             BannedSymbols = p.BannedSymbols,
             TimeLimitMs = p.TimeLimitMs,
@@ -218,9 +212,8 @@ public class BankController : ApiControllerBase
     {
         b.Title = (dto.Title ?? "").Trim();
         b.StatementMarkdown = dto.StatementMarkdown ?? "";
-        b.Language = NativeCompiler.Normalize(dto.Language);
+        b.AllowedLanguages = Languages.Normalize(dto.AllowedLanguages);
         b.Level = Mapping.ParseLevel(dto.Level);
-        b.StarterCode = dto.StarterCode ?? "";
         b.BannedHeaders = SourcePolicy.Normalize(dto.BannedHeaders);
         b.BannedSymbols = SourcePolicy.NormalizeSymbols(dto.BannedSymbols);
         b.TimeLimitMs = Math.Clamp(dto.TimeLimitMs <= 0 ? 1000 : dto.TimeLimitMs, 100, 10_000);

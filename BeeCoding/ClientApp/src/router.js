@@ -10,18 +10,18 @@ const routes = [
   { path: '/boards', component: () => import('./views/Dashboard.vue') },
   { path: '/bank', component: () => import('./views/Bank.vue') },
   { path: '/bank/new', component: () => import('./views/ProblemEdit.vue') },
-  { path: '/bank/:id/edit', component: () => import('./views/ProblemEdit.vue'), props: true },
+  { path: '/bank/:problemSlug/edit', component: () => import('./views/ProblemEdit.vue'), props: true },
   { path: '/practice', component: () => import('./views/Practice.vue') },
   { path: '/playground', component: () => import('./views/Playground.vue') },
-  { path: '/practice/:id', component: () => import('./views/PracticeSolve.vue'), props: true },
+  { path: '/practice/:slug', component: () => import('./views/PracticeSolve.vue'), props: true },
   { path: '/leaderboard', component: () => import('./views/Leaderboard.vue') },
   { path: '/account', component: () => import('./views/Account.vue') },
   { path: '/admin', component: () => import('./views/Admin.vue') },
   { path: '/boards/:slug', component: () => import('./views/Board.vue'), props: true },
   { path: '/boards/:slug/live', component: () => import('./views/LiveCode.vue'), props: true },
   { path: '/boards/:slug/problems/new', component: () => import('./views/ProblemEdit.vue'), props: true },
-  { path: '/boards/:slug/problems/:id/edit', component: () => import('./views/ProblemEdit.vue'), props: true },
-  { path: '/boards/:slug/problems/:problemId', component: () => import('./views/Solve.vue'), props: true },
+  { path: '/boards/:slug/problems/:problemSlug/edit', component: () => import('./views/ProblemEdit.vue'), props: true },
+  { path: '/boards/:slug/problems/:problemSlug', component: () => import('./views/Solve.vue'), props: true },
 ];
 
 export const router = createRouter({

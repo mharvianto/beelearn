@@ -32,12 +32,16 @@ public class SubmissionsController(AppDbContext db, BoardService boards, Visibil
         if (dto.Code.Length > 200_000) return BadRequest("Code is too large.");
         if (!_rate.TryAcquire(UserId)) return StatusCode(429, "Slow down a moment and try again.");
 
+        var lang = dto.Language is "c" or "cpp" ? dto.Language : Languages.Default(problem.AllowedLanguages);
+        if (!Languages.Allows(problem.AllowedLanguages, lang))
+            return BadRequest($"This problem only accepts {Languages.Label(problem.AllowedLanguages)}.");
+
         var sub = new Submission
         {
             ProblemId = problemId,
             UserId = UserId,
             Code = dto.Code,
-            Language = dto.Language is "c" or "cpp" ? dto.Language : problem.Language,
+            Language = lang,
             Status = SubmissionStatus.Queued,
         };
         _db.Submissions.Add(sub);
@@ -53,8 +57,7 @@ public class SubmissionsController(AppDbContext db, BoardService boards, Visibil
         var tests = problem.TestCases.OrderBy(t => t.Position).ThenBy(t => t.Id)
             .Select(t => new TestSpec(t.Stdin, t.ExpectedStdout, t.Points)).ToList();
         await _queue.EnqueueGradeAsync(new GradeJob(
-            "board", sub.Id,
-            string.IsNullOrEmpty(sub.Language) ? problem.Language : sub.Language!, sub.Code,
+            "board", sub.Id, lang, sub.Code,
             problem.TimeLimitMs, problem.MemoryLimitKb, problem.BannedHeaders, problem.BannedSymbols, tests));
         return Accepted(new { submissionId = sub.Id });
     }

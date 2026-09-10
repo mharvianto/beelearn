@@ -31,22 +31,22 @@ public static class Mapping
         new(t.Id, t.Stdin, t.ExpectedStdout, t.IsSample, t.Points, t.Position);
 
     public static ProblemDto ToOwnerDto(Problem p) => new(
-        p.Id, p.BoardId, p.Title, p.StatementMarkdown, p.Language, p.StarterCode,
-        p.TimeLimitMs, p.MemoryLimitKb, p.Position, p.Tags, p.Level.ToString(),
+        p.Id, p.Slug, p.BoardId, p.Title, p.StatementMarkdown, p.AllowedLanguages,
+        p.TimeLimitMs, p.MemoryLimitKb, p.Position, p.Tags, p.Level.ToString(), p.GeneratedByAi,
         p.TestCases.OrderBy(t => t.Position).ThenBy(t => t.Id).Select(ToDto).ToList(), p.BannedHeaders, p.BannedSymbols);
 
     public static StudentProblemDto ToStudentDto(Problem p) => new(
-        p.Id, p.BoardId, p.Title, p.StatementMarkdown, p.Language, p.StarterCode,
-        p.TimeLimitMs, p.MemoryLimitKb, p.Position, p.Tags, p.Level.ToString(),
+        p.Id, p.Slug, p.BoardId, p.Title, p.StatementMarkdown, p.AllowedLanguages,
+        p.TimeLimitMs, p.MemoryLimitKb, p.Position, p.Tags, p.Level.ToString(), p.GeneratedByAi,
         p.TestCases.Where(t => t.IsSample).OrderBy(t => t.Position).ThenBy(t => t.Id).Select(ToDto).ToList(), p.BannedHeaders, p.BannedSymbols);
 
     public static TestCaseDto ToDto(BankTestCase t) =>
         new(t.Id, t.Stdin, t.ExpectedStdout, t.IsSample, t.Points, t.Position);
 
     public static BankSummaryDto ToSummary(BankProblem b, int viewerUserId) => new(
-        b.Id, b.Title, b.Language, b.Level.ToString(), b.Tags, b.IsPublic,
+        b.Id, b.Slug, b.Title, b.AllowedLanguages, b.Level.ToString(), b.Tags, b.IsPublic,
         b.OwnerId == viewerUserId, b.Owner?.DisplayName ?? "teacher",
-        b.TestCases.Count, b.TestCases.Count(t => t.IsSample), b.UpdatedAt);
+        b.TestCases.Count, b.TestCases.Count(t => t.IsSample), b.UpdatedAt, b.GeneratedByAi);
 
     /// <summary>Hidden test cases are only exposed to the bank problem's owner.</summary>
     public static BankProblemDto ToDto(BankProblem b, int viewerUserId)
@@ -57,13 +57,13 @@ public static class Mapping
             .OrderBy(t => t.Position).ThenBy(t => t.Id)
             .Select(ToDto).ToList();
         return new(
-            b.Id, b.Title, b.StatementMarkdown, b.Language, b.StarterCode,
-            b.TimeLimitMs, b.MemoryLimitKb, b.Level.ToString(), b.Tags, b.IsPublic,
+            b.Id, b.Slug, b.Title, b.StatementMarkdown, b.AllowedLanguages,
+            b.TimeLimitMs, b.MemoryLimitKb, b.Level.ToString(), b.Tags, b.IsPublic, b.GeneratedByAi,
             mine, b.Owner?.DisplayName ?? "teacher", b.UpdatedAt, tests, b.BannedHeaders, b.BannedSymbols);
     }
 
     public static ProblemSummaryDto ToSummary(Problem p) =>
-        new(p.Id, p.Title, p.Position, p.TimeLimitMs, p.MemoryLimitKb, p.Language, p.Tags, p.Level.ToString());
+        new(p.Id, p.Slug, p.Title, p.Position, p.TimeLimitMs, p.MemoryLimitKb, p.AllowedLanguages, p.Tags, p.Level.ToString());
 
     public static BankSubmissionDto ToDto(BankSubmission s, bool withCode = true) => new(
         s.Id, s.BankProblemId, s.Status.ToString(), s.Verdict.ToString(),
@@ -75,7 +75,7 @@ public static class Mapping
     // Sample *inputs* are still returned so the Run box can be pre-filled — they're already
     // fully visible in the rendered statement image anyway.
     public static PracticeProblemDto ToPracticeDto(BankProblem b, bool solved) => new(
-        b.Id, b.Title, "", b.Language, b.StarterCode,
+        b.Id, b.Slug, b.Title, "", b.AllowedLanguages,
         b.TimeLimitMs, b.MemoryLimitKb, b.Level.ToString(), b.Tags,
         b.TestCases.Where(t => t.IsSample)
             .OrderBy(t => t.Position).ThenBy(t => t.Id)

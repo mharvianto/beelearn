@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { api } from '../lib/api';
 import { useProgress } from '../stores/progress';
+import { langLabel } from '../lib/templates';
 import LevelBadge from '../components/LevelBadge.vue';
 import VerdictBadge from '../components/VerdictBadge.vue';
 
@@ -86,7 +87,7 @@ onMounted(() => { load(); loadGuide(); progress.refresh(); });
                 class="text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600">use heuristic</button>
       </div>
       <div class="grid gap-2 sm:grid-cols-3">
-        <RouterLink v-for="r in guide.recommended" :key="r.id" :to="`/practice/${r.id}`"
+        <RouterLink v-for="r in guide.recommended" :key="r.id" :to="`/practice/${r.slug}`"
                     class="border border-amber-200 dark:border-amber-500/30 bg-amber-50/50 dark:bg-amber-500/5 rounded-xl p-3
                            hover:border-amber-400 dark:hover:border-amber-500/60 flex flex-col gap-1">
           <div class="flex items-center gap-2">
@@ -146,7 +147,7 @@ onMounted(() => { load(); loadGuide(); progress.refresh(); });
     </div>
 
     <div class="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
-      <RouterLink v-for="p in items" :key="p.id" :to="`/practice/${p.id}`"
+      <RouterLink v-for="p in items" :key="p.id" :to="`/practice/${p.slug}`"
                   class="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/60">
         <span class="w-5 text-center">
           <span v-if="p.solved" class="text-emerald-500">✓</span>
@@ -156,7 +157,7 @@ onMounted(() => { load(); loadGuide(); progress.refresh(); });
         <VerdictBadge v-if="p.myVerdict !== 'None' && !p.solved" :verdict="p.myVerdict" small />
         <span v-if="p.tags" class="hidden md:block text-[11px] text-slate-400 dark:text-slate-500 truncate max-w-[14rem]">{{ p.tags }}</span>
         <LevelBadge :level="p.level" />
-        <span class="text-[11px] text-slate-400 dark:text-slate-500 w-8 text-right">{{ p.language.toUpperCase() }}</span>
+        <span class="text-[11px] text-slate-400 dark:text-slate-500 w-10 text-right">{{ langLabel(p.allowedLanguages) }}</span>
       </RouterLink>
       <p v-if="!items.length" class="px-4 py-6 text-sm text-slate-400 dark:text-slate-500">No problems.</p>
     </div>

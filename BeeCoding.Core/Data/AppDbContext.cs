@@ -1,4 +1,5 @@
 using BeeCoding.Models;
+using BeeCoding.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace BeeCoding.Data;
@@ -39,6 +40,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasOne(x => x.User).WithMany(x => x.Memberships)
             .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
 
+        b.Entity<Problem>().HasIndex(x => x.Slug).IsUnique();
         b.Entity<Problem>()
             .HasOne(x => x.Board).WithMany(x => x.Problems)
             .HasForeignKey(x => x.BoardId).OnDelete(DeleteBehavior.Cascade);
@@ -77,6 +79,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         b.Entity<BankProblem>().HasIndex(x => x.OwnerId);
         b.Entity<BankProblem>().HasIndex(x => x.IsPublic);
+        b.Entity<BankProblem>().HasIndex(x => x.Slug).IsUnique();
         b.Entity<BankProblem>()
             .HasOne(x => x.Owner).WithMany()
             .HasForeignKey(x => x.OwnerId).OnDelete(DeleteBehavior.Cascade);
@@ -114,5 +117,42 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<AiHintProgress>()
             .HasOne(x => x.User).WithMany()
             .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        AssignSlugs();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        AssignSlugs();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    /// <summary>Give every tracked <see cref="IHasSlug"/> that still lacks one a unique
+    /// random slug (covers fresh inserts and any legacy row loaded for backfill).</summary>
+    private void AssignSlugs()
+    {
+        var pending = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var e in ChangeTracker.Entries<Problem>())
+            if (e.State is EntityState.Added or EntityState.Modified or EntityState.Unchanged
+                && string.IsNullOrEmpty(e.Entity.Slug))
+                e.Entity.Slug = FreshSlug(pending, s => Problems.Any(p => p.Slug == s));
+        foreach (var e in ChangeTracker.Entries<BankProblem>())
+            if (e.State is EntityState.Added or EntityState.Modified or EntityState.Unchanged
+                && string.IsNullOrEmpty(e.Entity.Slug))
+                e.Entity.Slug = FreshSlug(pending, s => BankProblems.Any(p => p.Slug == s));
+    }
+
+    private static string FreshSlug(HashSet<string> pending, Func<string, bool> takenInDb)
+    {
+        for (var i = 0; i < 25; i++)
+        {
+            var s = Slug.New();
+            if (pending.Add(s) && !takenInDb(s)) return s;
+        }
+        return Slug.New(12);   // astronomically unlikely; longer slug as a last resort
     }
 }

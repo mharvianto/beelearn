@@ -8,6 +8,12 @@ public enum ProblemLevel { Easy = 1, Medium = 2, Hard = 3 }
 
 public enum MembershipRole { Owner, Teacher, Student }
 
+/// <summary>Entities whose public URL uses an unguessable slug instead of the int Id.</summary>
+public interface IHasSlug
+{
+    string Slug { get; set; }
+}
+
 public enum SubmissionStatus { Queued, Running, Done }
 
 public enum Verdict
@@ -96,9 +102,14 @@ public class BoardMembership
     public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
 }
 
-public class Problem
+public class Problem : IHasSlug
 {
     public int Id { get; set; }
+
+    /// <summary>Unguessable public identifier used in URLs (the int Id stays internal).
+    /// Assigned automatically on insert (see <c>AppDbContext.SaveChangesAsync</c>).</summary>
+    [MaxLength(16)]
+    public string Slug { get; set; } = "";
 
     public int BoardId { get; set; }
     public Board? Board { get; set; }
@@ -108,9 +119,10 @@ public class Problem
 
     public string StatementMarkdown { get; set; } = "";
 
-    /// <summary>"c" or "cpp".</summary>
-    [MaxLength(8)]
-    public string Language { get; set; } = "cpp";
+    /// <summary>Comma-separated list of languages a submission may use ("c", "cpp").
+    /// Empty = every supported language is allowed.</summary>
+    [MaxLength(32)]
+    public string AllowedLanguages { get; set; } = "";
 
     /// <summary>Comma-separated, lowercase topic tags, e.g. "array,graph,dp".</summary>
     [MaxLength(300)]
@@ -118,7 +130,8 @@ public class Problem
 
     public ProblemLevel Level { get; set; } = ProblemLevel.Medium;
 
-    public string StarterCode { get; set; } = "";
+    /// <summary>True when this problem was written by the AI generator.</summary>
+    public bool GeneratedByAi { get; set; }
 
     /// <summary>Comma-separated header names a submission may NOT #include, e.g.
     /// "algorithm,numeric". When set, umbrella headers (bits/stdc++.h) are also blocked.</summary>
@@ -147,9 +160,14 @@ public class Problem
 /// A reusable problem in a teacher's private bank. Adding one to a board COPIES it into
 /// <see cref="Problem"/> — the board copy is independent afterwards.
 /// </summary>
-public class BankProblem
+public class BankProblem : IHasSlug
 {
     public int Id { get; set; }
+
+    /// <summary>Unguessable public identifier used in URLs (the int Id stays internal).
+    /// Assigned automatically on insert (see <c>AppDbContext.SaveChangesAsync</c>).</summary>
+    [MaxLength(16)]
+    public string Slug { get; set; } = "";
 
     public int OwnerId { get; set; }
     public User? Owner { get; set; }
@@ -159,10 +177,13 @@ public class BankProblem
 
     public string StatementMarkdown { get; set; } = "";
 
-    [MaxLength(8)]
-    public string Language { get; set; } = "cpp";
+    /// <summary>Comma-separated list of languages a submission may use ("c", "cpp").
+    /// Empty = every supported language is allowed.</summary>
+    [MaxLength(32)]
+    public string AllowedLanguages { get; set; } = "";
 
-    public string StarterCode { get; set; } = "";
+    /// <summary>True when this problem was written by the AI generator.</summary>
+    public bool GeneratedByAi { get; set; }
 
     /// <summary>Comma-separated header names a submission may NOT #include (see Problem).</summary>
     [MaxLength(300)]

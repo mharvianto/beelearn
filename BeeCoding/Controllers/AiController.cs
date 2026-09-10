@@ -29,36 +29,22 @@ public record AiGenerateDto(string? Idea, string? Level, string? Language, int? 
 [ApiController]
 [Authorize]
 [Route("api/ai")]
-public class AiController : ApiControllerBase
+public class AiController(AppDbContext db, BoardService boards, AiTutorService ai,
+    AiUsageService usage, AiHintProgressService prog, IJudgeQueue queue, IOptions<AiOptions> opt,
+    IAiJobStore jobs, IServiceScopeFactory scopes, ILogger<AiController> log) : ApiControllerBase
 {
-    private readonly AppDbContext _db;
-    private readonly BoardService _boards;
-    private readonly AiTutorService _ai;
-    private readonly AiUsageService _usage;
-    private readonly AiHintProgressService _prog;
-    private readonly IJudgeQueue _queue;
-    private readonly AiOptions _opt;
-    private readonly IAiJobStore _jobs;
-    private readonly IServiceScopeFactory _scopes;
-    private readonly ILogger<AiController> _log;
+    private readonly AppDbContext _db = db;
+    private readonly BoardService _boards = boards;
+    private readonly AiTutorService _ai = ai;
+    private readonly AiUsageService _usage = usage;
+    private readonly AiHintProgressService _prog = prog;
+    private readonly IJudgeQueue _queue = queue;
+    private readonly AiOptions _opt = opt.Value;
+    private readonly IAiJobStore _jobs = jobs;
+    private readonly IServiceScopeFactory _scopes = scopes;
+    private readonly ILogger<AiController> _log = log;
 
     private static readonly ConcurrentDictionary<int, long> _last = new();
-
-    public AiController(AppDbContext db, BoardService boards, AiTutorService ai,
-        AiUsageService usage, AiHintProgressService prog, IJudgeQueue queue, IOptions<AiOptions> opt,
-        IAiJobStore jobs, IServiceScopeFactory scopes, ILogger<AiController> log)
-    {
-        _db = db;
-        _boards = boards;
-        _ai = ai;
-        _usage = usage;
-        _prog = prog;
-        _queue = queue;
-        _opt = opt.Value;
-        _jobs = jobs;
-        _scopes = scopes;
-        _log = log;
-    }
 
     [HttpGet("enabled")]
     public IActionResult Enabled() =>
@@ -162,20 +148,23 @@ public class AiController : ApiControllerBase
                 OwnerId = userId,
                 Title = gp.Title.Trim(),
                 StatementMarkdown = gp.StatementMarkdown ?? "",
-                Language = refLang,
-                StarterCode = gp.StarterCode ?? "",
+                AllowedLanguages = "",          // AI problems are I/O-based — any language is fine
+                GeneratedByAi = true,
                 Level = Mapping.ParseLevel(gp.Level),
                 Tags = Mapping.NormalizeTags(gp.Tags),
                 TimeLimitMs = gp.TimeLimitMs,
                 MemoryLimitKb = gp.MemoryLimitKb,
-                IsPublic = false,
+                IsPublic = true,                // default: share with other teachers
             };
             int pos = 0;
             foreach (var (stdin, expected, isSample) in built)
                 problem.TestCases.Add(new BankTestCase
                 {
-                    Stdin = stdin, ExpectedStdout = expected, IsSample = isSample,
-                    Points = isSample ? 0 : 1, Position = pos++,
+                    Stdin = stdin,
+                    ExpectedStdout = expected,
+                    IsSample = isSample,
+                    Points = isSample ? 0 : 1,
+                    Position = pos++,
                 });
 
             db.BankProblems.Add(problem);
@@ -233,7 +222,7 @@ public class AiController : ApiControllerBase
                 .FirstOrDefaultAsync(b => b.Id == bankProblemId && b.OwnerId == userId, ct);
             if (problem is null) { await Fail("Problem not found."); return; }
 
-            var refLang = problem.Language is "c" ? "c" : "cpp";
+            var refLang = Languages.Default(problem.AllowedLanguages);
             var samples = problem.TestCases.Where(t => t.IsSample)
                 .OrderBy(t => t.Position).ThenBy(t => t.Id)
                 .Select(t => (t.Stdin, t.ExpectedStdout)).ToList();
@@ -280,7 +269,11 @@ public class AiController : ApiControllerBase
             foreach (var (stdin, expected) in fresh)
                 problem.TestCases.Add(new BankTestCase
                 {
-                    Stdin = stdin, ExpectedStdout = expected, IsSample = false, Points = 1, Position = pos++,
+                    Stdin = stdin,
+                    ExpectedStdout = expected,
+                    IsSample = false,
+                    Points = 1,
+                    Position = pos++,
                 });
             problem.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync(ct);
@@ -415,7 +408,7 @@ public class AiController : ApiControllerBase
             var b = await _db.BankProblems.Include(x => x.TestCases)
                 .FirstOrDefaultAsync(x => x.Id == bid && x.IsPublic);
             if (b is null) return (null, new ObjectResult("Problem not found.") { StatusCode = 404 });
-            statement = b.StatementMarkdown; language = b.Language;
+            statement = b.StatementMarkdown; language = Languages.Default(b.AllowedLanguages);
             samples = b.TestCases.Where(t => t.IsSample).OrderBy(t => t.Position).ThenBy(t => t.Id)
                 .Select(t => (t.Stdin, t.ExpectedStdout)).ToList();
         }
@@ -425,7 +418,7 @@ public class AiController : ApiControllerBase
             if (p is null) return (null, new ObjectResult("Problem not found.") { StatusCode = 404 });
             if (await _boards.GetMembershipAsync(p.BoardId, UserId) is null)
                 return (null, new ObjectResult("Not a member of this board.") { StatusCode = 403 });
-            statement = p.StatementMarkdown; language = p.Language;
+            statement = p.StatementMarkdown; language = Languages.Default(p.AllowedLanguages);
             samples = p.TestCases.Where(t => t.IsSample).OrderBy(t => t.Position).ThenBy(t => t.Id)
                 .Select(t => (t.Stdin, t.ExpectedStdout)).ToList();
         }

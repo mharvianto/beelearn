@@ -11,23 +11,14 @@ namespace BeeCoding.Controllers;
 
 [Authorize]
 [Route("api/run")]
-public class RunController : ApiControllerBase
+public class RunController(IJudgeQueue queue, RateLimiter rate, IOptions<JudgeOptions> opt,
+    AppDbContext db, BoardService boards) : ApiControllerBase
 {
-    private readonly IJudgeQueue _queue;
-    private readonly RateLimiter _rate;
-    private readonly JudgeOptions _opt;
-    private readonly AppDbContext _db;
-    private readonly BoardService _boards;
-
-    public RunController(IJudgeQueue queue, RateLimiter rate, IOptions<JudgeOptions> opt,
-        AppDbContext db, BoardService boards)
-    {
-        _queue = queue;
-        _rate = rate;
-        _opt = opt.Value;
-        _db = db;
-        _boards = boards;
-    }
+    private readonly IJudgeQueue _queue = queue;
+    private readonly RateLimiter _rate = rate;
+    private readonly JudgeOptions _opt = opt.Value;
+    private readonly AppDbContext _db = db;
+    private readonly BoardService _boards = boards;
 
     /// <summary>Ad-hoc compile + run with custom stdin. Not judged, not persisted.</summary>
     [HttpPost]
@@ -38,11 +29,13 @@ public class RunController : ApiControllerBase
         if ((dto.Stdin?.Length ?? 0) > 256_000) return BadRequest("Stdin is too large.");
         if (!_rate.TryAcquire(UserId)) return StatusCode(429, "Slow down a moment and try again.");
 
-        // If this Run is tied to a problem, apply that problem's header restrictions here too
+        // If this Run is tied to a problem, apply that problem's restrictions here too
         // (Submit already does) so students can't sidestep them via the Run box.
-        var (bh, bs) = await RestrictionsForAsync(dto.ProblemId, dto.BankProblemId);
+        var (bh, bs, allowedLangs) = await RestrictionsForAsync(dto.ProblemId, dto.BankProblemId);
         if (SourcePolicy.Violation(dto.Code, bh, bs) is { } denied)
             return new RunResultDto(false, denied, "", "", 0, 0, false, 0, 0);
+        if (!Languages.Allows(allowedLangs, dto.Language))
+            return new RunResultDto(false, $"This problem only accepts {Languages.Label(allowedLangs)}.", "", "", 0, 0, false, 0, 0);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
@@ -57,23 +50,22 @@ public class RunController : ApiControllerBase
         }
     }
 
-    private async Task<(string? Headers, string? Symbols)> RestrictionsForAsync(int? problemId, int? bankProblemId)
+    private async Task<(string? Headers, string? Symbols, string? AllowedLanguages)> RestrictionsForAsync(int? problemId, int? bankProblemId)
     {
         if (bankProblemId is int bid)
         {
             var b = await _db.BankProblems.Where(b => b.Id == bid && b.IsPublic)
-                .Select(b => new { b.BannedHeaders, b.BannedSymbols }).FirstOrDefaultAsync();
-            return b is null ? (null, null) : (b.BannedHeaders, b.BannedSymbols);
+                .Select(b => new { b.BannedHeaders, b.BannedSymbols, b.AllowedLanguages }).FirstOrDefaultAsync();
+            return b is null ? (null, null, null) : (b.BannedHeaders, b.BannedSymbols, b.AllowedLanguages);
         }
         if (problemId is int pid)
         {
             var row = await _db.Problems.Where(p => p.Id == pid)
-                .Select(p => new { p.BoardId, p.BannedHeaders, p.BannedSymbols }).FirstOrDefaultAsync();
-            if (row is null || (string.IsNullOrEmpty(row.BannedHeaders) && string.IsNullOrEmpty(row.BannedSymbols)))
-                return (null, null);
+                .Select(p => new { p.BoardId, p.BannedHeaders, p.BannedSymbols, p.AllowedLanguages }).FirstOrDefaultAsync();
+            if (row is null) return (null, null, null);
             return await _boards.GetMembershipAsync(row.BoardId, UserId) is null
-                ? (null, null) : (row.BannedHeaders, row.BannedSymbols);
+                ? (null, null, null) : (row.BannedHeaders, row.BannedSymbols, row.AllowedLanguages);
         }
-        return (null, null);
+        return (null, null, null);
     }
 }

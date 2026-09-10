@@ -22,8 +22,7 @@ public static class DbSeeder
                 OwnerId = owner.Id,
                 Title = s.Title,
                 StatementMarkdown = s.Statement,
-                Language = "cpp",
-                StarterCode = BankSeed.Starter,
+                AllowedLanguages = "",
                 TimeLimitMs = 1000,
                 MemoryLimitKb = 32_768,
                 Level = s.Level,
@@ -74,11 +73,9 @@ public static class DbSeeder
             StatementMarkdown =
                 "Read two integers `a` and `b` on one line, print `a + b`.\n\n" +
                 "**Input:** `2 3` — **Output:** `5`",
-            Language = "cpp",
+            AllowedLanguages = "",
             Tags = "math",
             Level = ProblemLevel.Easy,
-            StarterCode =
-                "#include <iostream>\nusing namespace std;\nint main(){\n    long long a, b;\n    cin >> a >> b;\n    cout << a + b << endl;\n}\n",
             TimeLimitMs = 1000,
             MemoryLimitKb = 32_768,
             Position = 0,

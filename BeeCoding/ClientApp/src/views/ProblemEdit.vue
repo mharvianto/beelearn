@@ -5,12 +5,13 @@ import { api } from '../lib/api';
 import ProblemEditor from '../components/ProblemEditor.vue';
 
 // One page for all four routes:
-//   /bank/new  /bank/:id/edit  /boards/:slug/problems/new  /boards/:slug/problems/:id/edit
-const props = defineProps({ id: [String, Number], slug: String });
+//   /bank/new  /bank/:problemSlug/edit
+//   /boards/:slug/problems/new  /boards/:slug/problems/:problemSlug/edit
+const props = defineProps({ problemSlug: String, slug: String });
 const router = useRouter();
 
 const isBoard = computed(() => !!props.slug);
-const editId = computed(() => (props.id ? Number(props.id) : null));
+const editSlug = computed(() => props.problemSlug || null);
 const listPath = computed(() => (isBoard.value ? `/boards/${props.slug}` : '/bank'));
 const apiBase = computed(() => (isBoard.value ? `/api/boards/${props.slug}/problems` : '/api/bank'));
 
@@ -24,7 +25,7 @@ const regenBusy = ref(false);
 async function load() {
   error.value = '';
   try {
-    problem.value = editId.value ? await api.get(`${apiBase.value}/${editId.value}`) : null;
+    problem.value = editSlug.value ? await api.get(`${apiBase.value}/${editSlug.value}`) : null;
   } catch (e) { error.value = e.message; }
   loaded.value = true;
 }
@@ -33,7 +34,7 @@ async function save(form) {
   error.value = ''; busy.value = true;
   try {
     const body = { ...(form.value ?? form) };
-    if (editId.value) await api.put(`${apiBase.value}/${editId.value}`, body);
+    if (editSlug.value) await api.put(`${apiBase.value}/${editSlug.value}`, body);
     else await api.post(apiBase.value, body);
     router.push(listPath.value);
   } catch (e) { error.value = e.message; }
@@ -41,10 +42,10 @@ async function save(form) {
 }
 
 async function remove() {
-  if (!editId.value || !confirm('Delete this problem?')) return;
+  if (!editSlug.value || !confirm('Delete this problem?')) return;
   error.value = '';
   try {
-    await api.del(`${apiBase.value}/${editId.value}`);
+    await api.del(`${apiBase.value}/${editSlug.value}`);
     router.push(listPath.value);
   } catch (e) { error.value = e.message; }
 }
@@ -56,10 +57,10 @@ function cancel() {
 
 // regenerate hidden tests — bank problems only (background job, poll)
 async function regenerateTests() {
-  if (isBoard.value || !editId.value) return;
+  if (isBoard.value || !problem.value?.id) return;
   error.value = ''; regenBusy.value = true;
   try {
-    const { jobId } = await api.post(`/api/ai/regenerate-tests/${editId.value}`);
+    const { jobId } = await api.post(`/api/ai/regenerate-tests/${problem.value.id}`);
     for (let n = 0; n < 240; n++) {
       await new Promise((r) => setTimeout(r, 2000));
       let r;
@@ -91,7 +92,7 @@ onMounted(async () => {
       :show-bank-fields="!isBoard"
       :error="error"
       :busy="busy"
-      :can-regen-tests="!isBoard && aiEnabled && !!editId"
+      :can-regen-tests="!isBoard && aiEnabled && !!editSlug"
       :regen-busy="regenBusy"
       @save="save" @delete="remove" @cancel="cancel" @regenerate-tests="regenerateTests" />
   </div>

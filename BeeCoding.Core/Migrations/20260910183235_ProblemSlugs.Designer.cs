@@ -3,6 +3,7 @@ using System;
 using BeeCoding.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BeeCoding.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260910183235_ProblemSlugs")]
+    partial class ProblemSlugs
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
@@ -84,11 +87,6 @@ namespace BeeCoding.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("AllowedLanguages")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("BannedHeaders")
                         .HasMaxLength(300)
                         .HasColumnType("TEXT");
@@ -100,11 +98,13 @@ namespace BeeCoding.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("GeneratedByAi")
-                        .HasColumnType("INTEGER");
-
                     b.Property<bool>("IsPublic")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("Level")
                         .HasColumnType("INTEGER");
@@ -118,6 +118,10 @@ namespace BeeCoding.Migrations
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("StarterCode")
+                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("StatementMarkdown")
@@ -424,11 +428,6 @@ namespace BeeCoding.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("AllowedLanguages")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("BannedHeaders")
                         .HasMaxLength(300)
                         .HasColumnType("TEXT");
@@ -443,8 +442,10 @@ namespace BeeCoding.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("GeneratedByAi")
-                        .HasColumnType("INTEGER");
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("Level")
                         .HasColumnType("INTEGER");
@@ -462,6 +463,10 @@ namespace BeeCoding.Migrations
 
                     b.Property<int?>("SourceBankProblemId")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("StarterCode")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("StatementMarkdown")
                         .IsRequired()

@@ -5,9 +5,6 @@ namespace BeeCoding.Services;
 /// <summary>Curated starter set of 20 problems (Input, Output, Operator, Selection, Loop, Array).</summary>
 public static class BankSeed
 {
-    public const string Starter =
-        "#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    // tulis solusimu di sini\n    return 0;\n}\n";
-
     public record Spec(
         string Title, string Tags, ProblemLevel Level, string Statement,
         (string In, string Out, bool Sample)[] Tests);

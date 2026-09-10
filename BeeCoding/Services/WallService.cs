@@ -4,17 +4,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BeeCoding.Services;
 
-public class WallService
+public class WallService(AppDbContext db, VisibilityService vis)
 {
-    private readonly AppDbContext _db;
-    private readonly VisibilityService _vis;
-
-    public WallService(AppDbContext db, VisibilityService vis)
-    {
-        _db = db;
-        _vis = vis;
-    }
-
+    private readonly AppDbContext _db = db;
+    private readonly VisibilityService _vis = vis;
     public static readonly string[] AllowedEmojis = { "👍", "⭐", "🎉", "🔥", "👀" };
 
     public static string CodePreview(string code, int maxLines = 14)
@@ -70,7 +63,7 @@ public class WallService
 
         var problems = board.Problems.OrderBy(p => p.Position).ThenBy(p => p.Id).ToList();
         var problemIds = problems.Select(p => p.Id).ToHashSet();
-        var langByProblem = problems.ToDictionary(p => p.Id, p => p.Language);
+        var langByProblem = problems.ToDictionary(p => p.Id, p => Languages.Default(p.AllowedLanguages));
 
         var posts = await _db.Posts
             .Where(p => p.BoardId == boardId)

@@ -1,7 +1,7 @@
 <script setup>
-import { ref, watch } from 'vue';
-import MonacoEditor from './MonacoEditor.vue';
+import { ref, computed, watch } from 'vue';
 import MarkdownBlock from './MarkdownBlock.vue';
+import { SUPPORTED_LANGS } from '../lib/templates';
 
 // statement: editor + preview side by side, either pane hideable (never both)
 const showWrite = ref(true);
@@ -24,7 +24,7 @@ const props = defineProps({
 const emit = defineEmits(['save', 'delete', 'cancel', 'regenerate-tests']);
 
 const blank = () => ({
-  title: '', statementMarkdown: '', language: 'cpp', starterCode: '',
+  title: '', statementMarkdown: '', allowedLanguages: '',
   timeLimitMs: 1000, memoryLimitKb: 32768, position: 0,
   level: 'Medium', tags: '', isPublic: false, bannedHeaders: '', bannedSymbols: '', testCases: [],
 });
@@ -35,6 +35,14 @@ watch(() => props.problem, (p) => {
   form.value = p ? { ...blank(), ...JSON.parse(JSON.stringify(p)) } : blank();
   tab.value = 'problem';
 }, { immediate: true });
+
+// allowed languages as a checkbox array <-> csv on the form (empty csv = all allowed)
+const allowedLangsArr = computed({
+  get: () => (form.value.allowedLanguages || '').split(',').map((s) => s.trim()).filter(Boolean),
+  set: (arr) => {
+    form.value.allowedLanguages = SUPPORTED_LANGS.filter((l) => arr.includes(l)).join(',');
+  },
+});
 
 function addTest() {
   form.value.testCases.push({ id: null, stdin: '', expectedStdout: '', isSample: false, points: 1, position: form.value.testCases.length });
@@ -47,6 +55,8 @@ function removeTest(i) { form.value.testCases.splice(i, 1); }
     <div class="max-w-5xl mx-auto px-4 py-6">
       <div class="flex items-center gap-3 flex-wrap mb-4">
         <h2 class="font-bold text-lg">{{ props.problem?.id ? 'Edit' : 'New' }} problem</h2>
+        <span v-if="props.problem?.generatedByAi"
+              class="text-[11px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">✨ AI-generated</span>
         <div class="ml-auto inline-flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden text-sm">
           <button type="button" @click="tab = 'problem'" class="px-3 py-1"
                   :class="tab === 'problem' ? 'bg-slate-800 text-white dark:bg-slate-600' : 'text-slate-500 dark:text-slate-400'">Problem</button>
@@ -79,12 +89,12 @@ function removeTest(i) { form.value.testCases.splice(i, 1); }
             </div>
           </div>
         </div>
-        <div class="flex gap-3 flex-wrap text-sm">
-          <label class="flex items-center gap-1">Language
-            <select v-model="form.language" class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1">
-              <option value="cpp">C++</option><option value="c">C</option>
-            </select>
-          </label>
+        <div class="flex gap-3 flex-wrap text-sm items-center">
+          <span class="flex items-center gap-2">Allowed languages
+            <label class="flex items-center gap-1"><input type="checkbox" value="c" v-model="allowedLangsArr" /> C</label>
+            <label class="flex items-center gap-1"><input type="checkbox" value="cpp" v-model="allowedLangsArr" /> C++</label>
+            <span class="text-[11px] text-slate-400 dark:text-slate-500">none checked = all languages</span>
+          </span>
           <label class="flex items-center gap-1">Level
             <select v-model="form.level" class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1">
               <option>Easy</option><option>Medium</option><option>Hard</option>
@@ -129,12 +139,6 @@ function removeTest(i) { form.value.testCases.splice(i, 1); }
           </label>
         </div>
 
-        <div>
-          <label class="text-xs text-slate-400 dark:text-slate-500">Starter code</label>
-          <div class="h-52 border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden mt-1">
-            <MonacoEditor v-model="form.starterCode" :language="form.language === 'c' ? 'c' : 'cpp'" />
-          </div>
-        </div>
       </div>
 
       <div v-show="tab === 'tests'">

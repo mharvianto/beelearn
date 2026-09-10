@@ -12,16 +12,18 @@ import ContentGuard from '../components/ContentGuard.vue';
 import StatementImage from '../components/StatementImage.vue';
 import AiHint from '../components/AiHint.vue';
 import SplitPane from '../components/SplitPane.vue';
-import { CODE_TEMPLATES, isPristine } from '../lib/templates';
+import { CODE_TEMPLATES, isPristine, allowedLangs, langLabel } from '../lib/templates';
 import { loadDraft, saveDraft, clearDraft } from '../lib/draft';
 import { celebrate } from '../lib/confetti';
 
-const props = defineProps({ slug: { type: String, required: true }, problemId: [String, Number] });
+const props = defineProps({ slug: { type: String, required: true }, problemSlug: { type: String, required: true } });
 const auth = useAuth();
 const progress = useProgress();
 
 const board = ref(null);
 const problem = ref(null);
+// internal id of the loaded problem — used for API calls / SignalR that key by int id
+const pid = computed(() => problem.value?.id);
 const protectOn = computed(() => !!board.value?.protectContent && auth.user?.role === 'Student');
 const watermark = computed(() =>
   `${auth.user?.email || auth.user?.displayName || ''} · ${new Date().toLocaleString()}`);
@@ -30,7 +32,7 @@ const stdin = ref('');
 const solveLang = ref('cpp');   // 'c' | 'cpp' — student's choice of compiler
 
 // local autosave so an accidental refresh doesn't wipe the editor
-const draftScope = computed(() => `board:${props.problemId}`);
+const draftScope = computed(() => `board:${props.problemSlug}`);
 const restored = ref(false);
 const restoredAt = ref('');
 let saveTimer = null;
@@ -38,21 +40,21 @@ function saveDraftNow() {
   if (problem.value) saveDraft(auth.user?.id, draftScope.value, code.value, solveLang.value);
 }
 function useTemplate() {
-  code.value = templateFor(solveLang.value);
+  code.value = CODE_TEMPLATES[solveLang.value] || '';
   clearDraft(auth.user?.id, draftScope.value);
   restored.value = false;
 }
 
-// The teacher's starter if it's in this language, otherwise the generic template.
-function templateFor(l) {
-  const authored = problem.value?.language === 'c' ? 'c' : 'cpp';
-  return l === authored && problem.value?.starterCode ? problem.value.starterCode : CODE_TEMPLATES[l];
-}
+// languages this problem accepts (empty allow-list on the problem => all of them)
+const langs = computed(() => allowedLangs(problem.value?.allowedLanguages));
+const langNote = computed(() =>
+  problem.value?.allowedLanguages ? langLabel(problem.value.allowedLanguages) : '');
+
 function setLang(l) {
-  if (l === solveLang.value) return;
+  if (l === solveLang.value || !langs.value.includes(l)) return;
   solveLang.value = l;
   // swap the boilerplate only if the student hasn't written their own code
-  if (isPristine(code.value, problem.value?.starterCode)) code.value = templateFor(l);
+  if (isPristine(code.value)) code.value = CODE_TEMPLATES[l] || '';
   try { localStorage.setItem('beecoding.lang', l); } catch { /* ignore */ }
 }
 const runOut = ref(null);
@@ -83,12 +85,12 @@ function pushLectureSoon() {
   if (!conn || conn.state !== 'Connected' || !isStaff.value || !board.value?.lecturingMode) return;
   clearTimeout(lectureTimer);
   lectureTimer = setTimeout(() => {
-    conn.invoke('PushLecture', board.value.id, Number(props.problemId), code.value, solveLang.value).catch(() => {});
+    conn.invoke('PushLecture', board.value.id, pid.value, code.value, solveLang.value).catch(() => {});
   }, 700);
 }
 function pushLectureNow() {
   if (conn?.state === 'Connected' && isStaff.value && board.value?.lecturingMode)
-    conn.invoke('PushLecture', board.value.id, Number(props.problemId), code.value, solveLang.value).catch(() => {});
+    conn.invoke('PushLecture', board.value.id, pid.value, code.value, solveLang.value).catch(() => {});
 }
 function useLectureCode() {
   if (!lecture.value) return;
@@ -98,15 +100,16 @@ function useLectureCode() {
 
 async function load() {
   board.value = await api.get(`/api/boards/${props.slug}`);
-  problem.value = await api.get(`/api/boards/${props.slug}/problems/${props.problemId}`);
+  problem.value = await api.get(`/api/boards/${props.slug}/problems/${props.problemSlug}`);
   let pref = null;
   try { pref = localStorage.getItem('beecoding.lang'); } catch { /* ignore */ }
-  solveLang.value = pref === 'c' || pref === 'cpp' ? pref : (problem.value.language === 'c' ? 'c' : 'cpp');
-  code.value = templateFor(solveLang.value) || '';
+  const allowed = allowedLangs(problem.value.allowedLanguages);
+  solveLang.value = allowed.includes(pref) ? pref : allowed[0];
+  code.value = CODE_TEMPLATES[solveLang.value] || '';
 
   // bring back an unsaved draft from a previous visit / refresh
   const d = loadDraft(auth.user?.id, draftScope.value);
-  if (d && d.code.trim() && !isPristine(d.code, problem.value.starterCode)) {
+  if (d && d.code.trim() && !isPristine(d.code)) {
     code.value = d.code;
     if (d.lang === 'c' || d.lang === 'cpp') solveLang.value = d.lang;
     restored.value = true;
@@ -117,13 +120,13 @@ async function load() {
   await loadSubs();
 }
 async function loadSubs() {
-  submissions.value = await api.get(`/api/problems/${props.problemId}/submissions`);
+  submissions.value = await api.get(`/api/problems/${pid.value}/submissions`);
 }
 
 async function run() {
   error.value = ''; running.value = true; runOut.value = null;
   try {
-    runOut.value = await api.post('/api/run', { language: solveLang.value, code: code.value, stdin: stdin.value, problemId: Number(props.problemId) });
+    runOut.value = await api.post('/api/run', { language: solveLang.value, code: code.value, stdin: stdin.value, problemId: pid.value });
   } catch (e) { error.value = e.message; }
   finally { running.value = false; }
 }
@@ -131,7 +134,7 @@ async function run() {
 async function submit() {
   error.value = ''; submitting.value = true;
   try {
-    await api.post(`/api/problems/${props.problemId}/submit`, { code: code.value, language: solveLang.value });
+    await api.post(`/api/problems/${pid.value}/submit`, { code: code.value, language: solveLang.value });
     await loadSubs();
   } catch (e) { error.value = e.message; }
   finally { submitting.value = false; }
@@ -151,7 +154,7 @@ function pushDraftSoon() {
   if (!conn || conn.state !== 'Connected' || !isStudent()) return;
   clearTimeout(draftTimer);
   draftTimer = setTimeout(() => {
-    conn.invoke('PushDraft', board.value.id, Number(props.problemId), code.value).catch(() => {});
+    conn.invoke('PushDraft', board.value.id, pid.value, code.value).catch(() => {});
   }, 900);
 }
 watch(code, () => {
@@ -168,38 +171,38 @@ onMounted(async () => {
   window.addEventListener('beforeunload', saveDraftNow);
   // Make sure a wall card exists for this student even before they run/submit.
   if (isStudent()) {
-    try { myPost.value = await api.post(`/api/problems/${props.problemId}/post`); } catch { /* ignore */ }
+    try { myPost.value = await api.post(`/api/problems/${pid.value}/post`); } catch { /* ignore */ }
   }
 
   conn = createBoardConnection();
   conn.on('submissionResult', (dto) => {
-    if (dto.problemId === Number(props.problemId)) { loadSubs(); progress.refresh(); }
+    if (dto.problemId === pid.value) { loadSubs(); progress.refresh(); }
   });
   conn.on('progressBumped', (p) => { progress.$patch({ ...p, ready: true }); celebrate(); });
   conn.on('boardSettingsChanged', async () => {
     try { board.value = await api.get(`/api/boards/${props.slug}`); } catch { /* ignore */ }
   });
   conn.on('lectureUpdated', (l) => {
-    if (l.problemId === Number(props.problemId) && !isStaff.value) lecture.value = l;
+    if (l.problemId === pid.value && !isStaff.value) lecture.value = l;
   });
   conn.on('draftUpdated', (d) => {
-    if (d.problemId === Number(props.problemId) && isStaff.value && d.userId !== auth.user?.id)
+    if (d.problemId === pid.value && isStaff.value && d.userId !== auth.user?.id)
       studentDrafts.value[d.userId] = { authorName: d.authorName, code: d.code, updatedAt: d.updatedAt };
   });
   try {
     await conn.start();
     await conn.invoke('JoinBoard', board.value.id);
-    if (isStudent()) conn.invoke('PushDraft', board.value.id, Number(props.problemId), code.value).catch(() => {});
+    if (isStudent()) conn.invoke('PushDraft', board.value.id, pid.value, code.value).catch(() => {});
     if (isStaff.value) {
       pushLectureNow();
       try {
         const ds = await conn.invoke('GetDrafts', board.value.id);
-        (ds || []).filter((d) => d.problemId === Number(props.problemId) && d.userId !== auth.user?.id)
+        (ds || []).filter((d) => d.problemId === pid.value && d.userId !== auth.user?.id)
           .forEach((d) => { studentDrafts.value[d.userId] = { authorName: d.authorName, code: d.code, updatedAt: d.updatedAt }; });
       } catch { /* ignore */ }
     } else {
       try {
-        const l = await conn.invoke('GetLecture', board.value.id, Number(props.problemId));
+        const l = await conn.invoke('GetLecture', board.value.id, pid.value);
         if (l) lecture.value = l;
       } catch { /* ignore */ }
     }
@@ -234,7 +237,7 @@ function ago(ts) {
               class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{{ t }}</span>
       </div>
       <div class="text-xs text-slate-400 dark:text-slate-500 mb-3">
-        {{ solveLang === 'c' ? 'C' : 'C++' }} · limit {{ problem.timeLimitMs }} ms · {{ problem.memoryLimitKb }} KB
+        {{ langNote || (solveLang === 'c' ? 'C' : 'C++') }} · limit {{ problem.timeLimitMs }} ms · {{ problem.memoryLimitKb }} KB
       </div>
       <p v-if="problem.bannedHeaders || problem.bannedSymbols" class="mb-3 text-xs bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 rounded-lg px-3 py-2 space-y-0.5">
         <span v-if="problem.bannedHeaders" class="block">🚫 Banned headers: <span class="font-mono">{{ problem.bannedHeaders }}</span> (and <span class="font-mono">bits/stdc++.h</span>).</span>
@@ -253,7 +256,7 @@ function ago(ts) {
       </p>
 
       <ContentGuard v-if="protectOn" :active="true" :watermark="''">
-        <StatementImage :problem-id="props.problemId" />
+        <StatementImage :problem-id="pid" />
       </ContentGuard>
 
       <template v-else>
@@ -312,7 +315,7 @@ function ago(ts) {
         </div>
       </div>
 
-      <AiHint :problem-id="props.problemId" :language="solveLang" :code="code" :stdin="stdin"
+      <AiHint :problem-id="pid" :language="solveLang" :code="code" :stdin="stdin"
               :verdict="latestMine?.status === 'Done' ? latestMine?.verdict : ''"
               :compiler-output="runOut && !runOut.compileOk ? runOut.compilerOutput : (latestMine?.compilerOutput || '')"
               :stderr="runOut?.stderr || ''" />
@@ -349,8 +352,8 @@ function ago(ts) {
                   class="bg-amber-500 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
             {{ submitting ? 'Submitting…' : 'Submit' }}
           </button>
-          <span class="ml-auto inline-flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden text-xs">
-            <button v-for="l in ['c', 'cpp']" :key="l" @click="setLang(l)"
+          <span v-if="langs.length > 1" class="ml-auto inline-flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden text-xs">
+            <button v-for="l in langs" :key="l" @click="setLang(l)"
                     class="px-2.5 py-1"
                     :class="solveLang === l
                       ? 'bg-slate-800 text-white dark:bg-slate-600'

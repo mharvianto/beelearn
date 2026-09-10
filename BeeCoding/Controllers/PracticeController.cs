@@ -54,7 +54,7 @@ public class PracticeController(AppDbContext db, IJudgeQueue queue, RateLimiter 
 
         var problems = await query
             .OrderBy(b => b.Level).ThenBy(b => b.Title)
-            .Select(b => new { b.Id, b.Title, b.Language, b.Level, b.Tags })
+            .Select(b => new { b.Id, b.Slug, b.Title, b.AllowedLanguages, b.Level, b.Tags })
             .Take(2000)
             .ToListAsync();
         var ids = problems.Select(p => p.Id).ToList();
@@ -77,7 +77,7 @@ public class PracticeController(AppDbContext db, IJudgeQueue queue, RateLimiter 
         {
             byId.TryGetValue(p.Id, out var m);
             return new PracticeSummaryDto(
-                p.Id, p.Title, p.Language, p.Level.ToString(), p.Tags,
+                p.Id, p.Slug, p.Title, p.AllowedLanguages, p.Level.ToString(), p.Tags,
                 m?.Latest.ToString() ?? "None",
                 m?.Best ?? 0,
                 m?.Solved ?? false);
@@ -111,7 +111,7 @@ public class PracticeController(AppDbContext db, IJudgeQueue queue, RateLimiter 
     public async Task<ActionResult<PracticeGuideDto>> Guide([FromQuery] bool ai = false)
     {
         var problems = await Pool()
-            .Select(b => new { b.Id, b.Title, b.Language, b.Level, b.Tags })
+            .Select(b => new { b.Id, b.Slug, b.Title, b.AllowedLanguages, b.Level, b.Tags })
             .ToListAsync();
         if (problems.Count == 0) return new PracticeGuideDto(new(), new(), "heuristic", _ai.Available);
 
@@ -189,7 +189,7 @@ public class PracticeController(AppDbContext db, IJudgeQueue queue, RateLimiter 
             .ThenBy(x => (int)x.p.Level).ThenBy(x => x.p.Title)
             .Take(3)
             .Select(x => new RecommendationDto(
-                x.p.Id, x.p.Title, x.p.Language, x.p.Level.ToString(), x.p.Tags, x.reason))
+                x.p.Id, x.p.Slug, x.p.Title, x.p.AllowedLanguages, x.p.Level.ToString(), x.p.Tags, x.reason))
             .ToList();
 
         var source = "heuristic";
@@ -228,7 +228,7 @@ public class PracticeController(AppDbContext db, IJudgeQueue queue, RateLimiter 
                         .Select(x =>
                         {
                             var p = byId[x.Id];
-                            return new RecommendationDto(p.Id, p.Title, p.Language, p.Level.ToString(), p.Tags,
+                            return new RecommendationDto(p.Id, p.Slug, p.Title, p.AllowedLanguages, p.Level.ToString(), p.Tags,
                                 string.IsNullOrWhiteSpace(x.Reason) ? "AI pick" : x.Reason);
                         }).ToList();
 
@@ -252,31 +252,35 @@ public class PracticeController(AppDbContext db, IJudgeQueue queue, RateLimiter 
         return new PracticeGuideDto(topics, recommended, source, _ai.Available);
     }
 
-    [HttpGet("{id:int}")]
-    public async Task<ActionResult<PracticeProblemDto>> Get(int id)
+    [HttpGet("{slug}")]
+    public async Task<ActionResult<PracticeProblemDto>> Get(string slug)
     {
-        var b = await Pool().Include(x => x.TestCases).FirstOrDefaultAsync(x => x.Id == id);
+        var b = await Pool().Include(x => x.TestCases).FirstOrDefaultAsync(x => x.Slug == slug);
         if (b is null) return NotFound();
         bool solved = await _db.BankSubmissions.AnyAsync(
-            s => s.UserId == UserId && s.BankProblemId == id && s.Verdict == Verdict.Accepted && s.Score >= 1.0);
+            s => s.UserId == UserId && s.BankProblemId == b.Id && s.Verdict == Verdict.Accepted && s.Score >= 1.0);
         return Mapping.ToPracticeDto(b, solved);
     }
 
-    [HttpPost("{id:int}/submit")]
-    public async Task<ActionResult<object>> Submit(int id, SubmitDto dto)
+    [HttpPost("{slug}/submit")]
+    public async Task<ActionResult<object>> Submit(string slug, SubmitDto dto)
     {
-        var problem = await Pool().Include(b => b.TestCases).FirstOrDefaultAsync(b => b.Id == id);
+        var problem = await Pool().Include(b => b.TestCases).FirstOrDefaultAsync(b => b.Slug == slug);
         if (problem is null) return NotFound();
         if (string.IsNullOrWhiteSpace(dto.Code)) return BadRequest("Code is empty.");
         if (dto.Code.Length > 200_000) return BadRequest("Code is too large.");
         if (!_rate.TryAcquire(UserId)) return StatusCode(429, "Slow down a moment and try again.");
 
+        var lang = dto.Language is "c" or "cpp" ? dto.Language : Languages.Default(problem.AllowedLanguages);
+        if (!Languages.Allows(problem.AllowedLanguages, lang))
+            return BadRequest($"This problem only accepts {Languages.Label(problem.AllowedLanguages)}.");
+
         var sub = new BankSubmission
         {
-            BankProblemId = id,
+            BankProblemId = problem.Id,
             UserId = UserId,
             Code = dto.Code,
-            Language = dto.Language is "c" or "cpp" ? dto.Language : problem.Language,
+            Language = lang,
         };
         _db.BankSubmissions.Add(sub);
         await _db.SaveChangesAsync();
@@ -284,15 +288,16 @@ public class PracticeController(AppDbContext db, IJudgeQueue queue, RateLimiter 
         var tests = problem.TestCases.OrderBy(t => t.Position).ThenBy(t => t.Id)
             .Select(t => new TestSpec(t.Stdin, t.ExpectedStdout, t.Points)).ToList();
         await _queue.EnqueueGradeAsync(new GradeJob(
-            "practice", sub.Id,
-            string.IsNullOrEmpty(sub.Language) ? problem.Language : sub.Language!, sub.Code,
+            "practice", sub.Id, lang, sub.Code,
             problem.TimeLimitMs, problem.MemoryLimitKb, problem.BannedHeaders, problem.BannedSymbols, tests));
         return Accepted(new { submissionId = sub.Id });
     }
 
-    [HttpGet("{id:int}/submissions")]
-    public async Task<ActionResult<IEnumerable<BankSubmissionDto>>> Mine(int id)
+    [HttpGet("{slug}/submissions")]
+    public async Task<ActionResult<IEnumerable<BankSubmissionDto>>> Mine(string slug)
     {
+        var id = await Pool().Where(b => b.Slug == slug).Select(b => (int?)b.Id).FirstOrDefaultAsync();
+        if (id is null) return NotFound();
         var rows = await _db.BankSubmissions
             .Where(s => s.BankProblemId == id && s.UserId == UserId)
             .OrderByDescending(s => s.CreatedAt).ThenByDescending(s => s.Id)

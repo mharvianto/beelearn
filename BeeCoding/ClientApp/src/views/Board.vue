@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { api } from '../lib/api';
 import { useAuth } from '../stores/auth';
 import { createBoardConnection } from '../lib/signalr';
+import { langLabel } from '../lib/templates';
 import ProgressGrid from '../components/ProgressGrid.vue';
 import PadletWall from '../components/PadletWall.vue';
 import BankPicker from '../components/BankPicker.vue';
@@ -16,7 +17,7 @@ const router = useRouter();
 
 const view = ref(localStorage.getItem('beecoding.boardView') || 'wall');
 function setView(v) { view.value = v; localStorage.setItem('beecoding.boardView', v); }
-function openCard({ problemId }) { router.push(`/boards/${props.slug}/problems/${problemId}`); }
+function openCard({ problemSlug }) { router.push(`/boards/${props.slug}/problems/${problemSlug}`); }
 
 const board = ref(null);
 const problems = ref([]);
@@ -192,14 +193,14 @@ onBeforeUnmount(async () => {
             <span v-for="t in (p.tags ? p.tags.split(',') : [])" :key="t"
                   class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{{ t }}</span>
           </div>
-          <div class="text-xs text-slate-400 dark:text-slate-500">{{ p.language.toUpperCase() }} · {{ p.timeLimitMs }}ms · {{ p.memoryLimitKb }}KB</div>
+          <div class="text-xs text-slate-400 dark:text-slate-500">{{ langLabel(p.allowedLanguages) }} · {{ p.timeLimitMs }}ms · {{ p.memoryLimitKb }}KB</div>
         </div>
         <div class="flex items-center gap-2">
           <button v-if="isStaff" @click="saveToBank(p)"
                   class="text-sm text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100"
                   title="Save to problem bank">📚</button>
-          <button v-if="isStaff" @click="router.push(`/boards/${props.slug}/problems/${p.id}/edit`)" class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">edit</button>
-          <RouterLink :to="`/boards/${board.slug}/problems/${p.id}`"
+          <button v-if="isStaff" @click="router.push(`/boards/${props.slug}/problems/${p.slug}/edit`)" class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">edit</button>
+          <RouterLink :to="`/boards/${board.slug}/problems/${p.slug}`"
                       class="text-sm bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-3 py-1.5">
             {{ isStaff ? 'View' : 'Solve' }}
           </RouterLink>
