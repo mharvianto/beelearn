@@ -29,9 +29,11 @@ const blank = () => ({
   level: 'Medium', tags: '', isPublic: false, bannedHeaders: '', bannedSymbols: '', testCases: [],
 });
 const form = ref(blank());
+const tab = ref('problem');   // 'problem' | 'tests'
 
 watch(() => props.problem, (p) => {
   form.value = p ? { ...blank(), ...JSON.parse(JSON.stringify(p)) } : blank();
+  tab.value = 'problem';
 }, { immediate: true });
 
 function addTest() {
@@ -41,10 +43,21 @@ function removeTest(i) { form.value.testCases.splice(i, 1); }
 </script>
 
 <template>
-  <div class="fixed inset-0 bg-black/50 flex items-start justify-center p-4 overflow-y-auto z-50">
-    <div class="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-transparent dark:border-slate-800 rounded-xl w-full max-w-4xl p-5 my-8">
-      <h2 class="font-bold text-lg mb-3">{{ props.problem?.id ? 'Edit' : 'New' }} problem</h2>
-      <div class="space-y-3">
+  <div class="fixed inset-0 z-40 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-y-auto">
+    <div class="max-w-5xl mx-auto px-4 py-6 pb-24">
+      <div class="flex items-center gap-3 flex-wrap mb-4">
+        <h2 class="font-bold text-lg">{{ props.problem?.id ? 'Edit' : 'New' }} problem</h2>
+        <div class="ml-auto inline-flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden text-sm">
+          <button type="button" @click="tab = 'problem'" class="px-3 py-1"
+                  :class="tab === 'problem' ? 'bg-slate-800 text-white dark:bg-slate-600' : 'text-slate-500 dark:text-slate-400'">Problem</button>
+          <button type="button" @click="tab = 'tests'" class="px-3 py-1"
+                  :class="tab === 'tests' ? 'bg-slate-800 text-white dark:bg-slate-600' : 'text-slate-500 dark:text-slate-400'">
+            Test cases · {{ form.testCases.length }}
+          </button>
+        </div>
+      </div>
+
+      <div v-show="tab === 'problem'" class="space-y-3">
         <input v-model="form.title" placeholder="Title" class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-2" />
         <div>
           <div class="flex items-center gap-2 text-xs mb-1">
@@ -122,42 +135,48 @@ function removeTest(i) { form.value.testCases.splice(i, 1); }
             <MonacoEditor v-model="form.starterCode" :language="form.language === 'c' ? 'c' : 'cpp'" />
           </div>
         </div>
+      </div>
 
-        <div>
-          <div class="flex items-center gap-3 mb-1">
-            <h3 class="font-semibold text-sm">Test cases</h3>
-            <button v-if="canRegenTests" @click="emit('regenerate-tests')" :disabled="regenBusy"
-                    class="text-xs text-violet-600 dark:text-violet-400 disabled:opacity-50">
-              {{ regenBusy ? '✨ regenerating…' : '✨ regenerate hidden tests' }}
-            </button>
-            <button @click="addTest" class="text-xs text-amber-600 ml-auto">+ add test</button>
+      <div v-show="tab === 'tests'">
+        <div class="flex items-center gap-3 mb-1 flex-wrap">
+          <h3 class="font-semibold text-sm">Test cases</h3>
+          <button v-if="canRegenTests" @click="emit('regenerate-tests')" :disabled="regenBusy"
+                  class="text-xs text-violet-600 dark:text-violet-400 disabled:opacity-50">
+            {{ regenBusy ? '✨ regenerating…' : '✨ regenerate hidden tests' }}
+          </button>
+          <button @click="addTest" class="text-xs text-amber-600 ml-auto">+ add test</button>
+        </div>
+        <p v-if="canRegenTests" class="text-[11px] text-slate-400 dark:text-slate-500 mb-2">
+          Keeps your statement &amp; samples; the AI writes a fresh reference solution
+          (checked against your samples) and a new, diverse set of hidden tests.
+        </p>
+        <div v-for="(t, i) in form.testCases" :key="i" class="border border-slate-200 dark:border-slate-800 rounded-lg p-2 mb-2">
+          <div class="grid grid-cols-2 gap-2">
+            <textarea v-model="t.stdin" placeholder="stdin" rows="2"
+                      class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1 font-mono text-xs"></textarea>
+            <textarea v-model="t.expectedStdout" placeholder="expected stdout" rows="2"
+                      class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1 font-mono text-xs"></textarea>
           </div>
-          <p v-if="canRegenTests" class="text-[11px] text-slate-400 dark:text-slate-500 mb-1">
-            Keeps your statement &amp; samples; the AI writes a fresh reference solution
-            (checked against your samples) and a new, diverse set of hidden tests.
-          </p>
-          <div v-for="(t, i) in form.testCases" :key="i" class="border border-slate-200 dark:border-slate-800 rounded-lg p-2 mb-2">
-            <div class="grid grid-cols-2 gap-2">
-              <textarea v-model="t.stdin" placeholder="stdin" rows="2"
-                        class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1 font-mono text-xs"></textarea>
-              <textarea v-model="t.expectedStdout" placeholder="expected stdout" rows="2"
-                        class="border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1 font-mono text-xs"></textarea>
-            </div>
-            <div class="flex items-center gap-3 text-xs mt-1">
-              <label class="flex items-center gap-1"><input type="checkbox" v-model="t.isSample" /> sample (visible to students)</label>
-              <label class="flex items-center gap-1">points <input v-model.number="t.points" type="number" class="w-14 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-1" /></label>
-              <button @click="removeTest(i)" class="text-red-500 ml-auto">remove</button>
-            </div>
+          <div class="flex items-center gap-3 text-xs mt-1">
+            <label class="flex items-center gap-1"><input type="checkbox" v-model="t.isSample" /> sample (visible to students)</label>
+            <label class="flex items-center gap-1">points <input v-model.number="t.points" type="number" class="w-14 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-1" /></label>
+            <button @click="removeTest(i)" class="text-red-500 ml-auto">remove</button>
           </div>
         </div>
+        <p v-if="!form.testCases.length" class="text-sm text-slate-400 dark:text-slate-500">No test cases yet — add one, or generate with AI.</p>
+      </div>
 
-        <p v-if="error" class="text-sm text-red-600 dark:text-red-400">{{ error }}</p>
-        <div class="flex gap-2 pt-1">
-          <button @click="emit('save', form)" :disabled="busy"
-                  class="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-4 py-2 font-medium disabled:opacity-50">Save</button>
-          <button @click="emit('cancel')" class="text-slate-500 dark:text-slate-400 px-3">Cancel</button>
-          <button v-if="props.problem?.id" @click="emit('delete')" class="text-red-600 dark:text-red-400 ml-auto px-3">Delete</button>
-        </div>
+      <pre v-if="error" class="mt-4 text-xs text-red-600 dark:text-red-400 whitespace-pre-wrap max-h-52 overflow-auto border border-red-200 dark:border-red-500/30 rounded-lg p-3">{{ error }}</pre>
+    </div>
+
+    <div class="fixed bottom-0 inset-x-0 z-10 border-t border-slate-200 dark:border-slate-800 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur">
+      <div class="max-w-5xl mx-auto px-4 py-3 flex items-center gap-2">
+        <button @click="emit('save', form)" :disabled="busy"
+                class="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-4 py-2 font-medium disabled:opacity-50">
+          {{ busy ? 'Saving…' : 'Save' }}
+        </button>
+        <button @click="emit('cancel')" class="text-slate-500 dark:text-slate-400 px-3">Cancel</button>
+        <button v-if="props.problem?.id" @click="emit('delete')" class="text-red-600 dark:text-red-400 ml-auto px-3">Delete</button>
       </div>
     </div>
   </div>
