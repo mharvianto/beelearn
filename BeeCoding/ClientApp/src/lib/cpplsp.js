@@ -18,9 +18,14 @@ export class CppLsp {
   connect(timeoutMs = 4000) {
     return new Promise((resolve, reject) => {
       let settled = false;
-      const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+      // In dev the page is on :5173 and Vite's proxy handles this WebSocket
+      // unreliably — go straight to Kestrel (same as the SignalR hub). Prod:
+      // relative to the page, nginx proxies /lsp fine.
+      const base = import.meta.env.DEV
+        ? (import.meta.env.VITE_BACKEND_URL || 'http://localhost:5048').replace(/^http/, 'ws')
+        : (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
       try {
-        this.ws = new WebSocket(`${proto}${location.host}/lsp/cpp?lang=${this.language}`);
+        this.ws = new WebSocket(`${base}/lsp/cpp?lang=${this.language}`);
       } catch (e) { return reject(e); }
 
       const timer = setTimeout(() => { if (!settled) { settled = true; this.close(); reject(new Error('lsp timeout')); } }, timeoutMs);
