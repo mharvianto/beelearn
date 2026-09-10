@@ -15,13 +15,22 @@ const logger = {
   },
 };
 
+// Under `npm run dev` the page is on :5173 and the hub would be proxied by Vite — its
+// dev proxy handles the SignalR WebSocket unreliably and buffers the SSE fallback, so
+// realtime (Live code, live drafts, the wall) stutters or dies. Point the hub straight
+// at Kestrel instead; the Development CORS policy already allows the :5173 origin with
+// credentials. Prod uses a relative URL (nginx proxies /hubs fine).
+const HUB_BASE = import.meta.env.DEV
+  ? (import.meta.env.VITE_BACKEND_URL || 'http://localhost:5048')
+  : '';
+
 /**
  * Creates (but does not start) a board hub connection.
  * The auth cookie rides along automatically on same-origin / proxied requests.
  */
 export function createBoardConnection() {
   return new signalR.HubConnectionBuilder()
-    .withUrl('/hubs/board')
+    .withUrl(`${HUB_BASE}/hubs/board`)
     .withAutomaticReconnect([0, 1000, 3000, 5000, 10000])
     .configureLogging(logger)
     .build();
