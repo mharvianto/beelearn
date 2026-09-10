@@ -31,21 +31,22 @@ public record UpsertProblemDto(
     string? Tags,
     string? Level,
     List<UpsertTestCaseDto>? TestCases,   // null => leave test cases untouched
-    string? BannedHeaders = null);        // comma-separated headers a submission may not #include
+    string? BannedHeaders = null,         // comma-separated headers a submission may not #include
+    string? BannedSymbols = null);        // comma-separated identifiers it may not use
 
 /// <summary>Full problem view for the board owner/teacher.</summary>
 public record ProblemDto(
     int Id, int BoardId, string Title, string StatementMarkdown, string Language,
     string StarterCode, int TimeLimitMs, int MemoryLimitKb, int Position,
     string Tags, string Level,
-    List<TestCaseDto> TestCases, string? BannedHeaders);
+    List<TestCaseDto> TestCases, string? BannedHeaders, string? BannedSymbols);
 
 /// <summary>Problem view for a student: only sample tests exposed.</summary>
 public record StudentProblemDto(
     int Id, int BoardId, string Title, string StatementMarkdown, string Language,
     string StarterCode, int TimeLimitMs, int MemoryLimitKb, int Position,
     string Tags, string Level,
-    List<TestCaseDto> SampleTests, string? BannedHeaders);
+    List<TestCaseDto> SampleTests, string? BannedHeaders, string? BannedSymbols);
 
 // ---- Problem bank ----
 public record BankSummaryDto(
@@ -56,13 +57,14 @@ public record BankProblemDto(
     int Id, string Title, string StatementMarkdown, string Language, string StarterCode,
     int TimeLimitMs, int MemoryLimitKb, string Level, string Tags, bool IsPublic,
     bool Mine, string OwnerName, DateTime UpdatedAt,
-    List<TestCaseDto> TestCases, string? BannedHeaders);   // full set only for the owner; samples only otherwise
+    List<TestCaseDto> TestCases, string? BannedHeaders, string? BannedSymbols);   // full set only for the owner; samples only otherwise
 
 public record UpsertBankProblemDto(
     string Title, string StatementMarkdown, string Language, string StarterCode,
     int TimeLimitMs, int MemoryLimitKb, string? Level, string Tags, bool IsPublic,
     List<UpsertTestCaseDto>? TestCases,   // null => leave test cases untouched
-    string? BannedHeaders = null);
+    string? BannedHeaders = null,
+    string? BannedSymbols = null);
 
 // ---- Admin ingest (token-authed, for scripting the problem bank) ----
 public record AdminTestInput(string Stdin, string ExpectedStdout, bool? IsSample, int? Points, int? Position);
@@ -77,7 +79,8 @@ public record AdminBankProblemInput(
     int? MemoryLimitKb,
     bool? IsPublic,            // default true
     List<AdminTestInput>? Tests,
-    string? BannedHeaders = null);
+    string? BannedHeaders = null,
+    string? BannedSymbols = null);
 public record AdminIngestDto(
     string? OwnerEmail,        // an existing Teacher; default = first teacher
     bool? ReplaceExisting,     // default true: upsert by (owner, title)
@@ -104,7 +107,7 @@ public record PracticeGuideDto(
 public record PracticeProblemDto(
     int Id, string Title, string StatementMarkdown, string Language, string StarterCode,
     int TimeLimitMs, int MemoryLimitKb, string Level, string Tags,
-    List<TestCaseDto> SampleTests, bool Solved, string? BannedHeaders);
+    List<TestCaseDto> SampleTests, bool Solved, string? BannedHeaders, string? BannedSymbols);
 
 public record BankSubmissionDto(
     int Id, int BankProblemId, string Status, string Verdict,

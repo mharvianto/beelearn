@@ -125,6 +125,10 @@ public class Problem
     [MaxLength(300)]
     public string? BannedHeaders { get; set; }
 
+    /// <summary>Comma-separated identifiers a submission may not use, e.g. "std::sort,qsort".</summary>
+    [MaxLength(300)]
+    public string? BannedSymbols { get; set; }
+
     public int TimeLimitMs { get; set; } = 1000;
 
     public int MemoryLimitKb { get; set; } = 32768;
@@ -163,6 +167,10 @@ public class BankProblem
     /// <summary>Comma-separated header names a submission may NOT #include (see Problem).</summary>
     [MaxLength(300)]
     public string? BannedHeaders { get; set; }
+
+    /// <summary>Comma-separated identifiers a submission may not use, e.g. "std::sort,qsort".</summary>
+    [MaxLength(300)]
+    public string? BannedSymbols { get; set; }
 
     public int TimeLimitMs { get; set; } = 1000;
 

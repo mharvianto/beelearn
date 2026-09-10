@@ -33,12 +33,12 @@ public static class Mapping
     public static ProblemDto ToOwnerDto(Problem p) => new(
         p.Id, p.BoardId, p.Title, p.StatementMarkdown, p.Language, p.StarterCode,
         p.TimeLimitMs, p.MemoryLimitKb, p.Position, p.Tags, p.Level.ToString(),
-        p.TestCases.OrderBy(t => t.Position).ThenBy(t => t.Id).Select(ToDto).ToList(), p.BannedHeaders);
+        p.TestCases.OrderBy(t => t.Position).ThenBy(t => t.Id).Select(ToDto).ToList(), p.BannedHeaders, p.BannedSymbols);
 
     public static StudentProblemDto ToStudentDto(Problem p) => new(
         p.Id, p.BoardId, p.Title, p.StatementMarkdown, p.Language, p.StarterCode,
         p.TimeLimitMs, p.MemoryLimitKb, p.Position, p.Tags, p.Level.ToString(),
-        p.TestCases.Where(t => t.IsSample).OrderBy(t => t.Position).ThenBy(t => t.Id).Select(ToDto).ToList(), p.BannedHeaders);
+        p.TestCases.Where(t => t.IsSample).OrderBy(t => t.Position).ThenBy(t => t.Id).Select(ToDto).ToList(), p.BannedHeaders, p.BannedSymbols);
 
     public static TestCaseDto ToDto(BankTestCase t) =>
         new(t.Id, t.Stdin, t.ExpectedStdout, t.IsSample, t.Points, t.Position);
@@ -59,7 +59,7 @@ public static class Mapping
         return new(
             b.Id, b.Title, b.StatementMarkdown, b.Language, b.StarterCode,
             b.TimeLimitMs, b.MemoryLimitKb, b.Level.ToString(), b.Tags, b.IsPublic,
-            mine, b.Owner?.DisplayName ?? "teacher", b.UpdatedAt, tests, b.BannedHeaders);
+            mine, b.Owner?.DisplayName ?? "teacher", b.UpdatedAt, tests, b.BannedHeaders, b.BannedSymbols);
     }
 
     public static ProblemSummaryDto ToSummary(Problem p) =>
@@ -81,5 +81,5 @@ public static class Mapping
             .OrderBy(t => t.Position).ThenBy(t => t.Id)
             .Select(t => new TestCaseDto(t.Id, t.Stdin, "", true, t.Points, t.Position))
             .ToList(),
-        solved, b.BannedHeaders);
+        solved, b.BannedHeaders, b.BannedSymbols);
 }

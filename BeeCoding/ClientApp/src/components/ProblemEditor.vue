@@ -24,7 +24,7 @@ const emit = defineEmits(['save', 'delete', 'cancel']);
 const blank = () => ({
   title: '', statementMarkdown: '', language: 'cpp', starterCode: '',
   timeLimitMs: 1000, memoryLimitKb: 32768, position: 0,
-  level: 'Medium', tags: '', isPublic: false, bannedHeaders: '', testCases: [],
+  level: 'Medium', tags: '', isPublic: false, bannedHeaders: '', bannedSymbols: '', testCases: [],
 });
 const form = ref(blank());
 
@@ -86,14 +86,20 @@ function removeTest(i) { form.value.testCases.splice(i, 1); }
           </label>
         </div>
 
-        <div>
+        <div class="space-y-2">
           <label class="flex items-center gap-1 text-sm">Banned headers
             <input v-model="form.bannedHeaders" placeholder="e.g. algorithm, numeric"
                    class="flex-1 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1" />
           </label>
-          <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-            Comma-separated header names a submission may not <code>#include</code>. When set,
-            <code>&lt;bits/stdc++.h&gt;</code> is blocked too. A violation is reported as a Compile Error.
+          <label class="flex items-center gap-1 text-sm">Banned functions
+            <input v-model="form.bannedSymbols" placeholder="e.g. std::sort, qsort, stable_sort"
+                   class="flex-1 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1" />
+          </label>
+          <p class="text-[11px] text-slate-400 dark:text-slate-500">
+            Comma-separated. <b>Headers</b>: names a submission may not <code>#include</code> (setting any also blocks
+            <code>&lt;bits/stdc++.h&gt;</code>). <b>Functions</b>: identifiers it may not use — <code>sort</code> also
+            catches <code>std::sort</code>; write <code>std::sort</code> to match only the qualified call. A violation
+            is reported as a Compile Error, on Run and Submit.
           </p>
         </div>
 

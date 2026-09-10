@@ -40,8 +40,8 @@ public class RunController : ApiControllerBase
 
         // If this Run is tied to a problem, apply that problem's header restrictions here too
         // (Submit already does) so students can't sidestep them via the Run box.
-        var banned = await BannedHeadersForAsync(dto.ProblemId, dto.BankProblemId);
-        if (SourcePolicy.Violation(dto.Code, banned) is { } denied)
+        var (bh, bs) = await RestrictionsForAsync(dto.ProblemId, dto.BankProblemId);
+        if (SourcePolicy.Violation(dto.Code, bh, bs) is { } denied)
             return new RunResultDto(false, denied, "", "", 0, 0, false, 0, 0);
 
         var job = new RunJob(
@@ -61,19 +61,23 @@ public class RunController : ApiControllerBase
         }
     }
 
-    private async Task<string?> BannedHeadersForAsync(int? problemId, int? bankProblemId)
+    private async Task<(string? Headers, string? Symbols)> RestrictionsForAsync(int? problemId, int? bankProblemId)
     {
         if (bankProblemId is int bid)
-            return await _db.BankProblems.Where(b => b.Id == bid && b.IsPublic)
-                .Select(b => b.BannedHeaders).FirstOrDefaultAsync();
-
+        {
+            var b = await _db.BankProblems.Where(b => b.Id == bid && b.IsPublic)
+                .Select(b => new { b.BannedHeaders, b.BannedSymbols }).FirstOrDefaultAsync();
+            return b is null ? (null, null) : (b.BannedHeaders, b.BannedSymbols);
+        }
         if (problemId is int pid)
         {
             var row = await _db.Problems.Where(p => p.Id == pid)
-                .Select(p => new { p.BoardId, p.BannedHeaders }).FirstOrDefaultAsync();
-            if (row is null || string.IsNullOrEmpty(row.BannedHeaders)) return null;
-            return await _boards.GetMembershipAsync(row.BoardId, UserId) is null ? null : row.BannedHeaders;
+                .Select(p => new { p.BoardId, p.BannedHeaders, p.BannedSymbols }).FirstOrDefaultAsync();
+            if (row is null || (string.IsNullOrEmpty(row.BannedHeaders) && string.IsNullOrEmpty(row.BannedSymbols)))
+                return (null, null);
+            return await _boards.GetMembershipAsync(row.BoardId, UserId) is null
+                ? (null, null) : (row.BannedHeaders, row.BannedSymbols);
         }
-        return null;
+        return (null, null);
     }
 }
