@@ -3,7 +3,7 @@ namespace BeeCoding.Models;
 // ---- Auth ----
 public record RegisterDto(string Email, string Password, string DisplayName, string Role, string? TeacherCode = null);
 public record LoginDto(string Email, string Password);
-public record MeDto(int Id, string Email, string DisplayName, string Role);
+public record MeDto(int Id, string Email, string DisplayName, string Role, bool IsAdmin = false);
 public record ChangePasswordDto(string CurrentPassword, string NewPassword);
 public record UpdateProfileDto(string DisplayName);
 public record DeleteAccountDto(string Password, bool DeleteOwnedBoards = false);
@@ -89,6 +89,22 @@ public record AdminBankRow(int Id, string Title, string Language, string Level, 
     bool IsPublic, int TestCount, int SampleCount, DateTime UpdatedAt);
 public record AdminIngestResultDto(
     List<AdminBankRow> Created, List<AdminBankRow> Updated, List<string> Errors);
+
+// ---- Admin panel (cookie-authed, Admin:Emails) ----
+public record AdminUserRow(int Id, string Email, string DisplayName, string Role, bool IsAdmin,
+    int Xp, DateTime CreatedAt, int OwnedBoards, int Submissions);
+
+public record AdminAiUsageBucket(int Calls, long PromptTokens, long CompletionTokens, long TotalTokens);
+public record AdminAiUsageRow(int UserId, string Email, string DisplayName,
+    AdminAiUsageBucket Today, AdminAiUsageBucket Month, AdminAiUsageBucket AllTime);
+
+public record AdminProblemTest(string Stdin, string ExpectedStdout, bool IsSample, int Points, int Position);
+public record AdminProblemItem(
+    string OwnerEmail, string Title, string StatementMarkdown, string Language, string Level,
+    string Tags, string StarterCode, int TimeLimitMs, int MemoryLimitKb, bool IsPublic,
+    string? BannedHeaders, string? BannedSymbols, List<AdminProblemTest> Tests);
+public record AdminProblemBundle(int Version, DateTime ExportedAt, List<AdminProblemItem> Problems);
+public record AdminImportResult(int Created, int Updated, int Skipped, List<string> Errors);
 
 // ---- Practice (students solve bank problems) ----
 public record PracticeSummaryDto(

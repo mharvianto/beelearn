@@ -485,7 +485,8 @@ variable (nesting pakai `__`).
 | `Judge:RateLimitMs` | `1500` | Jarak minimum antar Run/Submit per user. |
 | `Judge:RequireSandbox` | `false` | **Set `true` di produksi.** Bila `true` dan bwrap tak bisa bikin namespace, app **gagal start** (daripada diam-diam jalan tanpa isolasi filesystem/jaringan). |
 | `Auth:TeacherSignupCode` | `""` (kosong) | Kosong ⇒ pendaftaran mandiri **hanya bisa jadi Student**. Diisi ⇒ user boleh memilih peran Teacher jika memasukkan kode ini. Buat guru pertama lewat seeder / DB. |
-| `Admin:Token` | `""` (kosong) | Token endpoint `/api/admin/*`. Kosong ⇒ semua respons `404`. Token salah juga `404` (tak bisa dibedakan dari "mati"); brute force di-throttle per-IP (8 gagal / 10 menit). Pakai `openssl rand -hex 32`, set via env, jangan commit. |
+| `Admin:Token` | `""` (kosong) | Token endpoint **skrip** `/api/admin/*` (ingest bank soal). Kosong ⇒ semua respons `404`. Token salah juga `404` (tak bisa dibedakan dari "mati"); brute force di-throttle per-IP (8 gagal / 10 menit). Pakai `openssl rand -hex 32`, set via env, jangan commit. |
+| `Admin:Emails` | `""` (kosong) | Daftar email (pisah koma) yang mendapat **halaman Admin** (`/admin`): lihat penggunaan AI semua user, daftar user, export/import soal. Cookie-authed via role `Admin`; endpoint `/api/admin-ui/*`. Login ulang setelah mengubahnya. |
 | `Security:ContentSecurityPolicy` | *(bawaan)* | Override CSP dengan string sendiri, atau `"off"` untuk tidak mengirim header CSP (mis. jika Monaco bermasalah). |
 | `Lsp:Enabled` | `false` | Aktifkan IntelliSense C/C++ (butuh `clangd` di PATH). |
 | `Lsp:ClangdPath` | `clangd` | Path biner clangd. |

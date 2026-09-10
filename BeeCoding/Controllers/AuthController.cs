@@ -12,22 +12,20 @@ using Microsoft.EntityFrameworkCore;
 namespace BeeCoding.Controllers;
 
 [Route("api/auth")]
-public class AuthController : ApiControllerBase
+public class AuthController(AppDbContext db, PasswordService pw, IConfiguration cfg, LoginThrottle throttle) : ApiControllerBase
 {
-    private readonly AppDbContext _db;
-    private readonly PasswordService _pw;
-    private readonly IConfiguration _cfg;
-    private readonly LoginThrottle _throttle;
-
-    public AuthController(AppDbContext db, PasswordService pw, IConfiguration cfg, LoginThrottle throttle)
-    {
-        _db = db;
-        _pw = pw;
-        _cfg = cfg;
-        _throttle = throttle;
-    }
+    private readonly AppDbContext _db = db;
+    private readonly PasswordService _pw = pw;
+    private readonly IConfiguration _cfg = cfg;
+    private readonly LoginThrottle _throttle = throttle;
 
     private string ClientIp => HttpContext.Connection.RemoteIpAddress?.ToString() ?? "?";
+
+    /// <summary>Emails listed in Admin:Emails (comma-separated) get the admin panel.</summary>
+    private bool IsAdmin(string email) =>
+        (_cfg["Admin:Emails"] ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(e => string.Equals(e, email, StringComparison.OrdinalIgnoreCase));
 
     [HttpPost("register")]
     [AllowAnonymous]
@@ -69,7 +67,7 @@ public class AuthController : ApiControllerBase
         await _db.SaveChangesAsync();
 
         await SignInAsync(user);
-        return new MeDto(user.Id, user.Email, user.DisplayName, user.Role.ToString());
+        return new MeDto(user.Id, user.Email, user.DisplayName, user.Role.ToString(), IsAdmin(user.Email));
     }
 
     [HttpPost("login")]
@@ -91,7 +89,7 @@ public class AuthController : ApiControllerBase
 
         _throttle.RecordSuccess(ip, email);
         await SignInAsync(user);
-        return new MeDto(user.Id, user.Email, user.DisplayName, user.Role.ToString());
+        return new MeDto(user.Id, user.Email, user.DisplayName, user.Role.ToString(), IsAdmin(user.Email));
     }
 
     [HttpPost("logout")]
@@ -108,7 +106,7 @@ public class AuthController : ApiControllerBase
     {
         var user = await _db.Users.FindAsync(UserId);
         if (user is null) return Unauthorized();
-        return new MeDto(user.Id, user.Email, user.DisplayName, user.Role.ToString());
+        return new MeDto(user.Id, user.Email, user.DisplayName, user.Role.ToString(), IsAdmin(user.Email));
     }
 
     [HttpPatch("profile")]
@@ -128,7 +126,7 @@ public class AuthController : ApiControllerBase
             await _db.SaveChangesAsync();
             await SignInAsync(user);   // refresh the cookie so ClaimTypes.Name (author names, etc.) is current
         }
-        return new MeDto(user.Id, user.Email, user.DisplayName, user.Role.ToString());
+        return new MeDto(user.Id, user.Email, user.DisplayName, user.Role.ToString(), IsAdmin(user.Email));
     }
 
     [HttpPost("change-password")]
@@ -187,6 +185,7 @@ public class AuthController : ApiControllerBase
             new(ClaimTypes.Email, user.Email),
             new(ClaimTypes.Role, user.Role.ToString()),
         };
+        if (IsAdmin(user.Email)) claims.Add(new(ClaimTypes.Role, "Admin"));
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
         await HttpContext.SignInAsync(
             CookieAuthenticationDefaults.AuthenticationScheme,

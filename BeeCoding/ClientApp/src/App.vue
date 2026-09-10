@@ -77,6 +77,7 @@ onBeforeUnmount(() => {
           <RouterLink to="/playground">Playground</RouterLink>
           <RouterLink to="/leaderboard">Leaderboard</RouterLink>
           <RouterLink v-if="auth.isTeacher" to="/bank">Problem bank</RouterLink>
+          <RouterLink v-if="auth.user?.isAdmin" to="/admin" class="text-rose-600 dark:text-rose-400">Admin</RouterLink>
         </nav>
 
         <div class="order-2 md:order-3 ml-auto flex items-center gap-2 sm:gap-3 text-sm shrink-0">
