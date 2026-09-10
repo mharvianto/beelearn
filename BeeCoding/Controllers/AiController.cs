@@ -201,6 +201,121 @@ public class AiController : ApiControllerBase
         }
     }
 
+    /// <summary>
+    /// Teacher-only, own bank problem. Keep the statement + samples; replace the HIDDEN tests
+    /// with a fresh, diverse set. The AI writes a new reference solution which is checked
+    /// against the existing samples before its output is trusted for the new inputs.
+    /// </summary>
+    [HttpPost("regenerate-tests/{bankProblemId:int}")]
+    public async Task<IActionResult> RegenerateTests(int bankProblemId, [FromQuery] int? count)
+    {
+        if (!_ai.Available) return NotFound();
+        if (CurrentRole != "Teacher") return StatusCode(StatusCodes.Status403Forbidden, "Teachers only.");
+        if (RateLimited()) return StatusCode(StatusCodes.Status429TooManyRequests, "Give the AI a few seconds.");
+        if (_jobs.RunningFor(UserId) >= 2)
+            return StatusCode(StatusCodes.Status429TooManyRequests, "You already have generations running — wait for those to finish.");
+
+        var owns = await _db.BankProblems.AnyAsync(b => b.Id == bankProblemId && b.OwnerId == UserId);
+        if (!owns) return NotFound();
+
+        var job = _jobs.Create(UserId);
+        var n = count is >= 3 and <= 15 ? count.Value : 0;
+        _ = Task.Run(() => RunRegenerateAsync(job.Id, UserId, bankProblemId, n));
+        return Accepted(new { jobId = job.Id });
+    }
+
+    private async Task RunRegenerateAsync(Guid jobId, int userId, int bankProblemId, int count)
+    {
+        var job = _jobs.Get(jobId);
+        if (job is null) return;
+
+        void Fail(string msg, string? compilerOutput = null, string? stderr = null)
+        {
+            job.Message = msg; job.CompilerOutput = compilerOutput; job.Stderr = stderr;
+            job.Status = "error"; job.Finished = DateTime.UtcNow;
+        }
+
+        try
+        {
+            using var scope = _scopes.CreateScope();
+            var sp = scope.ServiceProvider;
+            var db = sp.GetRequiredService<AppDbContext>();
+            var ai = sp.GetRequiredService<AiTutorService>();
+            var usage = sp.GetRequiredService<AiUsageService>();
+            var queue = sp.GetRequiredService<JudgeQueue>();
+            var ct = CancellationToken.None;
+
+            var problem = await db.BankProblems.Include(b => b.TestCases).Include(b => b.Owner)
+                .FirstOrDefaultAsync(b => b.Id == bankProblemId && b.OwnerId == userId, ct);
+            if (problem is null) { Fail("Problem not found."); return; }
+
+            var refLang = problem.Language is "c" ? "c" : "cpp";
+            var samples = problem.TestCases.Where(t => t.IsSample)
+                .OrderBy(t => t.Position).ThenBy(t => t.Id)
+                .Select(t => (t.Stdin, t.ExpectedStdout)).ToList();
+            var hiddenCount = problem.TestCases.Count(t => !t.IsSample);
+            var want = count > 0 ? count : Math.Clamp(hiddenCount, 3, 15);
+
+            AiTutorService.AiRegenResult gen;
+            try { gen = await ai.RegenerateTestsAsync(problem.StatementMarkdown, refLang, samples, want, ct); }
+            catch (AiUnavailableException ex) { Fail(ex.Message); return; }
+            await usage.RecordAsync(userId, gen.PromptTokens, gen.CompletionTokens, ct);
+
+            // 1) the new reference must reproduce every existing sample
+            foreach (var (sIn, sExp) in samples)
+            {
+                var chk = new RunJob(refLang, gen.ReferenceSolution, sIn, problem.TimeLimitMs, problem.MemoryLimitKb,
+                    new TaskCompletionSource<RunResultDto>(TaskCreationOptions.RunContinuationsAsynchronously));
+                RunResultDto r;
+                try { r = await queue.EnqueueRunAsync(chk, ct); }
+                catch { Fail("Timed out validating the new tests."); return; }
+                if (!r.CompileOk) { Fail("The AI's reference solution didn't compile — try again.", compilerOutput: r.CompilerOutput); return; }
+                if (r.TimedOut || r.Signal != 0 || r.ExitCode != 0)
+                { Fail("The AI's reference solution crashed on a sample — try again.", stderr: r.Stderr); return; }
+                if (!VerdictEvaluator.OutputMatches(r.Stdout ?? "", sExp))
+                { Fail("The AI's reference disagrees with your sample tests — the statement may be ambiguous. Tighten it and retry."); return; }
+            }
+
+            // 2) run the new inputs through the (now trusted) reference for expected output
+            var seen = samples.Select(s => s.Stdin.Replace("\r\n", "\n").Trim()).ToHashSet();
+            var fresh = new List<(string Stdin, string Expected)>();
+            foreach (var inp in gen.Inputs.Take(15))
+            {
+                if (inp.Length > 16_000) continue;
+                if (!seen.Add(inp.Replace("\r\n", "\n").Trim())) continue;
+                var run = new RunJob(refLang, gen.ReferenceSolution, inp, problem.TimeLimitMs, problem.MemoryLimitKb,
+                    new TaskCompletionSource<RunResultDto>(TaskCreationOptions.RunContinuationsAsynchronously));
+                RunResultDto r;
+                try { r = await queue.EnqueueRunAsync(run, ct); }
+                catch { Fail("Timed out validating the new tests."); return; }
+                if (!r.CompileOk) { Fail("The AI's reference solution didn't compile — try again.", compilerOutput: r.CompilerOutput); return; }
+                if (r.TimedOut || r.Signal != 0 || r.ExitCode != 0) continue;   // skip an input the reference can't handle
+                fresh.Add((inp, r.Stdout ?? ""));
+            }
+            if (fresh.Count < 2) { Fail("The AI didn't produce enough usable new tests — try again."); return; }
+
+            // replace only the hidden tests; keep samples untouched
+            db.BankTestCases.RemoveRange(problem.TestCases.Where(t => !t.IsSample));
+            int pos = problem.TestCases.Where(t => t.IsSample).Select(t => t.Position).DefaultIfEmpty(-1).Max() + 1;
+            foreach (var (stdin, expected) in fresh)
+                problem.TestCases.Add(new BankTestCase
+                {
+                    Stdin = stdin, ExpectedStdout = expected, IsSample = false, Points = 1, Position = pos++,
+                });
+            problem.UpdatedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            job.Result = Mapping.ToDto(problem, userId);
+            job.Status = "done";
+            job.Finished = DateTime.UtcNow;
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "regenerate-tests job {Job} failed", jobId);
+            if (job.Status == "running") Fail("Regenerating tests failed unexpectedly — try again.");
+        }
+    }
+
     /// <summary>Forget the progressive-hint level for one problem — the next hint starts gentle again.</summary>
     [HttpPost("hint-progress/reset")]
     public async Task<IActionResult> ResetHintProgress(AiHintDto dto)

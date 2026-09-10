@@ -444,6 +444,64 @@ Shape:
         return new AiGenResult(gp, promptTok, completionTok);
     }
 
+    public sealed record AiRegenResult(string ReferenceSolution, List<string> Inputs, int PromptTokens, int CompletionTokens);
+
+    /// <summary>
+    /// For an EXISTING problem: ask for a fresh reference solution + a new, diverse set of
+    /// hidden test inputs. The caller compiles the reference, checks it against the known
+    /// sample outputs, then runs it to get each new input's expected output.
+    /// </summary>
+    public async Task<AiRegenResult> RegenerateTestsAsync(
+        string statementMarkdown, string language, IReadOnlyList<(string Stdin, string Expected)> samples,
+        int count, CancellationToken ct)
+    {
+        count = Math.Clamp(count, 3, 15);
+        var sys = $$"""
+You are a test-data setter for a C/C++ online judge. You are given an EXISTING problem
+statement (do NOT change or reinterpret it). Produce:
+1. "referenceSolution": a CORRECT {{language}} program that reads the stated stdin format and
+   prints exactly the required output. It MUST agree with the sample tests below.
+2. "tests": EXACTLY {{count}} NEW hidden test inputs (stdin only, no outputs). They must be
+   DISTINCT from each other and from the samples, each covering a different situation:
+   the stated minimum / empty, a single element, near the maximum stated size, already in
+   the target order, reverse order, random order, all values equal (AT MOST ONE), negatives
+   mixed with positives, zeros, duplicates, the extreme allowed values. Keep every stdin
+   under ~1 KB; sizes modest (mostly <= 50), largest maybe near the stated bound.
+
+Reply with ONLY one JSON object, first char `{`, last char `}`, no prose:
+{"referenceSolution":"...","tests":[{"stdin":"..."},{"stdin":"..."}]}
+""";
+        var u = new StringBuilder();
+        u.AppendLine("## Problem statement\n" + Trunc(statementMarkdown, 6000) + "\n");
+        u.AppendLine("## Sample tests (the reference MUST reproduce these)");
+        foreach (var (inp, exp) in samples.Take(4))
+            u.AppendLine($"- stdin:\n```\n{Trunc(inp, 800)}\n```\n  expected stdout:\n```\n{Trunc(exp, 800)}\n```");
+
+        using var req = NewRequest(BuildPayload(sys, u.ToString(), stream: true,
+            maxTokens: Math.Max(6000, _opt.MaxTokens), thinking: false, model: GenModel,
+            jsonObject: true, reasoningEffort: "low"));
+        var (content, pt, ctk) = await CollectStreamAsync(req, sys + u,
+            _opt.GenerateIdleTimeoutSeconds, _opt.GenerateTimeoutSeconds, ct);
+
+        var json = ExtractJson(content);
+        string reference; var inputs = new List<string>();
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var r = doc.RootElement;
+            reference = r.TryGetProperty("referenceSolution", out var rs) ? (rs.GetString() ?? "") : "";
+            if (r.TryGetProperty("tests", out var te) && te.ValueKind == JsonValueKind.Array)
+                foreach (var t in te.EnumerateArray())
+                    if (t.TryGetProperty("stdin", out var se) && se.GetString() is { } s)
+                        inputs.Add(s);
+        }
+        catch (Exception ex) { _log.LogWarning(ex, "AI regenerate JSON invalid"); throw new AiUnavailableException("AI returned malformed JSON."); }
+
+        if (string.IsNullOrWhiteSpace(reference) || inputs.Count < 2)
+            throw new AiUnavailableException("The AI didn't return a usable reference + tests — try again.");
+        return new AiRegenResult(reference, inputs, pt, ctk);
+    }
+
     // ---- streaming (SSE) ------------------------------------------------------
     /// <summary>
     /// Yields content deltas as they arrive. The final element is always a sentinel

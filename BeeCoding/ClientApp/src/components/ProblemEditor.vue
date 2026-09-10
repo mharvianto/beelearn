@@ -18,8 +18,10 @@ const props = defineProps({
   showBankFields: Boolean,         // tags + public toggle (bank only)
   error: String,
   busy: Boolean,
+  canRegenTests: Boolean,          // show "regenerate tests with AI" (bank, existing, AI on)
+  regenBusy: Boolean,
 });
-const emit = defineEmits(['save', 'delete', 'cancel']);
+const emit = defineEmits(['save', 'delete', 'cancel', 'regenerate-tests']);
 
 const blank = () => ({
   title: '', statementMarkdown: '', language: 'cpp', starterCode: '',
@@ -122,10 +124,18 @@ function removeTest(i) { form.value.testCases.splice(i, 1); }
         </div>
 
         <div>
-          <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center gap-3 mb-1">
             <h3 class="font-semibold text-sm">Test cases</h3>
-            <button @click="addTest" class="text-xs text-amber-600">+ add test</button>
+            <button v-if="canRegenTests" @click="emit('regenerate-tests')" :disabled="regenBusy"
+                    class="text-xs text-violet-600 dark:text-violet-400 disabled:opacity-50">
+              {{ regenBusy ? '✨ regenerating…' : '✨ regenerate hidden tests' }}
+            </button>
+            <button @click="addTest" class="text-xs text-amber-600 ml-auto">+ add test</button>
           </div>
+          <p v-if="canRegenTests" class="text-[11px] text-slate-400 dark:text-slate-500 mb-1">
+            Keeps your statement &amp; samples; the AI writes a fresh reference solution
+            (checked against your samples) and a new, diverse set of hidden tests.
+          </p>
           <div v-for="(t, i) in form.testCases" :key="i" class="border border-slate-200 dark:border-slate-800 rounded-lg p-2 mb-2">
             <div class="grid grid-cols-2 gap-2">
               <textarea v-model="t.stdin" placeholder="stdin" rows="2"

@@ -107,6 +107,28 @@ async function openEdit(item) {
   catch (e) { error.value = e.message; }
 }
 
+// Regenerate the hidden tests of the problem being edited (background job, same poll).
+const regenBusy = ref(false);
+async function regenerateTests() {
+  if (!editing.value?.id) return;
+  editError.value = ''; regenBusy.value = true;
+  try {
+    const { jobId } = await api.post(`/api/ai/regenerate-tests/${editing.value.id}`);
+    for (let n = 0; n < 240; n++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      let r;
+      try { r = await api.get(`/api/ai/generate-problem/${jobId}`); }
+      catch (e) { if (e.status === 404) { editError.value = 'The job expired.'; break; } continue; }
+      if (r.status === 'running') continue;
+      if (r.status === 'done') { editing.value = r.problem; await load(); }
+      else editError.value = (r.message || 'Regeneration failed.') +
+        (r.compilerOutput ? '\n\n' + r.compilerOutput : '') + (r.stderr ? '\n\n' + r.stderr : '');
+      break;
+    }
+  } catch (e) { editError.value = e.message; }
+  finally { regenBusy.value = false; }
+}
+
 async function save(form) {
   editError.value = ''; busy.value = true;
   try {
@@ -233,6 +255,8 @@ async function remove() {
       :show-bank-fields="true"
       :error="editError"
       :busy="busy"
-      @save="save" @delete="remove" @cancel="editing = null" />
+      :can-regen-tests="aiEnabled && !!editing.id"
+      :regen-busy="regenBusy"
+      @save="save" @delete="remove" @cancel="editing = null" @regenerate-tests="regenerateTests" />
   </div>
 </template>
