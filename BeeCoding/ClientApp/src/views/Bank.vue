@@ -1,17 +1,16 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { useRouter } from 'vue-router';
 import { api } from '../lib/api';
-import ProblemEditor from '../components/ProblemEditor.vue';
 import LevelBadge from '../components/LevelBadge.vue';
+
+const router = useRouter();
 
 const items = ref([]);
 const q = ref('');
 const scope = ref('mine');
 const level = ref('');
-const editing = ref(null);   // {} = new, object = edit, null = closed
 const error = ref('');
-const editError = ref('');
-const busy = ref(false);
 
 // AI problem generator
 const aiEnabled = ref(false);
@@ -61,8 +60,7 @@ async function pollJob(jobId) {
     if (r.status === 'done') {
       genOpen.value = false;
       gen.value.idea = '';
-      await load();
-      editing.value = r.problem;
+      router.push(`/bank/${r.problem.id}/edit`);
     } else {
       genError.value = (r.message || 'Generation failed.') +
         (r.compilerOutput ? '\n\n' + r.compilerOutput : '') +
@@ -101,54 +99,6 @@ onMounted(async () => {
 });
 onBeforeUnmount(() => { pollStopped = true; });
 
-async function openEdit(item) {
-  editError.value = '';
-  try { editing.value = await api.get(`/api/bank/${item.id}`); }
-  catch (e) { error.value = e.message; }
-}
-
-// Regenerate the hidden tests of the problem being edited (background job, same poll).
-const regenBusy = ref(false);
-async function regenerateTests() {
-  if (!editing.value?.id) return;
-  editError.value = ''; regenBusy.value = true;
-  try {
-    const { jobId } = await api.post(`/api/ai/regenerate-tests/${editing.value.id}`);
-    for (let n = 0; n < 240; n++) {
-      await new Promise((r) => setTimeout(r, 2000));
-      let r;
-      try { r = await api.get(`/api/ai/generate-problem/${jobId}`); }
-      catch (e) { if (e.status === 404) { editError.value = 'The job expired.'; break; } continue; }
-      if (r.status === 'running') continue;
-      if (r.status === 'done') { editing.value = r.problem; await load(); }
-      else editError.value = (r.message || 'Regeneration failed.') +
-        (r.compilerOutput ? '\n\n' + r.compilerOutput : '') + (r.stderr ? '\n\n' + r.stderr : '');
-      break;
-    }
-  } catch (e) { editError.value = e.message; }
-  finally { regenBusy.value = false; }
-}
-
-async function save(form) {
-  editError.value = ''; busy.value = true;
-  try {
-    const body = { ...form.value ?? form };
-    if (editing.value?.id) await api.put(`/api/bank/${editing.value.id}`, body);
-    else await api.post('/api/bank', body);
-    editing.value = null;
-    await load();
-  } catch (e) { editError.value = e.message; }
-  finally { busy.value = false; }
-}
-
-async function remove() {
-  if (!editing.value?.id || !confirm("Delete this problem from the bank?")) return;
-  try {
-    await api.del(`/api/bank/${editing.value.id}`);
-    editing.value = null;
-    await load();
-  } catch (e) { editError.value = e.message; }
-}
 </script>
 
 <template>
@@ -160,9 +110,9 @@ async function remove() {
                 class="px-3 py-1.5 rounded-lg text-sm font-medium border border-violet-300 dark:border-violet-500/40 text-violet-700 dark:text-violet-300">
           ✨ Generate with AI
         </button>
-        <button @click="editing = {}" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500 text-white">
+        <RouterLink to="/bank/new" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500 text-white">
           + New problem
-        </button>
+        </RouterLink>
       </div>
     </div>
 
@@ -242,21 +192,13 @@ async function remove() {
             {{ t }}
           </span>
         </div>
-        <button v-if="b.mine" @click="openEdit(b)"
-                class="mt-3 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
+        <RouterLink v-if="b.mine" :to="`/bank/${b.id}/edit`"
+                    class="mt-3 inline-block text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">
           edit
-        </button>
+        </RouterLink>
       </div>
     </div>
     <p v-if="!items.length" class="text-slate-400 dark:text-slate-500 text-sm">Nothing here yet.</p>
 
-    <ProblemEditor v-if="editing !== null"
-      :problem="editing.id ? editing : null"
-      :show-bank-fields="true"
-      :error="editError"
-      :busy="busy"
-      :can-regen-tests="aiEnabled && !!editing.id"
-      :regen-busy="regenBusy"
-      @save="save" @delete="remove" @cancel="editing = null" @regenerate-tests="regenerateTests" />
   </div>
 </template>

@@ -6,7 +6,6 @@ import { useAuth } from '../stores/auth';
 import { createBoardConnection } from '../lib/signalr';
 import ProgressGrid from '../components/ProgressGrid.vue';
 import PadletWall from '../components/PadletWall.vue';
-import ProblemEditor from '../components/ProblemEditor.vue';
 import BankPicker from '../components/BankPicker.vue';
 import LevelBadge from '../components/LevelBadge.vue';
 import VerdictBadge from '../components/VerdictBadge.vue';
@@ -23,7 +22,6 @@ const board = ref(null);
 const problems = ref([]);
 const progress = ref({ students: [], problems: [], cells: [], examMode: false, viewerIsStaff: false });
 const presence = ref([]);
-const editing = ref(null);       // problem object or {} for new, null = closed
 const error = ref('');
 let conn = null;
 let refreshTimer = null;
@@ -62,29 +60,7 @@ async function toggleHide(student) {
 }
 
 const picking = ref(false);
-const editError = ref('');
-const editBusy = ref(false);
 
-async function saveProblem(form) {
-  editError.value = ''; editBusy.value = true;
-  try {
-    const body = { ...(form.value ?? form) };
-    if (editing.value?.id) await api.put(`/api/boards/${props.slug}/problems/${editing.value.id}`, body);
-    else await api.post(`/api/boards/${props.slug}/problems`, body);
-    editing.value = null;
-    await loadAll();
-  } catch (e) { editError.value = e.message; }
-  finally { editBusy.value = false; }
-}
-
-async function deleteProblem() {
-  if (!editing.value?.id || !confirm('Delete this problem?')) return;
-  try {
-    await api.del(`/api/boards/${props.slug}/problems/${editing.value.id}`);
-    editing.value = null;
-    await loadAll();
-  } catch (e) { editError.value = e.message; }
-}
 
 async function saveToBank(p) {
   try {
@@ -173,7 +149,7 @@ onBeforeUnmount(async () => {
                   class="px-3 py-1.5 rounded-lg text-sm font-medium border bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700">
         🎥 Live code
       </RouterLink>
-      <button @click="editing = {}" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500 text-white">
+      <button @click="router.push(`/boards/${props.slug}/problems/new`)" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500 text-white">
         + Add problem
       </button>
       <button @click="picking = true"
@@ -222,7 +198,7 @@ onBeforeUnmount(async () => {
           <button v-if="isStaff" @click="saveToBank(p)"
                   class="text-sm text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100"
                   title="Save to problem bank">📚</button>
-          <button v-if="isStaff" @click="editing = p" class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">edit</button>
+          <button v-if="isStaff" @click="router.push(`/boards/${props.slug}/problems/${p.id}/edit`)" class="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100">edit</button>
           <RouterLink :to="`/boards/${board.slug}/problems/${p.id}`"
                       class="text-sm bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-3 py-1.5">
             {{ isStaff ? 'View' : 'Solve' }}
@@ -257,11 +233,6 @@ onBeforeUnmount(async () => {
       :current-user-id="auth.user?.id"
       @toggle-hide="toggleHide" />
 
-    <ProblemEditor v-if="editing !== null"
-      :problem="editing.id ? editing : null"
-      :error="editError"
-      :busy="editBusy"
-      @save="saveProblem" @delete="deleteProblem" @cancel="editing = null" />
 
     <BankPicker v-if="picking"
       :board-slug="board.slug"

@@ -9,6 +9,8 @@ const routes = [
   { path: '/terms', component: () => import('./views/Terms.vue'), meta: { public: true } },
   { path: '/boards', component: () => import('./views/Dashboard.vue') },
   { path: '/bank', component: () => import('./views/Bank.vue') },
+  { path: '/bank/new', component: () => import('./views/ProblemEdit.vue') },
+  { path: '/bank/:id/edit', component: () => import('./views/ProblemEdit.vue'), props: true },
   { path: '/practice', component: () => import('./views/Practice.vue') },
   { path: '/playground', component: () => import('./views/Playground.vue') },
   { path: '/practice/:id', component: () => import('./views/PracticeSolve.vue'), props: true },
@@ -17,6 +19,8 @@ const routes = [
   { path: '/admin', component: () => import('./views/Admin.vue') },
   { path: '/boards/:slug', component: () => import('./views/Board.vue'), props: true },
   { path: '/boards/:slug/live', component: () => import('./views/LiveCode.vue'), props: true },
+  { path: '/boards/:slug/problems/new', component: () => import('./views/ProblemEdit.vue'), props: true },
+  { path: '/boards/:slug/problems/:id/edit', component: () => import('./views/ProblemEdit.vue'), props: true },
   { path: '/boards/:slug/problems/:problemId', component: () => import('./views/Solve.vue'), props: true },
 ];
 
