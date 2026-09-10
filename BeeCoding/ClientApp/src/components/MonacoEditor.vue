@@ -261,11 +261,13 @@ onMounted(() => {
 watch(() => props.readOnly, (ro) => editor?.updateOptions({ readOnly: ro }));
 
 watch(() => props.modelValue, (v) => {
-  // Only for genuinely external changes (template switch, "copy into my editor").
-  // Never yank text out from under someone who is typing — that's what scrambled
-  // input on mobile: setValue resets the cursor mid-keystroke.
+  // Apply genuinely external changes (template switch, "copy into my editor", and a
+  // read-only editor mirroring live content). Don't yank text out from under someone
+  // who is typing — that's what scrambled input on mobile — but a read-only editor's
+  // user is never typing, so it must always follow modelValue.
   if (!editor || selfEmit) return;
-  if (v === editor.getValue() || editor.hasTextFocus()) return;
+  if (v === editor.getValue()) return;
+  if (!props.readOnly && editor.hasTextFocus()) return;
   const model = editor.getModel();
   editor.executeEdits('external', [{ range: model.getFullModelRange(), text: v || '' }]);
   editor.pushUndoStop();
