@@ -44,6 +44,18 @@ function readFont() {
 const fontSize = ref(readFont());
 const lspEnabled = ref((() => { try { return localStorage.getItem(LSP_KEY) !== '0'; } catch { return true; } })());
 
+// Is the clangd bridge switched on server-side? Asked once, shared by every editor.
+// Without this the editor opens a WebSocket that the server rejects -> console error.
+const serverLsp = ref(false);
+let serverLspProbe = null;
+function probeServerLsp() {
+  serverLspProbe ??= fetch('/api/lsp/enabled', { credentials: 'include' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j) => j?.enabled === true)
+    .catch(() => false);
+  return serverLspProbe;
+}
+
 // this editor can talk to clangd at all?
 const lspCapable = () => props.lsp === true || props.lsp === 'c' || props.lsp === 'cpp';
 
@@ -96,7 +108,7 @@ function toMonacoCompletion(it, fallbackRange) {
 }
 
 async function initLsp() {
-  if (!lspEnabled.value || props.readOnly) return;
+  if (!lspEnabled.value || props.readOnly || !serverLsp.value) return;
   const lang = props.lsp === true ? props.language : props.lsp;
   if (lang !== 'c' && lang !== 'cpp') return;
 
@@ -233,14 +245,17 @@ onMounted(() => {
     run: () => applyFont(DEFAULT_FONT),
   });
   if (lspCapable() && !props.readOnly) {
-    editor.addAction({
-      id: 'beecoding.toggleLsp', label: 'Editor: Toggle C/C++ IntelliSense (LSP)',
-      contextMenuGroupId: 'zz_beecoding', contextMenuOrder: 4,
-      run: () => toggleLsp(),
+    probeServerLsp().then((ok) => {
+      serverLsp.value = ok;
+      if (!ok) return;
+      editor?.addAction({
+        id: 'beecoding.toggleLsp', label: 'Editor: Toggle C/C++ IntelliSense (LSP)',
+        contextMenuGroupId: 'zz_beecoding', contextMenuOrder: 4,
+        run: () => toggleLsp(),
+      });
+      if (!props.readOnly) initLsp();
     });
   }
-
-  if (!props.readOnly) initLsp();
 });
 
 watch(() => props.readOnly, (ro) => editor?.updateOptions({ readOnly: ro }));
@@ -279,7 +294,7 @@ const btnCls =
       <button type="button" :class="btnCls" title="Decrease font size (Ctrl -)" @click="applyFont(fontSize - 1)">A&minus;</button>
       <span class="text-slate-400 dark:text-slate-500 tabular-nums w-4 text-center">{{ fontSize }}</span>
       <button type="button" :class="btnCls" title="Increase font size (Ctrl +)" @click="applyFont(fontSize + 1)">A+</button>
-      <button v-if="showLspBtn" type="button" :class="btnCls"
+      <button v-if="showLspBtn && serverLsp" type="button" :class="btnCls"
               :title="lspEnabled ? 'C/C++ IntelliSense on — click to disable' : 'C/C++ IntelliSense off — click to enable'"
               @click="toggleLsp()">
         LSP&nbsp;{{ lspEnabled ? 'on' : 'off' }}

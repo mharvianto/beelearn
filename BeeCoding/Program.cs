@@ -191,6 +191,10 @@ app.MapHub<BoardHub>("/hubs/board");
 // C/C++ language server bridge (clangd). No-op unless Lsp:Enabled + clangd on PATH.
 app.MapGet("/lsp/cpp", (HttpContext c, LspEndpoint ep) => ep.HandleAsync(c)).RequireAuthorization();
 
+// Lets the editor skip the WebSocket attempt (and its console error) when the bridge is off.
+app.MapGet("/api/lsp/enabled", (Microsoft.Extensions.Options.IOptions<LspOptions> o) =>
+    Results.Ok(new { enabled = o.Value.Enabled }));
+
 app.MapFallbackToFile("index.html");
 
 app.Run();
