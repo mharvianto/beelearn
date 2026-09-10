@@ -163,9 +163,24 @@ HSTS aktif hanya kalau app tahu request-nya HTTPS).
 
 ### 2.11 Health checks & observability
 
-- Tambah `builder.Services.AddHealthChecks()` + `app.MapHealthChecks("/health")` (cek DB +
-  Redis). `livenessProbe` = `/health`, `readinessProbe` menunggu DB & Redis siap.
+- **Sudah ada di repo:**
+  - `GET /health` — liveness, tanpa cek (200 selama proses menjawab). Pakai untuk `livenessProbe`.
+  - `GET /health/ready` — readiness, menjalankan cek bertag `ready` (saat ini: `DbHealthCheck` →
+    `AppDbContext.CanConnectAsync`, timeout 3 dtk). Pakai untuk `readinessProbe`.
+  - Keduanya anonim, tidak melewati auth.
+- Saat pindah ke Redis (§2.4), tambahkan cek Redis dengan tag `ready` juga.
 - Log JSON ke stdout (bukan journald); OpenTelemetry / Application Insights.
+
+```yaml
+livenessProbe:
+  httpGet: { path: /health, port: 8080 }
+  initialDelaySeconds: 10
+  periodSeconds: 15
+readinessProbe:
+  httpGet: { path: /health/ready, port: 8080 }
+  initialDelaySeconds: 5
+  periodSeconds: 10
+```
 
 ### 2.12 Image (Dockerfile multi-stage)
 
@@ -208,7 +223,7 @@ Urutan prioritas — **tanpa 1–4, replika kedua langsung merusak data / memutu
    lewat broker.
 6. **Sticky session OFF** setelah backplane ada (atau `skipNegotiation` + WS).
 7. **clangd**: `Lsp__Enabled=false`, atau pool khusus dengan routing sticky.
-8. **Health checks** + probe + graceful shutdown (drain job judge in-flight).
+8. **Health checks** (`/health`, `/health/ready` — sudah ada) + probe + graceful shutdown (drain job judge in-flight).
 9. **Logging** JSON ke stdout + OpenTelemetry / Application Insights.
 10. Aset statis: aman apa adanya; CDN di depan bila mau.
 
@@ -217,7 +232,6 @@ Urutan prioritas — **tanpa 1–4, replika kedua langsung merusak data / memutu
 - Abstraksi `IDraftStore`/`ILectureStore`/`IPresenceTracker` + implementasi Redis.
 - `IJudgeQueue` di atas broker (publish job + subscribe hasil) menggantikan `Channel<>`.
 - `IAiJobStore` di atas Redis menggantikan `AiGenerationJobs`.
-- Endpoint `/health` + probe.
 - Migrasi mode "run-and-exit" (`dotnet BeeCoding.dll migrate`).
 
 ---

@@ -6,6 +6,7 @@ using BeeCoding.Services.Judge;
 using BeeCoding.Services.Lsp;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 
@@ -31,6 +32,10 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
 
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
+
+// /health = liveness (process is up); /health/ready = readiness (DB reachable).
+builder.Services.AddHealthChecks()
+    .AddCheck<DbHealthCheck>("db", tags: new[] { "ready" });
 
 // Brotli + gzip for text-ish payloads (the Monaco bundle is ~3.3 MB -> ~0.86 MB).
 // Safe over HTTPS here: the compressible responses are static assets / non-secret JSON,
@@ -187,6 +192,13 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<BoardHub>("/hubs/board");
+
+// Liveness: no checks, just "the app is answering". Readiness: run the "ready"-tagged checks.
+app.MapHealthChecks("/health", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = c => c.Tags.Contains("ready"),
+});
 
 // C/C++ language server bridge (clangd). No-op unless Lsp:Enabled + clangd on PATH.
 app.MapGet("/lsp/cpp", (HttpContext c, LspEndpoint ep) => ep.HandleAsync(c)).RequireAuthorization();
