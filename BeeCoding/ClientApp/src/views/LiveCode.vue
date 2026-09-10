@@ -268,8 +268,8 @@ onBeforeUnmount(async () => {
                       class="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
                       :class="{ 'ml-auto': !studentList.length }">✕</button>
             </div>
-            <MonacoEditor v-if="selectedStudent" :model-value="selectedStudent.code"
-                          :language="liveLang" :read-only="true" class="flex-1 min-h-0" />
+            <pre v-if="selectedStudent"
+                 class="flex-1 min-h-0 overflow-auto m-0 bg-slate-900 text-slate-100 dark:bg-black p-3 font-mono text-xs leading-snug whitespace-pre">{{ selectedStudent.code || '(empty)' }}</pre>
             <div v-else class="flex-1 grid place-items-center text-sm text-slate-400 dark:text-slate-500 p-6 text-center">
               No student is typing yet.
             </div>
@@ -296,8 +296,8 @@ onBeforeUnmount(async () => {
                   </template>
                   <span v-else>{{ lecturingOn ? 'Waiting for the teacher to start typing…' : 'The teacher hasn’t started a live session yet.' }}</span>
                 </div>
-                <MonacoEditor v-if="lecture" :model-value="lecture.code" :language="lecture.language || 'cpp'"
-                              :read-only="true" class="flex-1 min-h-0" />
+                <pre v-if="lecture"
+                     class="flex-1 min-h-0 overflow-auto m-0 bg-slate-900 text-slate-100 dark:bg-black p-3 font-mono text-xs leading-snug whitespace-pre">{{ lecture.code || '(empty)' }}</pre>
                 <div v-else class="flex-1 grid place-items-center text-sm text-slate-400 dark:text-slate-500 p-6 text-center">
                   The teacher’s code will show here.
                 </div>
