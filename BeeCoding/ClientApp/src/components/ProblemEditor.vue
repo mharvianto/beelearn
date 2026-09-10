@@ -44,7 +44,7 @@ function removeTest(i) { form.value.testCases.splice(i, 1); }
 
 <template>
   <div class="fixed inset-0 z-40 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-y-auto">
-    <div class="max-w-5xl mx-auto px-4 py-6 pb-24">
+    <div class="max-w-5xl mx-auto px-4 py-6">
       <div class="flex items-center gap-3 flex-wrap mb-4">
         <h2 class="font-bold text-lg">{{ props.problem?.id ? 'Edit' : 'New' }} problem</h2>
         <div class="ml-auto inline-flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden text-sm">
@@ -167,10 +167,8 @@ function removeTest(i) { form.value.testCases.splice(i, 1); }
       </div>
 
       <pre v-if="error" class="mt-4 text-xs text-red-600 dark:text-red-400 whitespace-pre-wrap max-h-52 overflow-auto border border-red-200 dark:border-red-500/30 rounded-lg p-3">{{ error }}</pre>
-    </div>
 
-    <div class="fixed bottom-0 inset-x-0 z-10 border-t border-slate-200 dark:border-slate-800 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur">
-      <div class="max-w-5xl mx-auto px-4 py-3 flex items-center gap-2">
+      <div class="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center gap-2">
         <button @click="emit('save', form)" :disabled="busy"
                 class="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-4 py-2 font-medium disabled:opacity-50">
           {{ busy ? 'Saving…' : 'Save' }}
