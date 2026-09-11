@@ -10,20 +10,12 @@ namespace BeeCoding.Controllers;
 
 [Authorize]
 [Route("api/boards")]
-public class BoardsController : ApiControllerBase
+public class BoardsController(AppDbContext db, BoardService boards, VisibilityService vis, IBoardNotifier notifier) : ApiControllerBase
 {
-    private readonly AppDbContext _db;
-    private readonly BoardService _boards;
-    private readonly VisibilityService _vis;
-    private readonly IBoardNotifier _notifier;
-
-    public BoardsController(AppDbContext db, BoardService boards, VisibilityService vis, IBoardNotifier notifier)
-    {
-        _db = db;
-        _boards = boards;
-        _vis = vis;
-        _notifier = notifier;
-    }
+    private readonly AppDbContext _db = db;
+    private readonly BoardService _boards = boards;
+    private readonly VisibilityService _vis = vis;
+    private readonly IBoardNotifier _notifier = notifier;
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<BoardDto>>> Mine()

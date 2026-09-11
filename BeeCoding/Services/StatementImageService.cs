@@ -188,23 +188,16 @@ public class StatementImageService
 
     // ---- drawing helper ----------------------------------------------------
 
-    private sealed class Gfx
+    private sealed class Gfx(SKCanvas canvas, StatementImageService.Theme t, SKFont reg, SKFont bold, SKFont mono, SKFont monoSmall,
+        SKPaint text, SKPaint muted, SKPaint codeBg, SKPaint rule)
     {
-        public readonly SKCanvas Canvas;
-        private readonly Theme _t;
-        private readonly SKFont _reg, _bold, _mono, _monoSmall;
-        private readonly SKPaint _text, _muted, _codeBg, _rule;
+        public readonly SKCanvas Canvas = canvas;
+        private readonly Theme _t = t;
+        private readonly SKFont _reg = reg, _bold = bold, _mono = mono, _monoSmall = monoSmall;
+        private readonly SKPaint _text = text, _muted = muted, _codeBg = codeBg, _rule = rule;
         public float Y;
 
         public SKPaint MutedPaint => _muted;
-
-        public Gfx(SKCanvas canvas, Theme t, SKFont reg, SKFont bold, SKFont mono, SKFont monoSmall,
-            SKPaint text, SKPaint muted, SKPaint codeBg, SKPaint rule)
-        {
-            Canvas = canvas; _t = t;
-            _reg = reg; _bold = bold; _mono = mono; _monoSmall = monoSmall;
-            _text = text; _muted = muted; _codeBg = codeBg; _rule = rule;
-        }
 
         public void HLine() => Canvas.DrawLine(Margin, Y, Width - Margin, Y, _rule);
 

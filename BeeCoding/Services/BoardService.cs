@@ -4,17 +4,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BeeCoding.Services;
 
-public class BoardService
+public class BoardService(AppDbContext db, VisibilityService vis)
 {
-    private readonly AppDbContext _db;
-    private readonly VisibilityService _vis;
-
-    public BoardService(AppDbContext db, VisibilityService vis)
-    {
-        _db = db;
-        _vis = vis;
-    }
-
+    private readonly AppDbContext _db = db;
+    private readonly VisibilityService _vis = vis;
     private static readonly char[] CodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".ToCharArray();
 
     private string RandomCode(int len) =>

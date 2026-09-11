@@ -11,18 +11,11 @@ namespace BeeCoding.Controllers;
 
 [ApiController]
 [Authorize]
-public class StatementController : ApiControllerBase
+public class StatementController(AppDbContext db, BoardService boards, StatementImageService images) : ApiControllerBase
 {
-    private readonly AppDbContext _db;
-    private readonly BoardService _boards;
-    private readonly StatementImageService _images;
-
-    public StatementController(AppDbContext db, BoardService boards, StatementImageService images)
-    {
-        _db = db;
-        _boards = boards;
-        _images = images;
-    }
+    private readonly AppDbContext _db = db;
+    private readonly BoardService _boards = boards;
+    private readonly StatementImageService _images = images;
 
     /// <summary>
     /// Board problem statement + samples rendered to a PNG (no text reaches the client),

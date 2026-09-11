@@ -10,23 +10,14 @@ namespace BeeCoding.Controllers;
 
 [ApiController]
 [Authorize]
-public class WallController : ApiControllerBase
+public class WallController(AppDbContext db, WallService wall, VisibilityService vis,
+    IBoardNotifier notifier, BoardService boards) : ApiControllerBase
 {
-    private readonly AppDbContext _db;
-    private readonly WallService _wall;
-    private readonly VisibilityService _vis;
-    private readonly IBoardNotifier _notifier;
-    private readonly BoardService _boards;
-
-    public WallController(AppDbContext db, WallService wall, VisibilityService vis,
-        IBoardNotifier notifier, BoardService boards)
-    {
-        _db = db;
-        _wall = wall;
-        _vis = vis;
-        _notifier = notifier;
-        _boards = boards;
-    }
+    private readonly AppDbContext _db = db;
+    private readonly WallService _wall = wall;
+    private readonly VisibilityService _vis = vis;
+    private readonly IBoardNotifier _notifier = notifier;
+    private readonly BoardService _boards = boards;
 
     [HttpGet("api/boards/{slug}/wall")]
     public async Task<ActionResult<WallDto>> Get(string slug)

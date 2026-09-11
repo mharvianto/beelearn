@@ -12,11 +12,9 @@ namespace BeeCoding.Services.Ai;
 /// WITHOUT changing their code; a real attempt keeps the level where it is, and a quiet
 /// gap resets it.
 /// </summary>
-public class AiHintProgressService
+public class AiHintProgressService(AppDbContext db)
 {
-    private readonly AppDbContext _db;
-    public AiHintProgressService(AppDbContext db) => _db = db;
-
+    private readonly AppDbContext _db = db;
     private static readonly TimeSpan ResetAfter = TimeSpan.FromMinutes(90);
     public const int MaxLevel = 4;
 

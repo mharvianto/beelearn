@@ -11,11 +11,9 @@ public record ProgressDto(int Xp, int Level, int LevelStartXp, int NextLevelXp, 
 /// fully solves it (Accepted, score 1.0). A bank problem and its board copies share
 /// one key, so the same problem can't be farmed across boards.
 /// </summary>
-public class ProgressService
+public class ProgressService(AppDbContext db)
 {
-    private readonly AppDbContext _db;
-
-    public ProgressService(AppDbContext db) => _db = db;
+    private readonly AppDbContext _db = db;
 
     public static int XpFor(ProblemLevel level) => level switch
     {
@@ -46,7 +44,10 @@ public class ProgressService
         int xp = XpFor(level);
         _db.SolveRecords.Add(new SolveRecord
         {
-            UserId = userId, ProblemKey = problemKey, Level = level, XpAwarded = xp,
+            UserId = userId,
+            ProblemKey = problemKey,
+            Level = level,
+            XpAwarded = xp,
         });
         try
         {

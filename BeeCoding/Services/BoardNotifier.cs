@@ -5,11 +5,9 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace BeeCoding.Services;
 
-public class BoardNotifier : IBoardNotifier
+public class BoardNotifier(IHubContext<BoardHub> hub) : IBoardNotifier
 {
-    private readonly IHubContext<BoardHub> _hub;
-
-    public BoardNotifier(IHubContext<BoardHub> hub) => _hub = hub;
+    private readonly IHubContext<BoardHub> _hub = hub;
 
     public Task ProgressChangedAsync(int boardId, int problemId, int authorUserId) =>
         _hub.Clients.Group(BoardHub.BoardGroup(boardId))

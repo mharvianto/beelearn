@@ -11,16 +11,10 @@ public record LeaderRowDto(int Rank, int UserId, string DisplayName, string Role
 
 [ApiController]
 [Authorize]
-public class ProgressController : ApiControllerBase
+public class ProgressController(AppDbContext db, ProgressService progress) : ApiControllerBase
 {
-    private readonly AppDbContext _db;
-    private readonly ProgressService _progress;
-
-    public ProgressController(AppDbContext db, ProgressService progress)
-    {
-        _db = db;
-        _progress = progress;
-    }
+    private readonly AppDbContext _db = db;
+    private readonly ProgressService _progress = progress;
 
     [HttpGet("api/me/progress")]
     public Task<ProgressDto> Mine() => _progress.GetAsync(UserId);

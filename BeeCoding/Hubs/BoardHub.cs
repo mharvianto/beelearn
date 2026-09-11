@@ -9,20 +9,12 @@ using Microsoft.EntityFrameworkCore;
 namespace BeeCoding.Hubs;
 
 [Authorize]
-public class BoardHub : Hub
+public class BoardHub(AppDbContext db, IPresenceTracker presence, IDraftStore drafts, ILectureStore lectures) : Hub
 {
-    private readonly AppDbContext _db;
-    private readonly IPresenceTracker _presence;
-    private readonly IDraftStore _drafts;
-    private readonly ILectureStore _lectures;
-
-    public BoardHub(AppDbContext db, IPresenceTracker presence, IDraftStore drafts, ILectureStore lectures)
-    {
-        _db = db;
-        _presence = presence;
-        _drafts = drafts;
-        _lectures = lectures;
-    }
+    private readonly AppDbContext _db = db;
+    private readonly IPresenceTracker _presence = presence;
+    private readonly IDraftStore _drafts = drafts;
+    private readonly ILectureStore _lectures = lectures;
 
     private int UserId => int.Parse(Context.User!.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
