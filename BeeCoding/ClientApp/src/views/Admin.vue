@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { api } from '../lib/api';
 import { withBase } from '../lib/base';
 import { useAuth } from '../stores/auth';
@@ -8,6 +8,7 @@ import { useUndoToast } from '../stores/undoToast';
 import { useConfirmDialog } from '../stores/confirmDialog';
 
 const auth = useAuth();
+const route = useRoute();
 const router = useRouter();
 const confirmDialog = useConfirmDialog();
 const undoToast = useUndoToast();
@@ -15,7 +16,8 @@ const tabDefs = [
   ['ai', 'AI'], ['users', 'Users'], ['boards', 'Boards'], ['problems', 'Problems'],
   ['review', 'AI review'], ['reports', 'Reports'], ['trash', 'Trash'], ['audit', 'Audit log'],
 ];
-const tab = ref('ai');
+// Deep-linkable: ?tab=users etc. — reload/share/bookmark lands on the same tab.
+const tab = ref(tabDefs.some((t) => t[0] === route.query.tab) ? route.query.tab : 'ai');
 const err = ref('');
 
 const aiRows = ref(null);
@@ -30,7 +32,9 @@ const when = (d) => new Date(d.endsWith('Z') ? d : d + 'Z').toLocaleString();
 
 function switchTab(id) {
   tab.value = id;
+  router.replace({ query: { ...route.query, tab: id } });
   if (id === 'ai') {
+    if (!aiRows.value) loadAi();
     if (!aiSettings.value) loadAiSettings();
     if (!aiOverrides.value) loadAiOverrides();
   } else if (id === 'users') {
@@ -407,7 +411,7 @@ async function importProblems(ev) {
 
 onMounted(async () => {
   if (!auth.user?.isAdmin) { router.replace('/boards'); return; }
-  await Promise.all([loadAi(), loadAiSettings(), loadAiOverrides()]);
+  switchTab(tab.value);
 });
 </script>
 
