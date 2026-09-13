@@ -469,6 +469,41 @@ public class AiSettings
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 
+/// <summary>
+/// Which AI provider/credential to bill — layered the same way as AiSettings (Id=1 row is
+/// the platform-wide default, OrganizationId != null rows are one org's own override), but
+/// kept as its own table since this is about WHICH account is billed, not usage limits.
+/// Any field left null/empty falls through to the next layer: org row -> platform DB row ->
+/// appsettings.json's Ai:* (so a fresh deployment with no rows here still works unchanged).
+/// See AiProviderRuntime for the in-memory cache and AiTutorService.Effective() for the
+/// actual per-request resolution.
+/// </summary>
+public class AiProviderConfig
+{
+    public int Id { get; set; }
+
+    /// <summary>Null = the platform-wide default row. Non-null = one organization's own
+    /// override, editable by that org's Org Admin (or a super admin).</summary>
+    public int? OrganizationId { get; set; }
+    public Organization? Organization { get; set; }
+
+    /// <summary>Bearer token for the OpenAI-compatible endpoint. Never returned to a client
+    /// once saved — the admin/org-admin API exposes only whether one is set.</summary>
+    [MaxLength(300)]
+    public string? ApiKey { get; set; }
+
+    [MaxLength(500)]
+    public string? BaseUrl { get; set; }
+
+    [MaxLength(200)]
+    public string? Model { get; set; }
+
+    [MaxLength(200)]
+    public string? GenerateModel { get; set; }
+
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
 /// <summary>Per-user AI override: a custom daily quota and/or an outright ban. No row for a
 /// user means "use the role default from AiSettings, not banned".</summary>
 public class AiUserSetting

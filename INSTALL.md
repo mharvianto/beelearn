@@ -624,6 +624,12 @@ gaya OpenAI mana pun — ganti `Ai:BaseUrl` + `Ai:Model` (mis. OpenAI, Groq, vLL
 Kalau model default lambat, naikkan `Ai:TimeoutSeconds` atau pakai model lain; `Ai:Thinking=true`
 lebih teliti tapi jauh lebih lambat.
 
+`Ai:ApiKey`/`Ai:BaseUrl`/`Ai:Model`/`Ai:GenerateModel` di `appsettings.json` cuma **fallback
+paling bawah** sekarang — bisa di-override tanpa restart lewat tab **AI** di `/admin`
+("AI provider"), dan tiap organisasi bisa punya API key/model sendiri lewat `/org-admin`
+(lihat §5B). Urutan prioritas: override organisasi → override platform (di `/admin`) →
+`appsettings.json`, per field (key/BaseUrl/model boleh di-override sendiri-sendiri).
+
 ### Checklist keamanan produksi
 
 - `Environment=Judge__RequireSandbox=true` — pastikan log startup berbunyi `Sandbox mode: bubblewrap + rlimits` (kalau `rlimits only`, aktifkan *unprivileged user namespaces*, lihat §6).
@@ -760,9 +766,12 @@ kasus khusus).
    tanpa butuh akses super admin.
 
 **Yang bisa diatur Org Admin (di `/org-admin`):** anggota (tambah/hapus/ubah role),
-lihat daftar board organisasinya, dan kuota + pause AI khusus organisasinya (pause di
+lihat daftar board organisasinya, kuota + pause AI khusus organisasinya (pause di
 level organisasi tidak pernah mengalahkan kill-switch platform di `/admin` — kalau
-platform di-pause, semua organisasi ikut ter-pause).
+platform di-pause, semua organisasi ikut ter-pause), dan **API key/model AI sendiri**
+("bring your own key") — kalau organisasinya punya langganan API AI sendiri, isi di sini;
+kosongkan untuk ikut key/model default platform. Kuncinya tidak pernah ditampilkan lagi
+setelah disimpan, cuma preview 4 karakter terakhir.
 
 **Yang TIDAK ada di Org Admin** (sengaja dibatasi ke super admin/`/admin`, karena
 lintas-organisasi): trash/restore, audit log, dan export laporan CSV/Excel.

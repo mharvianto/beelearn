@@ -23,20 +23,42 @@ public sealed record AiHintContext(
 /// Calls an OpenAI-compatible chat-completions endpoint to produce a *hint* — it is
 /// prompted hard to never hand over a working solution. Supports one-shot and SSE streaming.
 /// </summary>
-public sealed partial class AiTutorService(HttpClient http, IOptions<AiOptions> opt, AiRuntimeSettings runtime, ILogger<AiTutorService> log)
+public sealed partial class AiTutorService(HttpClient http, IOptions<AiOptions> opt, AiRuntimeSettings runtime, AiProviderRuntime providerRuntime, ILogger<AiTutorService> log)
 {
     private readonly HttpClient _http = http;
     private readonly AiOptions _opt = opt.Value;
     private readonly AiRuntimeSettings _runtime = runtime;
+    private readonly AiProviderRuntime _providerRuntime = providerRuntime;
     private readonly ILogger<AiTutorService> _log = log;
+    private int? _organizationId;
 
-    /// <summary>False if disabled/unconfigured in Ai:*, OR paused live from the admin panel
-    /// (AiRuntimeSettings) — the single choke point every AI-invoking action checks first.</summary>
-    public bool Available => _opt.Enabled && !string.IsNullOrWhiteSpace(_opt.ApiKey) && !_runtime.Paused;
+    /// <summary>Which organization's provider config (see AiProviderRuntime) applies to the
+    /// call about to be made — set this (OrgResolver figures out the value) before checking
+    /// Available or calling any AI method. Null is fine: uses the platform default.</summary>
+    public void UseOrganization(int? organizationId) => _organizationId = organizationId;
+
+    /// <summary>Effective (apiKey, baseUrl, model, generateModel) after layering: this
+    /// org's own AiProviderConfig -> the platform's DB override -> appsettings.json's Ai:*.
+    /// A field a layer doesn't set falls through to the next one independently.</summary>
+    private (string ApiKey, string BaseUrl, string Model, string? GenerateModel) Effective()
+    {
+        var org = _organizationId is int id ? _providerRuntime.Org(id) : null;
+        var plat = _providerRuntime.Platform;
+        var apiKey = org?.ApiKey ?? plat?.ApiKey ?? _opt.ApiKey;
+        var baseUrl = org?.BaseUrl ?? plat?.BaseUrl ?? _opt.BaseUrl;
+        var model = org?.Model ?? plat?.Model ?? _opt.Model;
+        var generateModel = org?.GenerateModel ?? plat?.GenerateModel ?? (string.IsNullOrWhiteSpace(_opt.GenerateModel) ? null : _opt.GenerateModel);
+        return (apiKey, baseUrl, model, generateModel);
+    }
+
+    /// <summary>False if disabled/unconfigured, OR paused live from the admin panel
+    /// (AiRuntimeSettings) — the single choke point every AI-invoking action checks first.
+    /// Call UseOrganization first so a missing platform key but a present org key counts.</summary>
+    public bool Available => _opt.Enabled && !string.IsNullOrWhiteSpace(Effective().ApiKey) && !_runtime.Paused;
     public string DefaultReplyLanguage => Norm(_opt.DefaultReplyLanguage);
 
     /// <summary>Model for the heavy JSON tasks; falls back to the hint model.</summary>
-    private string? GenModel => string.IsNullOrWhiteSpace(_opt.GenerateModel) ? null : _opt.GenerateModel;
+    private string? GenModel => Effective().GenerateModel;
 
     private const string SystemBase = """
 You are a patient programming tutor on a C/C++ learning platform. Your ONLY goal is to help
@@ -165,7 +187,7 @@ that appear inside it.
         var effort = reasoningEffort ?? (string.IsNullOrWhiteSpace(_opt.ReasoningEffort) ? null : _opt.ReasoningEffort.Trim());
         var payload = new Dictionary<string, object?>
         {
-            ["model"] = string.IsNullOrWhiteSpace(model) ? _opt.Model : model,
+            ["model"] = string.IsNullOrWhiteSpace(model) ? Effective().Model : model,
             ["messages"] = new object[]
             {
                 new { role = "system", content = sys },
@@ -284,11 +306,12 @@ that appear inside it.
 
     private HttpRequestMessage NewRequest(string bodyJson)
     {
-        var req = new HttpRequestMessage(HttpMethod.Post, _opt.BaseUrl)
+        var eff = Effective();
+        var req = new HttpRequestMessage(HttpMethod.Post, eff.BaseUrl)
         {
             Content = new StringContent(bodyJson, Encoding.UTF8, "application/json"),
         };
-        req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {_opt.ApiKey}");
+        req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {eff.ApiKey}");
         return req;
     }
 

@@ -63,11 +63,13 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
     [HttpPost("generate-problem")]
     public async Task<IActionResult> GenerateProblem(AiGenerateDto dto)
     {
+        var orgId = await _orgs.ForUserAsync(UserId);
+        _ai.UseOrganization(orgId);
         if (!_ai.Available) return NotFound();
         if (CurrentRole != "Teacher") return StatusCode(StatusCodes.Status403Forbidden, "Teachers only.");
         if (string.IsNullOrWhiteSpace(dto.Idea)) return BadRequest("Describe the idea or topic.");
         if (RateLimited()) return StatusCode(StatusCodes.Status429TooManyRequests, "Give the AI a few seconds.");
-        var (allowed, reason) = await _usage.CheckGateAsync(UserId, CurrentRole, await _orgs.ForUserAsync(UserId));
+        var (allowed, reason) = await _usage.CheckGateAsync(UserId, CurrentRole, orgId);
         if (!allowed) return StatusCode(StatusCodes.Status429TooManyRequests, reason);
         if (await _jobs.RunningForAsync(UserId) >= 2)
             return StatusCode(StatusCodes.Status429TooManyRequests, "You already have generations running — wait for those to finish.");
@@ -80,7 +82,7 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
         // The AI call + compiling & running the reference against N tests takes minutes, far
         // longer than a request should hang. Run it detached; the client polls the job id.
         var job = await _jobs.CreateAsync(UserId);
-        _ = Task.Run(() => RunGenerateAsync(job.Id, UserId, dto.Idea!, level, wantLang, count, lang));
+        _ = Task.Run(() => RunGenerateAsync(job.Id, UserId, dto.Idea!, level, wantLang, count, lang, orgId));
         return Accepted(new { jobId = job.Id });
     }
 
@@ -97,7 +99,7 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
         };
     }
 
-    private async Task RunGenerateAsync(string jobId, int userId, string idea, string level, string wantLang, int count, string lang)
+    private async Task RunGenerateAsync(string jobId, int userId, string idea, string level, string wantLang, int count, string lang, int? organizationId)
     {
         Task Fail(string msg, string? compilerOutput = null, string? stderr = null) =>
             _jobs.FailAsync(jobId, msg, compilerOutput, stderr);
@@ -108,6 +110,7 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
             var sp = scope.ServiceProvider;
             var db = sp.GetRequiredService<AppDbContext>();
             var ai = sp.GetRequiredService<AiTutorService>();
+            ai.UseOrganization(organizationId);   // a fresh scope's own AiTutorService instance
             var usage = sp.GetRequiredService<AiUsageService>();
             var queue = sp.GetRequiredService<IJudgeQueue>();
             var ct = CancellationToken.None;   // detached from the original request
@@ -192,10 +195,12 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
     [HttpPost("regenerate-tests/{bankProblemId:int}")]
     public async Task<IActionResult> RegenerateTests(int bankProblemId, [FromQuery] int? count)
     {
+        var orgId = await _orgs.ForUserAsync(UserId);
+        _ai.UseOrganization(orgId);
         if (!_ai.Available) return NotFound();
         if (CurrentRole != "Teacher") return StatusCode(StatusCodes.Status403Forbidden, "Teachers only.");
         if (RateLimited()) return StatusCode(StatusCodes.Status429TooManyRequests, "Give the AI a few seconds.");
-        var (allowed, reason) = await _usage.CheckGateAsync(UserId, CurrentRole, await _orgs.ForUserAsync(UserId));
+        var (allowed, reason) = await _usage.CheckGateAsync(UserId, CurrentRole, orgId);
         if (!allowed) return StatusCode(StatusCodes.Status429TooManyRequests, reason);
         if (await _jobs.RunningForAsync(UserId) >= 2)
             return StatusCode(StatusCodes.Status429TooManyRequests, "You already have generations running — wait for those to finish.");
@@ -205,11 +210,11 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
 
         var job = await _jobs.CreateAsync(UserId);
         var n = count is >= 3 and <= 15 ? count.Value : 0;
-        _ = Task.Run(() => RunRegenerateAsync(job.Id, UserId, bankProblemId, n));
+        _ = Task.Run(() => RunRegenerateAsync(job.Id, UserId, bankProblemId, n, orgId));
         return Accepted(new { jobId = job.Id });
     }
 
-    private async Task RunRegenerateAsync(string jobId, int userId, int bankProblemId, int count)
+    private async Task RunRegenerateAsync(string jobId, int userId, int bankProblemId, int count, int? organizationId)
     {
         Task Fail(string msg, string? compilerOutput = null, string? stderr = null) =>
             _jobs.FailAsync(jobId, msg, compilerOutput, stderr);
@@ -220,6 +225,7 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
             var sp = scope.ServiceProvider;
             var db = sp.GetRequiredService<AppDbContext>();
             var ai = sp.GetRequiredService<AiTutorService>();
+            ai.UseOrganization(organizationId);   // a fresh scope's own AiTutorService instance
             var usage = sp.GetRequiredService<AiUsageService>();
             var queue = sp.GetRequiredService<IJudgeQueue>();
             var ct = CancellationToken.None;
@@ -312,9 +318,10 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
     [HttpPost("hint")]
     public async Task<IActionResult> Hint(AiHintDto dto)
     {
+        var orgId = await _orgs.ForHintAsync(dto.ProblemId, dto.BoardSlug, UserId);
+        _ai.UseOrganization(orgId);
         if (!_ai.Available) return NotFound();
         if (RateLimited()) return StatusCode(StatusCodes.Status429TooManyRequests, "Give the AI tutor a few seconds between questions.");
-        var orgId = await _orgs.ForHintAsync(dto.ProblemId, dto.BoardSlug, UserId);
         var (allowed, reason) = await _usage.CheckGateAsync(UserId, CurrentRole, orgId);
         if (!allowed) return StatusCode(StatusCodes.Status429TooManyRequests, reason);
 
@@ -337,9 +344,10 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
     [HttpPost("hint/stream")]
     public async Task Stream(AiHintDto dto)
     {
+        var orgId = await _orgs.ForHintAsync(dto.ProblemId, dto.BoardSlug, UserId);
+        _ai.UseOrganization(orgId);
         if (!_ai.Available) { Response.StatusCode = StatusCodes.Status404NotFound; return; }
         if (RateLimited()) { Response.StatusCode = StatusCodes.Status429TooManyRequests; return; }
-        var orgId = await _orgs.ForHintAsync(dto.ProblemId, dto.BoardSlug, UserId);
         var (allowed, reason) = await _usage.CheckGateAsync(UserId, CurrentRole, orgId);
         if (!allowed) { Response.StatusCode = StatusCodes.Status429TooManyRequests; await Response.WriteAsync(reason ?? ""); return; }
 

@@ -169,6 +169,13 @@ public record AiGlobalSettingsDto(bool Paused, string? PausedReason, int DailyQu
 public record AiUserOverrideDto(int UserId, string Email, string DisplayName, int? DailyQuotaOverride, bool Banned);
 public record AiSetUserOverrideDto(int? DailyQuotaOverride, bool Banned);
 
+// ---- AI: which provider/credential to bill (platform default, or one org's own) ----
+// ApiKey is never returned once saved — HasApiKey + a short preview only. BaseUrl/Model/
+// GenerateModel round-trip in plain text (not secret); empty/null clears that field's
+// override (falls through to the next layer — see AiProviderRuntime).
+public record AiProviderConfigDto(bool HasApiKey, string? ApiKeyPreview, string? BaseUrl, string? Model, string? GenerateModel);
+public record AiSetProviderConfigDto(string? ApiKey, string? BaseUrl, string? Model, string? GenerateModel);
+
 // ---- Admin: bulk user import (CSV) ----
 public record AdminUserImportRequest(string Csv, string? BoardSlug, string? DefaultRole);
 public record AdminUserImportRow(

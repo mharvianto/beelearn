@@ -197,7 +197,9 @@ public class PracticeController(AppDbContext db, IJudgeQueue queue, RateLimiter 
         // Best-effort: a paused/banned/over-quota AI just falls back to the heuristic list,
         // no error surfaced — this endpoint's AI use is a nice-to-have, not a request the
         // student explicitly made (unlike the hint/generate endpoints).
-        if (ai && _ai.Available && (await _aiUsage.CheckGateAsync(UserId, CurrentRole, await _orgs.ForUserAsync(UserId))).Allowed)
+        var practiceOrgId = await _orgs.ForUserAsync(UserId);
+        _ai.UseOrganization(practiceOrgId);
+        if (ai && _ai.Available && (await _aiUsage.CheckGateAsync(UserId, CurrentRole, practiceOrgId)).Allowed)
         {
             var cached = _aiCache.GetValueOrDefault(UserId);
             if (cached.Recs is { Count: > 0 } && DateTime.UtcNow.Ticks - cached.Ts < AiTtlTicks)

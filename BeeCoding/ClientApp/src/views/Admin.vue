@@ -44,6 +44,7 @@ function loadTabData(id) {
   else if (id === 'ai') {
     if (!aiRows.value) loadAi();
     if (!aiSettings.value) loadAiSettings();
+    if (!aiProvider.value) loadAiProvider();
     if (!aiOverrides.value) loadAiOverrides();
   } else if (id === 'users') {
     if (!users.value) loadUsers();
@@ -112,6 +113,34 @@ async function saveAiSettings() {
   catch (e) { err.value = e.message; }
   finally { aiSettingsSaving.value = false; }
 }
+// ---- AI provider/credential: platform default ----
+const aiProvider = ref(null);
+const aiProviderForm = ref({ apiKey: '', baseUrl: '', model: '', generateModel: '' });
+const aiProviderSaving = ref(false);
+const aiProviderMsg = ref('');
+async function loadAiProvider() {
+  err.value = '';
+  try {
+    aiProvider.value = await api.get('/api/admin-ui/ai-provider');
+    aiProviderForm.value = { apiKey: '', baseUrl: aiProvider.value.baseUrl || '', model: aiProvider.value.model || '', generateModel: aiProvider.value.generateModel || '' };
+  } catch (e) { err.value = e.message; }
+}
+async function saveAiProvider() {
+  err.value = ''; aiProviderSaving.value = true; aiProviderMsg.value = '';
+  try {
+    aiProvider.value = await api.put('/api/admin-ui/ai-provider', aiProviderForm.value);
+    aiProviderForm.value.apiKey = '';
+    aiProviderMsg.value = 'Saved.';
+  } catch (e) { err.value = e.message; }
+  finally { aiProviderSaving.value = false; }
+}
+async function clearAiProviderKey() {
+  if (!(await confirmDialog.ask('Clear the saved API key? AI will fall back to appsettings.json\'s key (if any).', { confirmLabel: 'Clear' }))) return;
+  err.value = '';
+  try { await api.del('/api/admin-ui/ai-provider/api-key'); await loadAiProvider(); }
+  catch (e) { err.value = e.message; }
+}
+
 async function loadAiOverrides() {
   err.value = '';
   try { aiOverrides.value = await api.get('/api/admin-ui/ai-settings/overrides'); }
@@ -661,6 +690,39 @@ onMounted(async () => {
         <button @click="saveAiSettings" :disabled="aiSettingsSaving"
                 class="bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
           {{ aiSettingsSaving ? 'Saving…' : 'Save' }}
+        </button>
+      </div>
+
+      <!-- Which AI provider/credential is billed -->
+      <div class="border border-slate-200 dark:border-slate-800 rounded-xl p-4" v-if="aiProvider">
+        <h2 class="font-semibold text-sm mb-1">AI provider (platform default)</h2>
+        <p class="text-xs text-slate-400 dark:text-slate-500 mb-3">
+          Overrides appsettings.json's <code>Ai:*</code> at runtime. An organization can set
+          its own key/model in <RouterLink to="/org-admin" class="underline">Organization</RouterLink>
+          → AI settings, which takes priority over this for that organization only.
+        </p>
+        <div class="space-y-2 text-sm max-w-md">
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400 dark:text-slate-500">
+              API key {{ aiProvider.hasApiKey ? `(saved: ${aiProvider.apiKeyPreview})` : '(none saved — using appsettings.json, if any)' }}
+            </span>
+            <div class="flex gap-2">
+              <input v-model="aiProviderForm.apiKey" type="password" placeholder="Leave blank to keep the saved key"
+                     class="flex-1 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-1.5" />
+              <button v-if="aiProvider.hasApiKey" @click="clearAiProviderKey" class="text-xs text-rose-600 dark:text-rose-400 hover:underline shrink-0">Clear</button>
+            </div>
+          </label>
+          <input v-model="aiProviderForm.baseUrl" placeholder="Base URL (blank = appsettings.json default)"
+                 class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-1.5" />
+          <input v-model="aiProviderForm.model" placeholder="Model (blank = appsettings.json default)"
+                 class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-1.5" />
+          <input v-model="aiProviderForm.generateModel" placeholder="Generate-problem model (blank = same as above)"
+                 class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-1.5" />
+        </div>
+        <p v-if="aiProviderMsg" class="text-xs text-emerald-600 dark:text-emerald-400 mt-2">{{ aiProviderMsg }}</p>
+        <button @click="saveAiProvider" :disabled="aiProviderSaving"
+                class="mt-3 bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
+          {{ aiProviderSaving ? 'Saving…' : 'Save' }}
         </button>
       </div>
 

@@ -109,6 +109,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.AddSingleton<AdminAccess>();
 builder.Services.AddScoped<AuditLog>();
 builder.Services.AddSingleton<AiRuntimeSettings>();
+builder.Services.AddSingleton<AiProviderRuntime>();
 builder.Services.AddSingleton<IAuthorizationHandler, AdminAuthorizationHandler>();
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("Admin", p => p.Requirements.Add(new AdminRequirement()));
@@ -268,6 +269,17 @@ using (var scope = app.Services.CreateScope())
         .Select(x => new { OrganizationId = x.OrganizationId!.Value, x.Paused, x.PausedReason, x.DailyQuotaStudent, x.DailyQuotaTeacher })
         .ToListAsync();
     aiRuntime.SetOrgs(orgAiSettings.Select(x => (x.OrganizationId, x.Paused, x.PausedReason, x.DailyQuotaStudent, x.DailyQuotaTeacher)));
+
+    // Same warm-up for which AI provider/credential to bill (see AiProviderRuntime) —
+    // appsettings.json's Ai:* stays the ultimate fallback when neither layer has a row.
+    var providerRuntime = scope.ServiceProvider.GetRequiredService<AiProviderRuntime>();
+    var platformProvider = await db.AiProviderConfigs.FirstOrDefaultAsync(x => x.OrganizationId == null);
+    if (platformProvider is not null)
+        providerRuntime.SetPlatform(platformProvider.ApiKey, platformProvider.BaseUrl, platformProvider.Model, platformProvider.GenerateModel);
+    var orgProviders = await db.AiProviderConfigs.Where(x => x.OrganizationId != null)
+        .Select(x => new { OrganizationId = x.OrganizationId!.Value, x.ApiKey, x.BaseUrl, x.Model, x.GenerateModel })
+        .ToListAsync();
+    providerRuntime.SetOrgs(orgProviders.Select(x => (x.OrganizationId, x.ApiKey, x.BaseUrl, x.Model, x.GenerateModel)));
 }
 
 // Build the sandbox runner + probe capabilities before serving traffic.

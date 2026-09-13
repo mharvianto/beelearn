@@ -23,6 +23,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AiHintProgress> AiHintProgresses => Set<AiHintProgress>();
     public DbSet<AuditLogEntry> AuditLogEntries => Set<AuditLogEntry>();
     public DbSet<AiSettings> AiSettings => Set<AiSettings>();
+    public DbSet<AiProviderConfig> AiProviderConfigs => Set<AiProviderConfig>();
     public DbSet<AiUserSetting> AiUserSettings => Set<AiUserSetting>();
     public DbSet<LtiPlatform> LtiPlatforms => Set<LtiPlatform>();
     public DbSet<LtiUserLink> LtiUserLinks => Set<LtiUserLink>();
@@ -177,6 +178,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         // row is one organization's own override.
         b.Entity<AiSettings>().HasIndex(x => x.OrganizationId).IsUnique().HasFilter("OrganizationId IS NOT NULL");
         b.Entity<AiSettings>()
+            .HasOne(x => x.Organization).WithMany()
+            .HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
+
+        b.Entity<AiProviderConfig>().HasIndex(x => x.OrganizationId).IsUnique().HasFilter("OrganizationId IS NOT NULL");
+        b.Entity<AiProviderConfig>()
             .HasOne(x => x.Organization).WithMany()
             .HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
     }

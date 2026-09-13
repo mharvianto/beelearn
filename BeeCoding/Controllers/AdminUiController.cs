@@ -25,6 +25,7 @@ namespace BeeCoding.Controllers;
 [Route("api/admin-ui")]
 public class AdminUiController(
     AppDbContext db, AdminAccess admin, AuditLog audit, PasswordService pw, AiRuntimeSettings aiRuntime,
+    AiProviderRuntime aiProviderRuntime,
     NativeToolchain toolchain, IJudgeQueue judgeQueue, IOptions<JudgeOptions> judgeOpt, IOptions<RealtimeStoreOptions> realtimeOpt)
     : ApiControllerBase
 {
@@ -33,6 +34,7 @@ public class AdminUiController(
     private readonly AuditLog _audit = audit;
     private readonly PasswordService _pw = pw;
     private readonly AiRuntimeSettings _aiRuntime = aiRuntime;
+    private readonly AiProviderRuntime _aiProviderRuntime = aiProviderRuntime;
     private readonly NativeToolchain _toolchain = toolchain;
     private readonly IJudgeQueue _judgeQueue = judgeQueue;
     private readonly JudgeOptions _judgeOpt = judgeOpt.Value;
@@ -861,6 +863,50 @@ public class AdminUiController(
 
         return new AiGlobalSettingsDto(s.Paused, s.PausedReason, s.DailyQuotaStudent, s.DailyQuotaTeacher);
     }
+
+    // ---- AI provider/credential: platform default -----------------------------
+    [HttpGet("ai-provider")]
+    public async Task<ActionResult<AiProviderConfigDto>> GetAiProvider()
+    {
+        var row = await _db.AiProviderConfigs.FirstOrDefaultAsync(x => x.OrganizationId == null);
+        return new AiProviderConfigDto(!string.IsNullOrEmpty(row?.ApiKey), ApiKeyPreview(row?.ApiKey), row?.BaseUrl, row?.Model, row?.GenerateModel);
+    }
+
+    /// <summary>Overrides appsettings.json's Ai:* at runtime, no restart needed — leave
+    /// ApiKey blank to keep whatever key is already saved (it's never sent back to the
+    /// client); use DELETE ai-provider/api-key to actually clear it.</summary>
+    [HttpPut("ai-provider")]
+    public async Task<ActionResult<AiProviderConfigDto>> SetAiProvider(AiSetProviderConfigDto dto)
+    {
+        var row = await _db.AiProviderConfigs.FirstOrDefaultAsync(x => x.OrganizationId == null);
+        if (row is null) { row = new AiProviderConfig(); _db.AiProviderConfigs.Add(row); }
+        if (!string.IsNullOrWhiteSpace(dto.ApiKey)) row.ApiKey = dto.ApiKey.Trim();
+        row.BaseUrl = string.IsNullOrWhiteSpace(dto.BaseUrl) ? null : dto.BaseUrl.Trim();
+        row.Model = string.IsNullOrWhiteSpace(dto.Model) ? null : dto.Model.Trim();
+        row.GenerateModel = string.IsNullOrWhiteSpace(dto.GenerateModel) ? null : dto.GenerateModel.Trim();
+        row.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        _aiProviderRuntime.SetPlatform(row.ApiKey, row.BaseUrl, row.Model, row.GenerateModel);
+        await _audit.RecordAsync(UserId, ActorEmail, "ai-provider-set", "AiProviderConfig", row.Id, "platform default");
+        return new AiProviderConfigDto(!string.IsNullOrEmpty(row.ApiKey), ApiKeyPreview(row.ApiKey), row.BaseUrl, row.Model, row.GenerateModel);
+    }
+
+    [HttpDelete("ai-provider/api-key")]
+    public async Task<IActionResult> ClearAiProviderKey()
+    {
+        var row = await _db.AiProviderConfigs.FirstOrDefaultAsync(x => x.OrganizationId == null);
+        if (row is null || row.ApiKey is null) return NoContent();
+        row.ApiKey = null;
+        row.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        _aiProviderRuntime.SetPlatform(null, row.BaseUrl, row.Model, row.GenerateModel);
+        await _audit.RecordAsync(UserId, ActorEmail, "ai-provider-clear-key", "AiProviderConfig", row.Id, "platform default");
+        return NoContent();
+    }
+
+    private static string? ApiKeyPreview(string? key) =>
+        string.IsNullOrEmpty(key) ? null : $"••••{key[Math.Max(0, key.Length - 4)..]}";
 
     [HttpGet("ai-settings/overrides")]
     public async Task<ActionResult<IEnumerable<AiUserOverrideDto>>> GetAiOverrides()

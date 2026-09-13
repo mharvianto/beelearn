@@ -15,6 +15,10 @@ const members = ref(null);
 const boards = ref(null);
 const aiSettings = ref(null);
 const aiSaving = ref(false);
+const aiProvider = ref(null);
+const aiProviderForm = ref({ apiKey: '', baseUrl: '', model: '', generateModel: '' });
+const aiProviderSaving = ref(false);
+const aiProviderMsg = ref('');
 
 const newMemberEmail = ref('');
 const newMemberRole = ref('Member');
@@ -29,7 +33,7 @@ async function loadOrgs() {
 
 function selectOrg(id) {
   orgId.value = id;
-  summary.value = null; members.value = null; boards.value = null; aiSettings.value = null;
+  summary.value = null; members.value = null; boards.value = null; aiSettings.value = null; aiProvider.value = null;
   loadTab(tab.value);
 }
 
@@ -39,7 +43,10 @@ function loadTab(id) {
   loadSummary();
   if (id === 'members' && !members.value) loadMembers();
   else if (id === 'boards' && !boards.value) loadBoards();
-  else if (id === 'ai' && !aiSettings.value) loadAiSettings();
+  else if (id === 'ai') {
+    if (!aiSettings.value) loadAiSettings();
+    if (!aiProvider.value) loadAiProvider();
+  }
 }
 
 async function loadSummary() {
@@ -85,6 +92,29 @@ async function saveAiSettings() {
   try { aiSettings.value = await api.put(`/api/org-admin/${orgId.value}/ai-settings`, aiSettings.value); }
   catch (e) { err.value = e.message; }
   finally { aiSaving.value = false; }
+}
+
+async function loadAiProvider() {
+  err.value = '';
+  try {
+    aiProvider.value = await api.get(`/api/org-admin/${orgId.value}/ai-provider`);
+    aiProviderForm.value = { apiKey: '', baseUrl: aiProvider.value.baseUrl || '', model: aiProvider.value.model || '', generateModel: aiProvider.value.generateModel || '' };
+  } catch (e) { err.value = e.message; }
+}
+async function saveAiProvider() {
+  err.value = ''; aiProviderSaving.value = true; aiProviderMsg.value = '';
+  try {
+    aiProvider.value = await api.put(`/api/org-admin/${orgId.value}/ai-provider`, aiProviderForm.value);
+    aiProviderForm.value.apiKey = '';
+    aiProviderMsg.value = 'Saved.';
+  } catch (e) { err.value = e.message; }
+  finally { aiProviderSaving.value = false; }
+}
+async function clearAiProviderKey() {
+  if (!(await confirmDialog.ask('Clear this organization\'s saved API key? It will fall back to the platform default.', { confirmLabel: 'Clear' }))) return;
+  err.value = '';
+  try { await api.del(`/api/org-admin/${orgId.value}/ai-provider/api-key`); await loadAiProvider(); }
+  catch (e) { err.value = e.message; }
 }
 
 onMounted(loadOrgs);
@@ -206,6 +236,36 @@ onMounted(loadOrgs);
             {{ aiSaving ? 'Saving…' : 'Save' }}
           </button>
         </template>
+
+        <div class="border-t border-slate-200 dark:border-slate-800 pt-3 mt-4">
+          <h3 class="font-semibold text-sm mb-1">AI provider (bring your own key)</h3>
+          <p class="text-xs text-slate-400 dark:text-slate-500 mb-2">
+            Leave everything blank to keep using the platform default.
+          </p>
+          <template v-if="aiProvider">
+            <label class="flex flex-col gap-1 text-sm mb-2">
+              <span class="text-xs text-slate-400 dark:text-slate-500">
+                API key {{ aiProvider.hasApiKey ? `(saved: ${aiProvider.apiKeyPreview})` : '(none — using the platform default)' }}
+              </span>
+              <div class="flex gap-2">
+                <input v-model="aiProviderForm.apiKey" type="password" placeholder="Leave blank to keep the saved key"
+                       class="flex-1 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-1.5" />
+                <button v-if="aiProvider.hasApiKey" @click="clearAiProviderKey" class="text-xs text-rose-600 dark:text-rose-400 hover:underline shrink-0">Clear</button>
+              </div>
+            </label>
+            <input v-model="aiProviderForm.baseUrl" placeholder="Base URL (blank = platform default)"
+                   class="w-full mb-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-1.5 text-sm" />
+            <input v-model="aiProviderForm.model" placeholder="Model (blank = platform default)"
+                   class="w-full mb-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-1.5 text-sm" />
+            <input v-model="aiProviderForm.generateModel" placeholder="Generate-problem model (blank = same as above)"
+                   class="w-full mb-2 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-1.5 text-sm" />
+            <p v-if="aiProviderMsg" class="text-xs text-emerald-600 dark:text-emerald-400 mb-2">{{ aiProviderMsg }}</p>
+            <button @click="saveAiProvider" :disabled="aiProviderSaving"
+                    class="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-4 py-1.5 text-sm font-medium disabled:opacity-50">
+              {{ aiProviderSaving ? 'Saving…' : 'Save' }}
+            </button>
+          </template>
+        </div>
       </section>
     </template>
   </div>

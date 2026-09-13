@@ -21,12 +21,13 @@ namespace BeeCoding.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/org-admin")]
-public class OrgAdminController(AppDbContext db, OrgAccess access, AuditLog audit, AiRuntimeSettings aiRuntime) : ApiControllerBase
+public class OrgAdminController(AppDbContext db, OrgAccess access, AuditLog audit, AiRuntimeSettings aiRuntime, AiProviderRuntime aiProviderRuntime) : ApiControllerBase
 {
     private readonly AppDbContext _db = db;
     private readonly OrgAccess _access = access;
     private readonly AuditLog _audit = audit;
     private readonly AiRuntimeSettings _aiRuntime = aiRuntime;
+    private readonly AiProviderRuntime _aiProviderRuntime = aiProviderRuntime;
 
     /// <summary>Organizations the caller administers — for the org picker. Empty for a
     /// user who administers none (most users, including most super admins' everyday use).</summary>
@@ -162,4 +163,52 @@ public class OrgAdminController(AppDbContext db, OrgAccess access, AuditLog audi
             dto.Paused ? $"paused: {dto.PausedReason}" : $"quota {dto.DailyQuotaStudent}/{dto.DailyQuotaTeacher}");
         return new OrgAiSettingsDto(row.Paused, row.PausedReason, row.DailyQuotaStudent, row.DailyQuotaTeacher);
     }
+
+    // ---- AI provider/credential: this org's own override -----------------------
+    [HttpGet("{orgId:int}/ai-provider")]
+    public async Task<ActionResult<AiProviderConfigDto>> GetAiProvider(int orgId)
+    {
+        if (!await _access.CanManageAsync(UserId, ActorEmail, orgId)) return Forbid();
+        var row = await _db.AiProviderConfigs.FirstOrDefaultAsync(x => x.OrganizationId == orgId);
+        return new AiProviderConfigDto(!string.IsNullOrEmpty(row?.ApiKey), ApiKeyPreview(row?.ApiKey), row?.BaseUrl, row?.Model, row?.GenerateModel);
+    }
+
+    /// <summary>Bring-your-own AI credential for this organization — falls back to the
+    /// platform default (and from there to appsettings.json) field-by-field when left blank.
+    /// Leave ApiKey blank to keep whatever key is already saved; use DELETE
+    /// ai-provider/api-key to actually clear it.</summary>
+    [HttpPut("{orgId:int}/ai-provider")]
+    public async Task<ActionResult<AiProviderConfigDto>> SetAiProvider(int orgId, AiSetProviderConfigDto dto)
+    {
+        if (!await _access.CanManageAsync(UserId, ActorEmail, orgId)) return Forbid();
+        var row = await _db.AiProviderConfigs.FirstOrDefaultAsync(x => x.OrganizationId == orgId);
+        if (row is null) { row = new AiProviderConfig { OrganizationId = orgId }; _db.AiProviderConfigs.Add(row); }
+        if (!string.IsNullOrWhiteSpace(dto.ApiKey)) row.ApiKey = dto.ApiKey.Trim();
+        row.BaseUrl = string.IsNullOrWhiteSpace(dto.BaseUrl) ? null : dto.BaseUrl.Trim();
+        row.Model = string.IsNullOrWhiteSpace(dto.Model) ? null : dto.Model.Trim();
+        row.GenerateModel = string.IsNullOrWhiteSpace(dto.GenerateModel) ? null : dto.GenerateModel.Trim();
+        row.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        _aiProviderRuntime.SetOrg(orgId, row.ApiKey, row.BaseUrl, row.Model, row.GenerateModel);
+        await _audit.RecordAsync(UserId, ActorEmail, "org-ai-provider-set", "Organization", orgId, "AI provider override");
+        return new AiProviderConfigDto(!string.IsNullOrEmpty(row.ApiKey), ApiKeyPreview(row.ApiKey), row.BaseUrl, row.Model, row.GenerateModel);
+    }
+
+    [HttpDelete("{orgId:int}/ai-provider/api-key")]
+    public async Task<IActionResult> ClearAiProviderKey(int orgId)
+    {
+        if (!await _access.CanManageAsync(UserId, ActorEmail, orgId)) return Forbid();
+        var row = await _db.AiProviderConfigs.FirstOrDefaultAsync(x => x.OrganizationId == orgId);
+        if (row is null || row.ApiKey is null) return NoContent();
+        row.ApiKey = null;
+        row.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        _aiProviderRuntime.SetOrg(orgId, null, row.BaseUrl, row.Model, row.GenerateModel);
+        await _audit.RecordAsync(UserId, ActorEmail, "org-ai-provider-clear-key", "Organization", orgId, "AI provider override");
+        return NoContent();
+    }
+
+    private static string? ApiKeyPreview(string? key) =>
+        string.IsNullOrEmpty(key) ? null : $"••••{key[Math.Max(0, key.Length - 4)..]}";
 }
