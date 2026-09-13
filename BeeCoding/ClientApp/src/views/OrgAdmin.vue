@@ -2,15 +2,20 @@
 import { ref, onMounted } from 'vue';
 import { api } from '../lib/api';
 import { useConfirmDialog } from '../stores/confirmDialog';
+import MiniLineChart from '../components/MiniLineChart.vue';
+import TopicBarChart from '../components/TopicBarChart.vue';
 
 const confirmDialog = useConfirmDialog();
 
 const orgs = ref(null);
 const orgId = ref(null);
-const tab = ref('members');
+const tab = ref('dashboard');
 const err = ref('');
 
 const summary = ref(null);
+const dashboard = ref(null);
+const weeklyStats = ref(null);
+const topicStats = ref(null);
 const members = ref(null);
 const boards = ref(null);
 const aiSettings = ref(null);
@@ -33,7 +38,8 @@ async function loadOrgs() {
 
 function selectOrg(id) {
   orgId.value = id;
-  summary.value = null; members.value = null; boards.value = null; aiSettings.value = null; aiProvider.value = null;
+  summary.value = null; dashboard.value = null; weeklyStats.value = null; topicStats.value = null;
+  members.value = null; boards.value = null; aiSettings.value = null; aiProvider.value = null;
   loadTab(tab.value);
 }
 
@@ -41,7 +47,8 @@ function switchTab(id) { tab.value = id; loadTab(id); }
 function loadTab(id) {
   if (!orgId.value) return;
   loadSummary();
-  if (id === 'members' && !members.value) loadMembers();
+  if (id === 'dashboard' && !dashboard.value) loadDashboard();
+  else if (id === 'members' && !members.value) loadMembers();
   else if (id === 'boards' && !boards.value) loadBoards();
   else if (id === 'ai') {
     if (!aiSettings.value) loadAiSettings();
@@ -52,6 +59,25 @@ function loadTab(id) {
 async function loadSummary() {
   try { summary.value = await api.get(`/api/org-admin/${orgId.value}/summary`); } catch (e) { err.value = e.message; }
 }
+
+async function loadDashboard() {
+  err.value = '';
+  try {
+    const [d, weekly, topics] = await Promise.all([
+      api.get(`/api/org-admin/${orgId.value}/dashboard`),
+      api.get(`/api/org-admin/${orgId.value}/dashboard/weekly?weeks=12`),
+      api.get(`/api/org-admin/${orgId.value}/dashboard/topics?take=8`),
+    ]);
+    dashboard.value = d;
+    weeklyStats.value = weekly;
+    topicStats.value = topics;
+  } catch (e) { err.value = e.message; }
+}
+const shortDate = (s) => new Date(`${s}T00:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const fmt = (n) => (n ?? 0).toLocaleString();
+const activeUserPoints = () => (weeklyStats.value || []).map((w) => ({ label: shortDate(w.weekStart), value: w.activeUsers }));
+const submissionPoints = () => (weeklyStats.value || []).map((w) => ({ label: shortDate(w.weekStart), value: w.submissions }));
+const topicBarItems = () => (topicStats.value || []).map((t) => ({ label: t.tag, value: t.attempts, rate: t.acceptRate }));
 async function loadMembers() {
   err.value = '';
   try { members.value = await api.get(`/api/org-admin/${orgId.value}/members`); } catch (e) { err.value = e.message; }
@@ -143,12 +169,58 @@ onMounted(loadOrgs);
       </div>
 
       <div class="inline-flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden text-sm mb-4">
-        <button v-for="t in [['members', 'Members'], ['boards', 'Boards'], ['ai', 'AI settings']]" :key="t[0]"
+        <button v-for="t in [['dashboard', 'Dashboard'], ['members', 'Members'], ['boards', 'Boards'], ['ai', 'AI settings']]" :key="t[0]"
                 @click="switchTab(t[0])" class="px-3 py-1.5"
                 :class="tab === t[0] ? 'bg-slate-800 text-white dark:bg-slate-600' : 'text-slate-500 dark:text-slate-400'">
           {{ t[1] }}
         </button>
       </div>
+
+      <!-- Dashboard -->
+      <section v-show="tab === 'dashboard'" class="space-y-5">
+        <button @click="loadDashboard" class="text-xs text-slate-500 dark:text-slate-400">↻ refresh</button>
+
+        <div v-if="dashboard" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <button type="button" @click="switchTab('members')" class="text-left border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:border-slate-300 dark:hover:border-slate-700">
+            <div class="text-xs text-slate-400 dark:text-slate-500">Members</div>
+            <div class="text-2xl font-bold">{{ fmt(dashboard.totalMembers) }}</div>
+            <div class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+              {{ dashboard.teacherCount }} teacher · {{ dashboard.studentCount }} student · {{ dashboard.adminCount }} admin
+            </div>
+          </button>
+
+          <button type="button" @click="switchTab('boards')" class="text-left border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:border-slate-300 dark:hover:border-slate-700">
+            <div class="text-xs text-slate-400 dark:text-slate-500">Boards</div>
+            <div class="text-2xl font-bold">{{ fmt(dashboard.totalBoards) }}</div>
+            <div class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">{{ fmt(dashboard.totalProblems) }} problem(s)</div>
+          </button>
+
+          <div class="border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+            <div class="text-xs text-slate-400 dark:text-slate-500">Submissions</div>
+            <div class="text-2xl font-bold">{{ fmt(dashboard.totalSubmissions) }}</div>
+            <div class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+              {{ dashboard.totalSubmissions ? Math.round(100 * dashboard.acceptedSubmissions / dashboard.totalSubmissions) : 0 }}% accepted
+            </div>
+          </div>
+
+          <button type="button" @click="switchTab('ai')" class="text-left border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:border-slate-300 dark:hover:border-slate-700">
+            <div class="text-xs text-slate-400 dark:text-slate-500">AI calls today / this month</div>
+            <div class="text-2xl font-bold">{{ fmt(dashboard.aiToday.calls) }} / {{ fmt(dashboard.aiMonth.calls) }}</div>
+            <div class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">across this org's members</div>
+          </button>
+        </div>
+        <p v-else-if="!dashboard" class="text-slate-400 dark:text-slate-500 text-sm">Loading…</p>
+
+        <div v-if="weeklyStats?.length" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <MiniLineChart title="Active users / week" :points="activeUserPoints()" />
+          <MiniLineChart title="Submissions / week" :points="submissionPoints()" />
+        </div>
+
+        <div v-if="topicStats">
+          <h2 class="font-semibold text-sm mb-1.5">Top topics by attempts</h2>
+          <TopicBarChart :items="topicBarItems()" />
+        </div>
+      </section>
 
       <!-- Members -->
       <section v-show="tab === 'members'">

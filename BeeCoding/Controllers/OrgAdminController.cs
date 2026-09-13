@@ -38,6 +38,102 @@ public class OrgAdminController(AppDbContext db, OrgAccess access, AuditLog audi
         return orgs.Select(o => new OrganizationDto(o.Id, o.Name, o.Slug, o.CreatedAt)).ToList();
     }
 
+    // ---- Dashboard: at-a-glance overview, scoped to this org only ------------
+    [HttpGet("{orgId:int}/dashboard")]
+    public async Task<ActionResult<OrgDashboardDto>> Dashboard(int orgId)
+    {
+        if (!await _access.CanManageAsync(UserId, ActorEmail, orgId)) return Forbid();
+
+        var members = await _db.OrganizationMemberships.Where(m => m.OrganizationId == orgId)
+            .Select(m => new { m.UserId, m.Role, UserRole = m.User!.Role }).ToListAsync();
+        var totalMembers = members.Count;
+        var teacherCount = members.Count(m => m.UserRole == UserRole.Teacher);
+        var studentCount = members.Count(m => m.UserRole == UserRole.Student);
+        var adminCount = members.Count(m => m.Role == OrgRole.Admin);
+
+        var totalBoards = await _db.Boards.CountAsync(b => b.OrganizationId == orgId);
+        var totalProblems = await _db.Problems.CountAsync(p => p.Board!.OrganizationId == orgId);
+        var totalSubmissions = await _db.Submissions.CountAsync(s => s.Problem!.Board!.OrganizationId == orgId);
+        var acceptedSubmissions = await _db.Submissions.CountAsync(s =>
+            s.Problem!.Board!.OrganizationId == orgId && s.Verdict == Verdict.Accepted && s.Score >= 1.0);
+
+        // AI usage isn't tracked per-org directly (AiUsage is per-user) — sum it across this
+        // org's members as the closest proxy. A user in several orgs shows up under each.
+        var memberIds = members.Select(m => m.UserId).ToList();
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var monthStart = new DateOnly(today.Year, today.Month, 1);
+        var usage = await _db.AiUsages.Where(x => memberIds.Contains(x.UserId) && x.Day >= monthStart).ToListAsync();
+        static AdminAiUsageBucket Sum(IEnumerable<AiUsage> xs)
+        {
+            int c = 0; long p = 0, k = 0;
+            foreach (var x in xs) { c += x.Calls; p += x.PromptTokens; k += x.CompletionTokens; }
+            return new AdminAiUsageBucket(c, p, k, p + k);
+        }
+
+        return new OrgDashboardDto(totalMembers, teacherCount, studentCount, adminCount,
+            totalBoards, totalProblems, totalSubmissions, acceptedSubmissions,
+            Sum(usage.Where(x => x.Day == today)), Sum(usage));
+    }
+
+    /// <summary>Weekly active-users + submissions, scoped to this org's boards only (bank/
+    /// practice activity isn't org-scopable — a bank problem belongs to a user, not an org).</summary>
+    [HttpGet("{orgId:int}/dashboard/weekly")]
+    public async Task<ActionResult<List<AdminWeeklyStatDto>>> DashboardWeekly(int orgId, [FromQuery] int weeks = 12)
+    {
+        if (!await _access.CanManageAsync(UserId, ActorEmail, orgId)) return Forbid();
+        weeks = Math.Clamp(weeks, 1, 52);
+
+        var activity = await _db.Submissions.Where(s => s.Problem!.Board!.OrganizationId == orgId)
+            .Select(s => new { s.UserId, s.CreatedAt }).ToListAsync();
+
+        DateOnly WeekStart(DateTime dt)
+        {
+            var d = DateOnly.FromDateTime(dt);
+            return d.AddDays(-(((int)d.DayOfWeek + 6) % 7));
+        }
+
+        return activity.GroupBy(x => WeekStart(x.CreatedAt))
+            .OrderByDescending(g => g.Key).Take(weeks).OrderBy(g => g.Key)
+            .Select(g => new AdminWeeklyStatDto(g.Key.ToString("yyyy-MM-dd"), g.Select(x => x.UserId).Distinct().Count(), g.Count()))
+            .ToList();
+    }
+
+    /// <summary>Top tags by attempts, scoped to this org's board problems only.</summary>
+    [HttpGet("{orgId:int}/dashboard/topics")]
+    public async Task<ActionResult<List<AdminTopicStatDto>>> DashboardTopics(int orgId, [FromQuery] int take = 8)
+    {
+        if (!await _access.CanManageAsync(UserId, ActorEmail, orgId)) return Forbid();
+        take = Math.Clamp(take, 1, 50);
+
+        var problems = await _db.Problems.Where(p => p.Board!.OrganizationId == orgId)
+            .Select(p => new { p.Id, p.Tags }).ToListAsync();
+        var problemIds = problems.Select(p => p.Id).ToHashSet();
+        var subs = await _db.Submissions.Where(s => problemIds.Contains(s.ProblemId))
+            .Select(s => new { s.ProblemId, s.UserId, s.Verdict, s.Score }).ToListAsync();
+
+        var byTag = new Dictionary<string, (int Attempts, int Accepted, HashSet<int> Solvers)>();
+        static IEnumerable<string> TagsOf(string? t) =>
+            (t ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                     .Select(x => x.ToLowerInvariant()).Distinct();
+
+        foreach (var p in problems)
+        {
+            var pSubs = subs.Where(s => s.ProblemId == p.Id).ToList();
+            foreach (var tag in TagsOf(p.Tags))
+            {
+                var (attempts, accepted, solvers) = byTag.TryGetValue(tag, out var v) ? v : (0, 0, new HashSet<int>());
+                attempts += pSubs.Count;
+                foreach (var s in pSubs.Where(s => s.Verdict == Verdict.Accepted && s.Score >= 1.0)) { accepted++; solvers.Add(s.UserId); }
+                byTag[tag] = (attempts, accepted, solvers);
+            }
+        }
+
+        return byTag.OrderByDescending(kv => kv.Value.Attempts).Take(take)
+            .Select(kv => new AdminTopicStatDto(kv.Key, kv.Value.Attempts, kv.Value.Accepted,
+                kv.Value.Attempts > 0 ? kv.Value.Accepted / (double)kv.Value.Attempts : 0))
+            .ToList();
+    }
+
     [HttpGet("{orgId:int}/summary")]
     public async Task<ActionResult<OrgSummaryDto>> Summary(int orgId)
     {

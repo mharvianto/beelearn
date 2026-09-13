@@ -298,6 +298,10 @@ public record OrgAddMemberDto(string Email, string OrgRole);   // "Member" | "Ad
 public record OrgSetMemberRoleDto(string OrgRole);
 public record OrgBoardRow(int Id, string Slug, string Title, string OwnerEmail, int MemberCount, int ProblemCount, DateTime CreatedAt);
 public record OrgAiSettingsDto(bool Paused, string? PausedReason, int DailyQuotaStudent, int DailyQuotaTeacher);
+public record OrgDashboardDto(
+    int TotalMembers, int TeacherCount, int StudentCount, int AdminCount,
+    int TotalBoards, int TotalProblems, int TotalSubmissions, int AcceptedSubmissions,
+    AdminAiUsageBucket AiToday, AdminAiUsageBucket AiMonth);
 
 // ---- Ad-hoc run ----
 public record RunDto(string Language, string Code, string Stdin,
