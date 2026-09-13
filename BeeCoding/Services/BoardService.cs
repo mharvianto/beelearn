@@ -13,12 +13,14 @@ public class BoardService(AppDbContext db, VisibilityService vis)
     private string RandomCode(int len) =>
         string.Concat(Enumerable.Range(0, len).Select(_ => CodeAlphabet[Random.Shared.Next(CodeAlphabet.Length)]));
 
+    // IgnoreQueryFilters(): JoinCode/Slug are unique across every Board row, soft-deleted
+    // or not, so a freshly-generated value must be checked against all of them too.
     public async Task<string> GenerateJoinCodeAsync()
     {
         for (var attempt = 0; attempt < 20; attempt++)
         {
             var code = RandomCode(6);
-            if (!await _db.Boards.AnyAsync(b => b.JoinCode == code)) return code;
+            if (!await _db.Boards.IgnoreQueryFilters().AnyAsync(b => b.JoinCode == code)) return code;
         }
         throw new InvalidOperationException("could not allocate a unique join code");
     }
@@ -29,7 +31,7 @@ public class BoardService(AppDbContext db, VisibilityService vis)
         for (var attempt = 0; attempt < 20; attempt++)
         {
             var slug = RandomCode(12);
-            if (!await _db.Boards.AnyAsync(b => b.Slug == slug)) return slug;
+            if (!await _db.Boards.IgnoreQueryFilters().AnyAsync(b => b.Slug == slug)) return slug;
         }
         throw new InvalidOperationException("could not allocate a unique slug");
     }

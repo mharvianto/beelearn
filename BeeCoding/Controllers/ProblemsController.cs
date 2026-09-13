@@ -10,12 +10,15 @@ namespace BeeCoding.Controllers;
 
 [Authorize]
 [Route("api/boards/{slug}/problems")]
-public class ProblemsController(AppDbContext db, BoardService boards, VisibilityService vis, IBoardNotifier notifier) : ApiControllerBase
+public class ProblemsController(AppDbContext db, BoardService boards, VisibilityService vis,
+    IBoardNotifier notifier, AdminAccess admin, AuditLog audit) : ApiControllerBase
 {
     private readonly AppDbContext _db = db;
     private readonly BoardService _boards = boards;
     private readonly VisibilityService _vis = vis;
     private readonly IBoardNotifier _notifier = notifier;
+    private readonly AdminAccess _admin = admin;
+    private readonly AuditLog _audit = audit;
 
     [HttpGet]
     public async Task<ActionResult<object>> List(string slug)
@@ -93,18 +96,42 @@ public class ProblemsController(AppDbContext db, BoardService boards, Visibility
         return Mapping.ToOwnerDto(fresh);
     }
 
+    /// <summary>Soft-delete (owner or admin). Owner undo is time-boxed to
+    /// <see cref="SoftDelete.UndoWindow"/>; an admin can restore any time.</summary>
     [HttpDelete("{problemSlug}")]
     public async Task<IActionResult> Delete(string slug, string problemSlug)
     {
-        var (boardId, err) = await RequireOwnerAsync(slug);
-        if (err is not null) return err;
+        var board = await _db.Boards.FirstOrDefaultAsync(b => b.Slug == slug);
+        if (board is null) return NotFound();
+        if (board.OwnerId != UserId && !IsAdminUser(_admin)) return Forbid();
 
-        var p = await _db.Problems.FirstOrDefaultAsync(x => x.Slug == problemSlug && x.BoardId == boardId!.Value);
+        var p = await _db.Problems.FirstOrDefaultAsync(x => x.Slug == problemSlug && x.BoardId == board.Id);
         if (p is null) return NotFound();
 
-        _db.Problems.Remove(p);
+        p.DeletedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
-        await _notifier.ProblemChangedAsync(boardId!.Value);
+        await _audit.RecordAsync(UserId, ActorEmail, "delete", "Problem", p.Id, p.Title);
+        await _notifier.ProblemChangedAsync(board.Id);
+        return NoContent();
+    }
+
+    [HttpPost("{problemSlug}/restore")]
+    public async Task<IActionResult> Restore(string slug, string problemSlug)
+    {
+        var board = await _db.Boards.IgnoreQueryFilters().FirstOrDefaultAsync(b => b.Slug == slug);
+        if (board is null) return NotFound();
+        bool isAdmin = IsAdminUser(_admin);
+        if (board.OwnerId != UserId && !isAdmin) return Forbid();
+
+        var p = await _db.Problems.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(x => x.Slug == problemSlug && x.BoardId == board.Id);
+        if (p is null) return NotFound();
+        if (!isAdmin && !SoftDelete.CanRestore(p.DeletedAt)) return StatusCode(StatusCodes.Status410Gone, "The undo window has expired.");
+
+        p.DeletedAt = null;
+        await _db.SaveChangesAsync();
+        await _audit.RecordAsync(UserId, ActorEmail, "restore", "Problem", p.Id, p.Title);
+        await _notifier.ProblemChangedAsync(board.Id);
         return NoContent();
     }
 

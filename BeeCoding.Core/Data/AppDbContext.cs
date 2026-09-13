@@ -21,6 +21,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<SolveRecord> SolveRecords => Set<SolveRecord>();
     public DbSet<AiUsage> AiUsages => Set<AiUsage>();
     public DbSet<AiHintProgress> AiHintProgresses => Set<AiHintProgress>();
+    public DbSet<AuditLogEntry> AuditLogEntries => Set<AuditLogEntry>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -28,6 +29,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         b.Entity<Board>().HasIndex(x => x.JoinCode).IsUnique();
         b.Entity<Board>().HasIndex(x => x.Slug).IsUnique();
+        b.Entity<Board>().HasQueryFilter(x => x.DeletedAt == null);
         b.Entity<Board>()
             .HasOne(x => x.Owner).WithMany()
             .HasForeignKey(x => x.OwnerId).OnDelete(DeleteBehavior.Restrict);
@@ -41,6 +43,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
 
         b.Entity<Problem>().HasIndex(x => x.Slug).IsUnique();
+        b.Entity<Problem>().HasQueryFilter(x => x.DeletedAt == null);
         b.Entity<Problem>()
             .HasOne(x => x.Board).WithMany(x => x.Problems)
             .HasForeignKey(x => x.BoardId).OnDelete(DeleteBehavior.Cascade);
@@ -80,6 +83,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<BankProblem>().HasIndex(x => x.OwnerId);
         b.Entity<BankProblem>().HasIndex(x => x.IsPublic);
         b.Entity<BankProblem>().HasIndex(x => x.Slug).IsUnique();
+        b.Entity<BankProblem>().HasQueryFilter(x => x.DeletedAt == null);
         b.Entity<BankProblem>()
             .HasOne(x => x.Owner).WithMany()
             .HasForeignKey(x => x.OwnerId).OnDelete(DeleteBehavior.Cascade);
@@ -117,6 +121,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<AiHintProgress>()
             .HasOne(x => x.User).WithMany()
             .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+        // No FK to Users: an audit row must survive the actor being purged.
+        b.Entity<AuditLogEntry>().HasIndex(x => x.CreatedAt);
     }
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
@@ -135,15 +142,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     /// random slug (covers fresh inserts and any legacy row loaded for backfill).</summary>
     private void AssignSlugs()
     {
+        // IgnoreQueryFilters(): the unique index on Slug applies to every row in the table,
+        // soft-deleted or not, so uniqueness must be checked against all of them too.
         var pending = new HashSet<string>(StringComparer.Ordinal);
         foreach (var e in ChangeTracker.Entries<Problem>())
             if (e.State is EntityState.Added or EntityState.Modified or EntityState.Unchanged
                 && string.IsNullOrEmpty(e.Entity.Slug))
-                e.Entity.Slug = FreshSlug(pending, s => Problems.Any(p => p.Slug == s));
+                e.Entity.Slug = FreshSlug(pending, s => Problems.IgnoreQueryFilters().Any(p => p.Slug == s));
         foreach (var e in ChangeTracker.Entries<BankProblem>())
             if (e.State is EntityState.Added or EntityState.Modified or EntityState.Unchanged
                 && string.IsNullOrEmpty(e.Entity.Slug))
-                e.Entity.Slug = FreshSlug(pending, s => BankProblems.Any(p => p.Slug == s));
+                e.Entity.Slug = FreshSlug(pending, s => BankProblems.IgnoreQueryFilters().Any(p => p.Slug == s));
     }
 
     private static string FreshSlug(HashSet<string> pending, Func<string, bool> takenInDb)

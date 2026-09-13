@@ -2,7 +2,10 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '../lib/api';
+import { useUndoToast } from '../stores/undoToast';
 import ProblemEditor from '../components/ProblemEditor.vue';
+
+const undoToast = useUndoToast();
 
 // One page for all four routes:
 //   /bank/new  /bank/:problemSlug/edit
@@ -42,11 +45,15 @@ async function save(form) {
 }
 
 async function remove() {
-  if (!editSlug.value || !confirm('Delete this problem?')) return;
+  if (!editSlug.value) return;
+  const slug = editSlug.value;
+  const base = apiBase.value;
+  const title = problem.value?.title || 'Problem';
   error.value = '';
   try {
-    await api.del(`${apiBase.value}/${editSlug.value}`);
+    await api.del(`${base}/${slug}`);
     router.push(listPath.value);
+    undoToast.show(`"${title}" deleted.`, () => api.post(`${base}/${slug}/restore`));
   } catch (e) { error.value = e.message; }
 }
 

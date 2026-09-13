@@ -6,7 +6,9 @@ using BeeCoding.Services.Judge;
 using BeeCoding.Services.Lsp;
 using BeeCoding.Services.Realtime;
 using StackExchange.Redis;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.ResponseCompression;
@@ -68,8 +70,46 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         // API/hub calls should get 401/403, never an HTML redirect.
         o.Events.OnRedirectToLogin = ctx => { ctx.Response.StatusCode = StatusCodes.Status401Unauthorized; return Task.CompletedTask; };
         o.Events.OnRedirectToAccessDenied = ctx => { ctx.Response.StatusCode = StatusCodes.Status403Forbidden; return Task.CompletedTask; };
+        // A user soft-deleted (or removed) by an admin loses access on their very next
+        // request instead of riding out the rest of their 7-day cookie. An admin changing
+        // someone's Teacher/Student role also takes effect immediately — the claim in their
+        // existing cookie is refreshed in place, no re-login needed.
+        o.Events.OnValidatePrincipal = async ctx =>
+        {
+            var idClaim = ctx.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (idClaim is null || !int.TryParse(idClaim, out var uid)) return;
+
+            var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+            var row = await db.Users.Where(u => u.Id == uid)
+                .Select(u => new { u.DeletedAt, u.Role, u.DisplayName, u.Email }).FirstOrDefaultAsync();
+            if (row is null || row.DeletedAt is not null)
+            {
+                ctx.RejectPrincipal();
+                await ctx.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                return;
+            }
+
+            var currentRole = ctx.Principal!.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+            if (currentRole != row.Role.ToString())
+            {
+                var claims = new List<System.Security.Claims.Claim>
+                {
+                    new(System.Security.Claims.ClaimTypes.NameIdentifier, uid.ToString()),
+                    new(System.Security.Claims.ClaimTypes.Name, row.DisplayName),
+                    new(System.Security.Claims.ClaimTypes.Email, row.Email),
+                    new(System.Security.Claims.ClaimTypes.Role, row.Role.ToString()),
+                };
+                var identity = new System.Security.Claims.ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+                ctx.ReplacePrincipal(new System.Security.Claims.ClaimsPrincipal(identity));
+                ctx.ShouldRenew = true;
+            }
+        };
     });
-builder.Services.AddAuthorization();
+builder.Services.AddSingleton<AdminAccess>();
+builder.Services.AddScoped<AuditLog>();
+builder.Services.AddSingleton<IAuthorizationHandler, AdminAuthorizationHandler>();
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy("Admin", p => p.Requirements.Add(new AdminRequirement()));
 
 builder.Services.Configure<JudgeOptions>(builder.Configuration.GetSection("Judge"));
 builder.Services.Configure<LspOptions>(builder.Configuration.GetSection("Lsp"));
@@ -188,6 +228,11 @@ using (var scope = app.Services.CreateScope())
         db.Posts.Add(new BeeCoding.Models.Post { BoardId = boardId, ProblemId = k.ProblemId, UserId = k.UserId });
     }
     if (missing.Count > 0) await db.SaveChangesAsync();
+
+    // Warm the in-memory DB-admin cache (see AdminAccess) with anyone granted admin from
+    // the admin panel, so the "Admin" policy doesn't need a DB hit on every request.
+    var dbAdminEmails = await db.Users.Where(u => u.IsAdmin).Select(u => u.Email).ToListAsync();
+    scope.ServiceProvider.GetRequiredService<AdminAccess>().SetDbAdmins(dbAdminEmails);
 }
 
 // Build the sandbox runner + probe capabilities before serving traffic.

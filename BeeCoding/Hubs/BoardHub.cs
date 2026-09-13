@@ -76,7 +76,9 @@ public class BoardHub(AppDbContext db, IPresenceTracker presence, IDraftStore dr
         var m = await _db.BoardMemberships
             .FirstOrDefaultAsync(x => x.BoardId == boardId && x.UserId == UserId);
         if (m is null || m.Role is not (MembershipRole.Owner or MembershipRole.Teacher)) return;
-        if (!await _db.Boards.Where(b => b.Id == boardId).Select(b => b.LecturingMode).FirstAsync()) return;
+        var lecturingMode = await _db.Boards.Where(b => b.Id == boardId)
+            .Select(b => (bool?)b.LecturingMode).FirstOrDefaultAsync() ?? false;   // false if the board was deleted
+        if (!lecturingMode) return;
         if (code is { Length: > 200_000 }) code = code[..200_000];
         if (stdin is { Length: > 20_000 }) stdin = stdin[..20_000];
 
@@ -90,7 +92,8 @@ public class BoardHub(AppDbContext db, IPresenceTracker presence, IDraftStore dr
 
     private async Task<bool> DraftVisibleToPeersAsync(int boardId, int problemId, BoardMembership me)
     {
-        var examMode = await _db.Boards.Where(b => b.Id == boardId).Select(b => b.ExamMode).FirstAsync();
+        var examMode = await _db.Boards.Where(b => b.Id == boardId)
+            .Select(b => (bool?)b.ExamMode).FirstOrDefaultAsync() ?? true;   // treat a deleted board as locked down
         var hiddenByStudent = await _db.Posts
             .Where(p => p.ProblemId == problemId && p.UserId == UserId)
             .Select(p => (bool?)p.HiddenByStudent).FirstOrDefaultAsync() ?? false;
@@ -107,7 +110,7 @@ public class BoardHub(AppDbContext db, IPresenceTracker presence, IDraftStore dr
         if (me.Role is MembershipRole.Owner or MembershipRole.Teacher)
             return await _drafts.ForBoardAsync(boardId);
 
-        if (me.Board!.ExamMode) return Enumerable.Empty<Draft>();
+        if (me.Board is null || me.Board.ExamMode) return Enumerable.Empty<Draft>();   // deleted board -> locked down
         var hiddenUserIds = await _db.BoardMemberships
             .Where(m => m.BoardId == boardId && m.HiddenByTeacher)
             .Select(m => m.UserId).ToListAsync();

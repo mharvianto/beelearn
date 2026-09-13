@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../stores/auth';
 import { createBoardConnection } from '../lib/signalr';
 import { langLabel } from '../lib/templates';
+import { useUndoToast } from '../stores/undoToast';
 import ProgressGrid from '../components/ProgressGrid.vue';
 import PadletWall from '../components/PadletWall.vue';
 import BankPicker from '../components/BankPicker.vue';
@@ -14,6 +15,7 @@ import VerdictBadge from '../components/VerdictBadge.vue';
 const props = defineProps({ slug: { type: String, required: true } });
 const auth = useAuth();
 const router = useRouter();
+const undoToast = useUndoToast();
 
 const view = ref(localStorage.getItem('beecoding.boardView') || 'wall');
 function setView(v) { view.value = v; localStorage.setItem('beecoding.boardView', v); }
@@ -72,6 +74,16 @@ async function saveToBank(p) {
 }
 
 async function onBankAdded() { picking.value = false; await loadAll(); }
+
+async function deleteBoard() {
+  const title = board.value.title;
+  const slug = props.slug;
+  try {
+    await api.del(`/api/boards/${slug}`);
+    router.push('/boards');
+    undoToast.show(`"${title}" deleted.`, () => api.post(`/api/boards/${slug}/restore`));
+  } catch (e) { error.value = e.message; }
+}
 
 // Authoritative live-draft snapshot (server filters by visibility for students).
 async function refreshDrafts() {
@@ -156,6 +168,10 @@ onBeforeUnmount(async () => {
       <button @click="picking = true"
               class="px-3 py-1.5 rounded-lg text-sm font-medium border bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700">
         📚 From bank
+      </button>
+      <button v-if="board.isOwner" @click="deleteBoard"
+              class="ml-auto px-3 py-1.5 rounded-lg text-sm font-medium border border-rose-300 dark:border-rose-500/40 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10">
+        🗑️ Delete board
       </button>
     </div>
 

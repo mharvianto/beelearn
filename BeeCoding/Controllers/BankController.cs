@@ -14,15 +14,18 @@ namespace BeeCoding.Controllers;
 /// copy happens server-side). Adding to a board COPIES: the board's problem is independent.
 /// </summary>
 [ApiController]
-[Authorize(Roles = "Teacher")]
-public class BankController(AppDbContext db, IBoardNotifier notifier) : ApiControllerBase
+[Authorize]
+public class BankController(AppDbContext db, IBoardNotifier notifier, AdminAccess admin, AuditLog audit) : ApiControllerBase
 {
     private readonly AppDbContext _db = db;
     private readonly IBoardNotifier _notifier = notifier;
+    private readonly AdminAccess _admin = admin;
+    private readonly AuditLog _audit = audit;
 
     private IQueryable<BankProblem> Readable() =>
         _db.BankProblems.Where(b => b.OwnerId == UserId || b.IsPublic);
 
+    [Authorize(Roles = "Teacher")]
     [HttpGet("api/bank")]
     public async Task<ActionResult<IEnumerable<BankSummaryDto>>> List(
         [FromQuery] string? q, [FromQuery] string? tag, [FromQuery] string? scope,
@@ -61,6 +64,7 @@ public class BankController(AppDbContext db, IBoardNotifier notifier) : ApiContr
         return rows.Select(b => Mapping.ToSummary(b, UserId)).ToList();
     }
 
+    [Authorize(Roles = "Teacher")]
     [HttpGet("api/bank/{slug}")]
     public async Task<ActionResult<BankProblemDto>> Get(string slug)
     {
@@ -71,6 +75,7 @@ public class BankController(AppDbContext db, IBoardNotifier notifier) : ApiContr
         return b is null ? NotFound() : Mapping.ToDto(b, UserId);
     }
 
+    [Authorize(Roles = "Teacher")]
     [HttpPost("api/bank")]
     public async Task<ActionResult<BankProblemDto>> Create(UpsertBankProblemDto dto)
     {
@@ -83,6 +88,7 @@ public class BankController(AppDbContext db, IBoardNotifier notifier) : ApiContr
         return Mapping.ToDto(b, UserId);
     }
 
+    [Authorize(Roles = "Teacher")]
     [HttpPut("api/bank/{slug}")]
     public async Task<ActionResult<BankProblemDto>> Update(string slug, UpsertBankProblemDto dto)
     {
@@ -106,19 +112,38 @@ public class BankController(AppDbContext db, IBoardNotifier notifier) : ApiContr
         return Mapping.ToDto(fresh, UserId);
     }
 
+    /// <summary>Soft-delete (owner or admin — admin need not be a Teacher). Undo-able for
+    /// <see cref="SoftDelete.UndoWindow"/>.</summary>
     [HttpDelete("api/bank/{slug}")]
     public async Task<IActionResult> Delete(string slug)
     {
         var b = await _db.BankProblems.FirstOrDefaultAsync(x => x.Slug == slug);
         if (b is null) return NotFound();
-        if (b.OwnerId != UserId) return Forbid();
+        if (b.OwnerId != UserId && !IsAdminUser(_admin)) return Forbid();
 
-        _db.BankProblems.Remove(b);
+        b.DeletedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
+        await _audit.RecordAsync(UserId, ActorEmail, "delete", "BankProblem", b.Id, b.Title);
+        return NoContent();
+    }
+
+    [HttpPost("api/bank/{slug}/restore")]
+    public async Task<IActionResult> Restore(string slug)
+    {
+        var b = await _db.BankProblems.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.Slug == slug);
+        if (b is null) return NotFound();
+        bool isAdmin = IsAdminUser(_admin);
+        if (b.OwnerId != UserId && !isAdmin) return Forbid();
+        if (!isAdmin && !SoftDelete.CanRestore(b.DeletedAt)) return StatusCode(StatusCodes.Status410Gone, "The undo window has expired.");
+
+        b.DeletedAt = null;
+        await _db.SaveChangesAsync();
+        await _audit.RecordAsync(UserId, ActorEmail, "restore", "BankProblem", b.Id, b.Title);
         return NoContent();
     }
 
     /// <summary>Copy a bank problem (with all its tests) onto a board the caller owns.</summary>
+    [Authorize(Roles = "Teacher")]
     [HttpPost("api/bank/{id:int}/copy-to/{slug}")]
     public async Task<ActionResult<ProblemDto>> CopyToBoard(int id, string slug)
     {
@@ -166,6 +191,7 @@ public class BankController(AppDbContext db, IBoardNotifier notifier) : ApiContr
     }
 
     /// <summary>Save an existing board problem into the caller's bank.</summary>
+    [Authorize(Roles = "Teacher")]
     [HttpPost("api/boards/{slug}/problems/{problemId:int}/to-bank")]
     public async Task<ActionResult<BankProblemDto>> SaveToBank(string slug, int problemId)
     {

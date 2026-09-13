@@ -69,7 +69,8 @@ public class SubmissionsController(AppDbContext db, BoardService boards, Visibil
         if (problem is null) return NotFound();
 
         var board = await _db.Boards.Include(b => b.Members).ThenInclude(m => m.User)
-            .FirstAsync(b => b.Id == problem.BoardId);
+            .FirstOrDefaultAsync(b => b.Id == problem.BoardId);
+        if (board is null) return NotFound();
         var viewer = board.Members.FirstOrDefault(m => m.UserId == UserId);
         if (viewer is null) return Forbid();
         bool staff = _vis.IsStaff(viewer.Role);
@@ -106,8 +107,12 @@ public class SubmissionsController(AppDbContext db, BoardService boards, Visibil
         if (s.UserId == UserId)
             return Mapping.ToDto(s, UserId, canSeeCode: true, s.User!.DisplayName);
 
+        // The problem (or its board) may since have been soft-deleted — a peer/staff
+        // viewer has nothing to check visibility against then.
+        if (s.Problem is null) return NotFound();
         var board = await _db.Boards.Include(b => b.Members).ThenInclude(m => m.User)
-            .FirstAsync(b => b.Id == s.Problem!.BoardId);
+            .FirstOrDefaultAsync(b => b.Id == s.Problem.BoardId);
+        if (board is null) return NotFound();
         var viewer = board.Members.FirstOrDefault(m => m.UserId == UserId);
         if (viewer is null) return Forbid();
         bool staff = _vis.IsStaff(viewer.Role);
@@ -129,7 +134,8 @@ public class SubmissionsController(AppDbContext db, BoardService boards, Visibil
 
         s.HiddenByStudent = dto.HiddenByStudent;
         await _db.SaveChangesAsync();
-        await _notifier.ProgressChangedAsync(s.Problem!.BoardId, s.ProblemId, s.UserId);
+        if (s.Problem is not null)   // the problem may since have been soft-deleted
+            await _notifier.ProgressChangedAsync(s.Problem.BoardId, s.ProblemId, s.UserId);
         return Mapping.ToDto(s, UserId, canSeeCode: true, s.User!.DisplayName);
     }
 }

@@ -12,20 +12,17 @@ using Microsoft.EntityFrameworkCore;
 namespace BeeCoding.Controllers;
 
 [Route("api/auth")]
-public class AuthController(AppDbContext db, PasswordService pw, IConfiguration cfg, LoginThrottle throttle) : ApiControllerBase
+public class AuthController(AppDbContext db, PasswordService pw, IConfiguration cfg, AdminAccess admin, LoginThrottle throttle) : ApiControllerBase
 {
     private readonly AppDbContext _db = db;
     private readonly PasswordService _pw = pw;
     private readonly IConfiguration _cfg = cfg;
+    private readonly AdminAccess _admin = admin;
     private readonly LoginThrottle _throttle = throttle;
 
     private string ClientIp => HttpContext.Connection.RemoteIpAddress?.ToString() ?? "?";
 
-    /// <summary>Emails listed in Admin:Emails (comma-separated) get the admin panel.</summary>
-    private bool IsAdmin(string email) =>
-        (_cfg["Admin:Emails"] ?? "")
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Any(e => string.Equals(e, email, StringComparison.OrdinalIgnoreCase));
+    private bool IsAdmin(string email) => _admin.IsAdminEmail(email);
 
     [HttpPost("register")]
     [AllowAnonymous]
@@ -81,7 +78,7 @@ public class AuthController(AppDbContext db, PasswordService pw, IConfiguration 
             return StatusCode(StatusCodes.Status429TooManyRequests, "Too many failed attempts. Try again in a few minutes.");
 
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
-        if (user is null || !_pw.Verify(user, dto.Password ?? ""))
+        if (user is null || user.DeletedAt is not null || !_pw.Verify(user, dto.Password ?? ""))
         {
             _throttle.RecordFailure(ip, email);
             return Unauthorized("Wrong email or password.");
@@ -185,7 +182,9 @@ public class AuthController(AppDbContext db, PasswordService pw, IConfiguration 
             new(ClaimTypes.Email, user.Email),
             new(ClaimTypes.Role, user.Role.ToString()),
         };
-        if (IsAdmin(user.Email)) claims.Add(new(ClaimTypes.Role, "Admin"));
+        // Admin is NOT baked in here — it's evaluated fresh from Admin:Emails on every
+        // request (see AdminAccess / the "Admin" authorization policy) so granting or
+        // revoking it takes effect immediately, without a re-login.
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
         await HttpContext.SignInAsync(
             CookieAuthenticationDefaults.AuthenticationScheme,

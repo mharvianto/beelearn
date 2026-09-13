@@ -10,12 +10,15 @@ namespace BeeCoding.Controllers;
 
 [Authorize]
 [Route("api/boards")]
-public class BoardsController(AppDbContext db, BoardService boards, VisibilityService vis, IBoardNotifier notifier) : ApiControllerBase
+public class BoardsController(AppDbContext db, BoardService boards, VisibilityService vis,
+    IBoardNotifier notifier, AdminAccess admin, AuditLog audit) : ApiControllerBase
 {
     private readonly AppDbContext _db = db;
     private readonly BoardService _boards = boards;
     private readonly VisibilityService _vis = vis;
     private readonly IBoardNotifier _notifier = notifier;
+    private readonly AdminAccess _admin = admin;
+    private readonly AuditLog _audit = audit;
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<BoardDto>>> Mine()
@@ -26,7 +29,10 @@ public class BoardsController(AppDbContext db, BoardService boards, VisibilitySe
             .Include(m => m.Board!).ThenInclude(b => b.Problems)
             .ToListAsync();
 
+        // Board's query filter can leave a stale membership's Board navigation null
+        // (the board was deleted but the membership row wasn't cleaned up).
         return rows
+            .Where(m => m.Board is not null)
             .OrderByDescending(m => m.Board!.CreatedAt)
             .Select(m => ToDto(m.Board!, m.Role))
             .ToList();
@@ -116,6 +122,38 @@ public class BoardsController(AppDbContext db, BoardService boards, VisibilitySe
         if (boardId is null) return NotFound();
         var progress = await _boards.BuildProgressAsync(boardId.Value, UserId);
         return progress is null ? Forbid() : progress;
+    }
+
+    /// <summary>Soft-delete (owner or admin). Owner undo is time-boxed to
+    /// <see cref="SoftDelete.UndoWindow"/>; an admin can restore any time (see the admin
+    /// trash view).</summary>
+    [HttpDelete("{slug}")]
+    public async Task<IActionResult> Delete(string slug)
+    {
+        var board = await _db.Boards.FirstOrDefaultAsync(b => b.Slug == slug);
+        if (board is null) return NotFound();
+        bool isAdmin = IsAdminUser(_admin);
+        if (board.OwnerId != UserId && !isAdmin) return Forbid();
+
+        board.DeletedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        await _audit.RecordAsync(UserId, ActorEmail, "delete", "Board", board.Id, board.Title);
+        return NoContent();
+    }
+
+    [HttpPost("{slug}/restore")]
+    public async Task<IActionResult> Restore(string slug)
+    {
+        var board = await _db.Boards.IgnoreQueryFilters().FirstOrDefaultAsync(b => b.Slug == slug);
+        if (board is null) return NotFound();
+        bool isAdmin = IsAdminUser(_admin);
+        if (board.OwnerId != UserId && !isAdmin) return Forbid();
+        if (!isAdmin && !SoftDelete.CanRestore(board.DeletedAt)) return StatusCode(StatusCodes.Status410Gone, "The undo window has expired.");
+
+        board.DeletedAt = null;
+        await _db.SaveChangesAsync();
+        await _audit.RecordAsync(UserId, ActorEmail, "restore", "Board", board.Id, board.Title);
+        return NoContent();
     }
 
     private BoardDto ToDto(Board b, MembershipRole role) => new(

@@ -41,10 +41,21 @@ public class User
 
     public UserRole Role { get; set; }
 
+    /// <summary>Admin granted from the admin panel, as opposed to the <c>Admin:Emails</c>
+    /// config list (which always wins and can't be revoked from the UI).</summary>
+    public bool IsAdmin { get; set; }
+
     /// <summary>Total experience points earned by solving problems (see <see cref="SolveRecord"/>).</summary>
     public int Xp { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Soft-delete marker (admin-only action). Not a global query filter — the
+    /// row keeps showing up via existing relations (submissions, posts, ...) so past
+    /// activity still renders correctly; enforced explicitly at login and active-session
+    /// checks, and in the admin user list. See <c>SoftDelete.CanRestore</c> for the
+    /// 30-second undo window.</summary>
+    public DateTime? DeletedAt { get; set; }
 
     public List<BoardMembership> Memberships { get; set; } = new();
 }
@@ -79,6 +90,10 @@ public class Board
     public bool ProtectContent { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Soft-delete marker — excluded from all normal queries via a global query
+    /// filter (see AppDbContext). Restorable within <c>SoftDelete.UndoWindow</c>.</summary>
+    public DateTime? DeletedAt { get; set; }
 
     public List<BoardMembership> Members { get; set; } = new();
     public List<Problem> Problems { get; set; } = new();
@@ -153,6 +168,10 @@ public class Problem : IHasSlug
     /// <summary>Provenance when this problem was copied in from the bank.</summary>
     public int? SourceBankProblemId { get; set; }
 
+    /// <summary>Soft-delete marker — excluded from all normal queries via a global query
+    /// filter (see AppDbContext). Restorable within <c>SoftDelete.UndoWindow</c>.</summary>
+    public DateTime? DeletedAt { get; set; }
+
     public List<TestCase> TestCases { get; set; } = new();
 }
 
@@ -208,6 +227,10 @@ public class BankProblem : IHasSlug
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Soft-delete marker — excluded from all normal queries via a global query
+    /// filter (see AppDbContext). Restorable within <c>SoftDelete.UndoWindow</c>.</summary>
+    public DateTime? DeletedAt { get; set; }
 
     public List<BankTestCase> TestCases { get; set; } = new();
 }
@@ -427,4 +450,36 @@ public class AiHintProgress
     public string? LastCodeHash { get; set; }
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Trail of moderation actions (soft-delete, restore, permanent purge) for the admin panel.
+/// Actor/target are denormalized (email, label) so the row still reads sensibly after the
+/// actor or target account is itself deleted or purged.
+/// </summary>
+public class AuditLogEntry
+{
+    public int Id { get; set; }
+
+    public int ActorUserId { get; set; }
+
+    [MaxLength(256)]
+    public string ActorEmail { get; set; } = "";
+
+    /// <summary>"delete" | "restore" | "purge".</summary>
+    [MaxLength(20)]
+    public string Action { get; set; } = "";
+
+    /// <summary>"User" | "Board" | "Problem" | "BankProblem".</summary>
+    [MaxLength(20)]
+    public string TargetType { get; set; } = "";
+
+    public int TargetId { get; set; }
+
+    /// <summary>Title/email/display name at the time of the action, for a readable log
+    /// even once the target row is purged.</summary>
+    [MaxLength(300)]
+    public string TargetLabel { get; set; } = "";
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

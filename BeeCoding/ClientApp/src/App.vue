@@ -5,6 +5,7 @@ import { useAuth } from './stores/auth';
 import { useProgress } from './stores/progress';
 import ThemeToggle from './components/ThemeToggle.vue';
 import AppFooter from './components/AppFooter.vue';
+import UndoToast from './components/UndoToast.vue';
 import { celebrate } from './lib/confetti';
 
 const auth = useAuth();
@@ -13,9 +14,11 @@ const router = useRouter();
 const route = useRoute();
 
 // The footer flows at the end of the page content (not pinned). Skip it on the
-// full-height editor views where there is no natural page bottom.
+// full-height editor views where there is no natural page bottom. Problem/practice
+// ids are slugs now, not numbers — match any slug but exclude the "new" segment,
+// which is the ordinary (footer-having) create-problem form.
 const showFooter = computed(() =>
-  !/\/problems\/\d+/.test(route.path) && !/^\/practice\/\d+/.test(route.path)
+  !/^\/boards\/[^/]+\/problems\/(?!new$)[^/]+$/.test(route.path) && !/^\/practice\/[^/]+$/.test(route.path)
   && !/^\/boards\/[^/]+\/live$/.test(route.path) && route.path !== '/playground');
 
 // keep the header XP in sync with who's logged in
@@ -112,5 +115,6 @@ onBeforeUnmount(() => {
       </div>
       <AppFooter v-if="showFooter" class="shrink-0" />
     </main>
+    <UndoToast />
   </div>
 </template>
