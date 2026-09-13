@@ -5,10 +5,12 @@ import { api } from '../lib/api';
 import { withBase } from '../lib/base';
 import { useAuth } from '../stores/auth';
 import { useUndoToast } from '../stores/undoToast';
+import { useConfirmDialog } from '../stores/confirmDialog';
 
 const auth = useAuth();
 const router = useRouter();
 const undoToast = useUndoToast();
+const confirmDialog = useConfirmDialog();
 const tabDefs = [
   ['ai', 'AI'], ['users', 'Users'], ['boards', 'Boards'], ['problems', 'Problems'],
   ['review', 'AI review'], ['reports', 'Reports'], ['trash', 'Trash'], ['audit', 'Audit log'],
@@ -161,7 +163,7 @@ const userDeleteResultMsg = ref('');
 async function deleteSelectedUsers() {
   const ids = [...selectedUsers.value];
   if (!ids.length) return;
-  if (!confirm(`Delete ${ids.length} user(s)? They'll move to Trash and can be restored there.`)) return;
+  if (!(await confirmDialog.ask(`Delete ${ids.length} user(s)? They'll move to Trash and can be restored there.`, { confirmLabel: 'Delete' }))) return;
   err.value = ''; userDeleteResultMsg.value = '';
   try {
     const result = await api.post('/api/admin-ui/users/bulk-delete', { ids });
@@ -251,7 +253,7 @@ const archiveResultMsg = ref('');
 async function archiveSelectedBoards() {
   const slugs = [...selectedBoards.value];
   if (!slugs.length) return;
-  if (!confirm(`Archive ${slugs.length} board(s)? They'll move to Trash and can be restored there (no 30s limit for admins).`)) return;
+  if (!(await confirmDialog.ask(`Archive ${slugs.length} board(s)? They'll move to Trash and can be restored there (no 30s limit for admins).`, { confirmLabel: 'Archive' }))) return;
   err.value = ''; archiveResultMsg.value = '';
   try {
     const result = await api.post('/api/admin-ui/boards/archive', { slugs });
@@ -279,7 +281,7 @@ async function restoreTrash(kind, row) {
   } catch (e) { err.value = e.message; }
 }
 async function purge(kind, row, label) {
-  if (!confirm(`Permanently delete "${label}"? This cannot be undone.`)) return;
+  if (!(await confirmDialog.ask(`Permanently delete "${label}"? This cannot be undone.`, { confirmLabel: 'Delete forever' }))) return;
   err.value = '';
   try {
     await api.del(`/api/admin-ui/trash/${kind}/${kind === 'users' ? row.id : row.slug}`);

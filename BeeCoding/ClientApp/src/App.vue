@@ -6,6 +6,7 @@ import { useProgress } from './stores/progress';
 import ThemeToggle from './components/ThemeToggle.vue';
 import AppFooter from './components/AppFooter.vue';
 import UndoToast from './components/UndoToast.vue';
+import ConfirmDialog from './components/ConfirmDialog.vue';
 import { celebrate } from './lib/confetti';
 
 const auth = useAuth();
@@ -116,5 +117,6 @@ onBeforeUnmount(() => {
       <AppFooter v-if="showFooter" class="shrink-0" />
     </main>
     <UndoToast />
+    <ConfirmDialog />
   </div>
 </template>
