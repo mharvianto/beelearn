@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '../lib/api';
 import { withBase } from '../lib/base';
@@ -9,8 +9,8 @@ import { useConfirmDialog } from '../stores/confirmDialog';
 
 const auth = useAuth();
 const router = useRouter();
-const undoToast = useUndoToast();
 const confirmDialog = useConfirmDialog();
+const undoToast = useUndoToast();
 const tabDefs = [
   ['ai', 'AI'], ['users', 'Users'], ['boards', 'Boards'], ['problems', 'Problems'],
   ['review', 'AI review'], ['reports', 'Reports'], ['trash', 'Trash'], ['audit', 'Audit log'],
@@ -264,12 +264,44 @@ async function archiveSelectedBoards() {
 }
 
 // ---- trash: browse + restore/purge soft-deleted rows (no time limit for admins) ----
-const trash = ref(null);
-async function loadTrash() {
+// One category at a time, each independently paginated/selectable — the underlying tables
+// (esp. deleted problems) can grow large enough that loading everything at once doesn't scale.
+const TRASH_KINDS = [
+  ['users', 'Users', (r) => r.displayName],
+  ['boards', 'Boards', (r) => r.title],
+  ['problems', 'Problems', (r) => `${r.title} (${r.boardTitle})`],
+  ['bank', 'Bank problems', (r) => r.title],
+];
+const trash = reactive(Object.fromEntries(TRASH_KINDS.map(([kind]) => [kind, {
+  rows: null, total: 0, page: 1, pageSize: 25, selected: new Set(), msg: '',
+}])));
+const trashKey = (kind, row) => (kind === 'users' ? String(row.id) : row.slug);
+
+async function loadTrashKind(kind) {
   err.value = '';
-  try { trash.value = await api.get('/api/admin-ui/trash'); }
-  catch (e) { err.value = e.message; }
+  const st = trash[kind];
+  try {
+    const p = new URLSearchParams({ page: String(st.page), pageSize: String(st.pageSize) });
+    const result = await api.get(`/api/admin-ui/trash/${kind}?${p}`);
+    st.rows = result.rows;
+    st.total = result.total;
+    st.selected = new Set();
+  } catch (e) { err.value = e.message; }
 }
+function loadTrash() { return Promise.all(TRASH_KINDS.map(([kind]) => loadTrashKind(kind))); }
+
+function toggleTrashSelect(kind, row) {
+  const id = trashKey(kind, row);
+  const next = new Set(trash[kind].selected);
+  next.has(id) ? next.delete(id) : next.add(id);
+  trash[kind].selected = next;
+}
+function selectAllTrash(kind, checked) {
+  trash[kind].selected = checked ? new Set((trash[kind].rows || []).map((r) => trashKey(kind, r))) : new Set();
+}
+function trashPrevPage(kind) { const st = trash[kind]; if (st.page > 1) { st.page--; loadTrashKind(kind); } }
+function trashNextPage(kind) { const st = trash[kind]; if (st.page * st.pageSize < st.total) { st.page++; loadTrashKind(kind); } }
+
 async function restoreTrash(kind, row) {
   err.value = '';
   try {
@@ -277,7 +309,7 @@ async function restoreTrash(kind, row) {
     else if (kind === 'boards') await api.post(`/api/boards/${row.slug}/restore`);
     else if (kind === 'problems') await api.post(`/api/boards/${row.boardSlug}/problems/${row.slug}/restore`);
     else if (kind === 'bank') await api.post(`/api/bank/${row.slug}/restore`);
-    await loadTrash();
+    await loadTrashKind(kind);
   } catch (e) { err.value = e.message; }
 }
 async function purge(kind, row, label) {
@@ -285,7 +317,29 @@ async function purge(kind, row, label) {
   err.value = '';
   try {
     await api.del(`/api/admin-ui/trash/${kind}/${kind === 'users' ? row.id : row.slug}`);
-    await loadTrash();
+    await loadTrashKind(kind);
+  } catch (e) { err.value = e.message; }
+}
+
+async function restoreSelectedTrash(kind) {
+  const ids = [...trash[kind].selected];
+  if (!ids.length) return;
+  err.value = ''; trash[kind].msg = '';
+  try {
+    const result = await api.post(`/api/admin-ui/trash/${kind}/restore`, { ids });
+    await loadTrashKind(kind);
+    trash[kind].msg = `Restored ${result.count}.` + (result.errors.length ? ` Errors: ${result.errors.join(', ')}` : '');
+  } catch (e) { err.value = e.message; }
+}
+async function purgeSelectedTrash(kind) {
+  const ids = [...trash[kind].selected];
+  if (!ids.length) return;
+  if (!(await confirmDialog.ask(`Permanently delete ${ids.length} item(s)? This cannot be undone.`, { confirmLabel: 'Delete forever' }))) return;
+  err.value = ''; trash[kind].msg = '';
+  try {
+    const result = await api.post(`/api/admin-ui/trash/${kind}/purge`, { ids });
+    await loadTrashKind(kind);
+    trash[kind].msg = `Purged ${result.count}.` + (result.errors.length ? ` Errors: ${result.errors.join(', ')}` : '');
   } catch (e) { err.value = e.message; }
 }
 
@@ -804,31 +858,55 @@ onMounted(async () => {
     <section v-show="tab === 'trash'" class="space-y-5">
       <button @click="loadTrash" class="text-xs text-slate-500 dark:text-slate-400">↻ refresh</button>
 
-      <div v-for="group in [
-        ['Users', 'users', trash?.users, (r) => r.displayName],
-        ['Boards', 'boards', trash?.boards, (r) => r.title],
-        ['Problems', 'problems', trash?.problems, (r) => `${r.title} (${r.boardTitle})`],
-        ['Bank problems', 'bank', trash?.bankProblems, (r) => r.title],
-      ]" :key="group[1]">
-        <h2 class="font-semibold text-sm mb-1.5">{{ group[0] }} · {{ group[2]?.length ?? 0 }}</h2>
+      <div v-for="[kind, label, labelFn] in TRASH_KINDS" :key="kind">
+        <div class="flex items-center gap-3 mb-1.5 flex-wrap">
+          <h2 class="font-semibold text-sm">{{ label }} · {{ trash[kind].total }}</h2>
+          <div v-if="trash[kind].selected.size" class="flex items-center gap-2 text-xs">
+            <span>{{ trash[kind].selected.size }} selected</span>
+            <button @click="restoreSelectedTrash(kind)" class="text-emerald-600 dark:text-emerald-400 hover:underline">Restore selected</button>
+            <button @click="purgeSelectedTrash(kind)" class="text-rose-600 dark:text-rose-400 hover:underline">Purge selected</button>
+          </div>
+        </div>
+        <p v-if="trash[kind].msg" class="text-[11px] text-emerald-600 dark:text-emerald-400 mb-1">{{ trash[kind].msg }}</p>
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
+            <thead>
+              <tr class="text-xs text-left text-slate-400 dark:text-slate-500 border-b border-slate-200 dark:border-slate-800">
+                <th class="font-normal py-1 pr-3 w-6">
+                  <input type="checkbox" :checked="!!trash[kind].rows?.length && trash[kind].selected.size === trash[kind].rows.length"
+                         @change="selectAllTrash(kind, $event.target.checked)" />
+                </th>
+                <th class="font-normal py-1 pr-3" colspan="4"></th>
+              </tr>
+            </thead>
             <tbody class="[&_td]:py-1.5 [&_td]:pr-3">
-              <tr v-for="row in group[2]" :key="row.slug ?? row.id" class="border-b border-slate-100 dark:border-slate-800/60">
-                <td class="font-medium">{{ group[3](row) }}</td>
+              <tr v-for="row in trash[kind].rows" :key="trashKey(kind, row)" class="border-b border-slate-100 dark:border-slate-800/60">
+                <td><input type="checkbox" :checked="trash[kind].selected.has(trashKey(kind, row))" @change="toggleTrashSelect(kind, row)" /></td>
+                <td class="font-medium">{{ labelFn(row) }}</td>
                 <td class="text-[11px] text-slate-400">{{ row.email || row.ownerEmail || '' }}</td>
                 <td class="text-[11px] text-slate-400">deleted {{ when(row.deletedAt) }}</td>
                 <td class="text-right">
-                  <button @click="restoreTrash(group[1], row)" class="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline mr-3">Restore</button>
-                  <button @click="purge(group[1], row, group[3](row))" class="text-[11px] text-rose-600 dark:text-rose-400 hover:underline">Purge</button>
+                  <button @click="restoreTrash(kind, row)" class="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline mr-3">Restore</button>
+                  <button @click="purge(kind, row, labelFn(row))" class="text-[11px] text-rose-600 dark:text-rose-400 hover:underline">Purge</button>
                 </td>
               </tr>
-              <tr v-if="group[2] && !group[2].length"><td class="text-slate-400 dark:text-slate-500 py-1.5 text-xs">Empty.</td></tr>
+              <tr v-if="trash[kind].rows && !trash[kind].rows.length"><td colspan="5" class="text-slate-400 dark:text-slate-500 py-1.5 text-xs">Empty.</td></tr>
             </tbody>
           </table>
         </div>
+        <div v-if="trash[kind].total > trash[kind].pageSize" class="flex items-center gap-3 mt-1.5 text-xs">
+          <span class="text-slate-400 dark:text-slate-500">
+            {{ (trash[kind].page - 1) * trash[kind].pageSize + 1 }}–{{ Math.min(trash[kind].page * trash[kind].pageSize, trash[kind].total) }} of {{ trash[kind].total }}
+          </span>
+          <div class="ml-auto flex gap-2">
+            <button @click="trashPrevPage(kind)" :disabled="trash[kind].page === 1"
+                    class="px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 disabled:opacity-40">Prev</button>
+            <button @click="trashNextPage(kind)" :disabled="trash[kind].page * trash[kind].pageSize >= trash[kind].total"
+                    class="px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 disabled:opacity-40">Next</button>
+          </div>
+        </div>
       </div>
-      <p v-if="!trash" class="text-slate-400 dark:text-slate-500 text-sm">Loading…</p>
+      <p v-if="TRASH_KINDS.every(([kind]) => trash[kind].rows === null)" class="text-slate-400 dark:text-slate-500 text-sm">Loading…</p>
     </section>
 
     <!-- Audit log -->
