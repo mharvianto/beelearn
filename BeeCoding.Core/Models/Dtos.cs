@@ -115,9 +115,11 @@ public record AdminTrashUserRow(int Id, string Email, string DisplayName, DateTi
 public record AdminTrashBoardRow(string Slug, string Title, string OwnerEmail, DateTime DeletedAt);
 public record AdminTrashProblemRow(string Slug, string Title, string BoardSlug, string BoardTitle, DateTime DeletedAt);
 public record AdminTrashBankRow(string Slug, string Title, string OwnerEmail, DateTime DeletedAt);
-public record AdminTrashPageDto<T>(List<T> Rows, int Total, int Page, int PageSize);
 public record AdminTrashBulkDto(List<string> Ids);
 public record AdminTrashBulkResult(int Count, List<string> Errors);
+
+/// <summary>Generic paged-list envelope — shared by trash and the audit log.</summary>
+public record AdminPageDto<T>(List<T> Rows, int Total, int Page, int PageSize);
 
 // ---- Admin: audit log ----
 public record AdminAuditLogRow(int Id, DateTime CreatedAt, string ActorEmail, string Action,

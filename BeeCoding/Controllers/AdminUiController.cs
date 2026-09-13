@@ -383,7 +383,7 @@ public class AdminUiController(
                 var total = await query.CountAsync();
                 var rows = await query.OrderByDescending(u => u.DeletedAt).Skip((page - 1) * pageSize).Take(pageSize)
                     .Select(u => new AdminTrashUserRow(u.Id, u.Email, u.DisplayName, u.DeletedAt!.Value)).ToListAsync();
-                return Ok(new AdminTrashPageDto<AdminTrashUserRow>(rows, total, page, pageSize));
+                return Ok(new AdminPageDto<AdminTrashUserRow>(rows, total, page, pageSize));
             }
             case "boards":
             {
@@ -394,7 +394,7 @@ public class AdminUiController(
                     .Skip((page - 1) * pageSize).Take(pageSize)
                     .Select(b => new AdminTrashBoardRow(b.Slug, b.Title, b.Owner != null ? b.Owner.Email : "?", b.DeletedAt!.Value))
                     .ToListAsync();
-                return Ok(new AdminTrashPageDto<AdminTrashBoardRow>(rows, total, page, pageSize));
+                return Ok(new AdminPageDto<AdminTrashBoardRow>(rows, total, page, pageSize));
             }
             case "problems":
             {
@@ -411,7 +411,7 @@ public class AdminUiController(
                     boardById.TryGetValue(p.BoardId, out var b);
                     return new AdminTrashProblemRow(p.Slug, p.Title, b?.Slug ?? "", b?.Title ?? "(deleted board)", p.DeletedAt!.Value);
                 }).ToList();
-                return Ok(new AdminTrashPageDto<AdminTrashProblemRow>(rows, total, page, pageSize));
+                return Ok(new AdminPageDto<AdminTrashProblemRow>(rows, total, page, pageSize));
             }
             case "bank":
             {
@@ -422,7 +422,7 @@ public class AdminUiController(
                     .Skip((page - 1) * pageSize).Take(pageSize)
                     .Select(b => new AdminTrashBankRow(b.Slug, b.Title, b.Owner != null ? b.Owner.Email : "?", b.DeletedAt!.Value))
                     .ToListAsync();
-                return Ok(new AdminTrashPageDto<AdminTrashBankRow>(rows, total, page, pageSize));
+                return Ok(new AdminPageDto<AdminTrashBankRow>(rows, total, page, pageSize));
             }
             default:
                 return BadRequest("kind must be users, boards, problems, or bank.");
@@ -600,15 +600,27 @@ public class AdminUiController(
 
     // ---- audit log ------------------------------------------------------------
     [HttpGet("audit-log")]
-    public async Task<ActionResult<IEnumerable<AdminAuditLogRow>>> AuditLogFeed([FromQuery] int take = 200)
+    public async Task<ActionResult<AdminPageDto<AdminAuditLogRow>>> AuditLogFeed(
+        [FromQuery] string? q, [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
     {
-        take = Math.Clamp(take, 1, 1000);
-        var rows = await _db.AuditLogEntries
-            .OrderByDescending(x => x.CreatedAt)
-            .Take(take)
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 500);
+
+        var query = _db.AuditLogEntries.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var n = q.Trim();
+            query = query.Where(x => EF.Functions.Like(x.ActorEmail, $"%{n}%") || EF.Functions.Like(x.TargetLabel, $"%{n}%")
+                || EF.Functions.Like(x.Action, $"%{n}%") || EF.Functions.Like(x.TargetType, $"%{n}%"));
+        }
+
+        var total = await query.CountAsync();
+        var rows = await query.OrderByDescending(x => x.CreatedAt)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(x => new AdminAuditLogRow(x.Id, x.CreatedAt, x.ActorEmail, x.Action, x.TargetType, x.TargetId, x.TargetLabel))
             .ToListAsync();
-        return rows.Select(x => new AdminAuditLogRow(
-            x.Id, x.CreatedAt, x.ActorEmail, x.Action, x.TargetType, x.TargetId, x.TargetLabel)).ToList();
+
+        return new AdminPageDto<AdminAuditLogRow>(rows, total, page, pageSize);
     }
 
     // ---- AI usage --------------------------------------------------------------

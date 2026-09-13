@@ -345,11 +345,24 @@ async function purgeSelectedTrash(kind) {
 
 // ---- audit log ----
 const auditRows = ref(null);
+const auditQ = ref('');
+const auditPage = ref(1);
+const auditPageSize = ref(50);
+const auditTotal = ref(0);
+
 async function loadAudit() {
   err.value = '';
-  try { auditRows.value = await api.get('/api/admin-ui/audit-log'); }
-  catch (e) { err.value = e.message; }
+  try {
+    const p = new URLSearchParams({ page: String(auditPage.value), pageSize: String(auditPageSize.value) });
+    if (auditQ.value.trim()) p.set('q', auditQ.value.trim());
+    const result = await api.get(`/api/admin-ui/audit-log?${p}`);
+    auditRows.value = result.rows;
+    auditTotal.value = result.total;
+  } catch (e) { err.value = e.message; }
 }
+function searchAudit() { auditPage.value = 1; loadAudit(); }
+function auditPrevPage() { if (auditPage.value > 1) { auditPage.value--; loadAudit(); } }
+function auditNextPage() { if (auditPage.value * auditPageSize.value < auditTotal.value) { auditPage.value++; loadAudit(); } }
 
 // ---- problems export / import ----
 const importing = ref(false);
@@ -911,7 +924,12 @@ onMounted(async () => {
 
     <!-- Audit log -->
     <section v-show="tab === 'audit'">
-      <button @click="loadAudit" class="text-xs text-slate-500 dark:text-slate-400 mb-2">↻ refresh</button>
+      <div class="flex gap-2 mb-3">
+        <input v-model="auditQ" @keyup.enter="searchAudit" placeholder="Search actor, action, or target…"
+               class="flex-1 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-2 text-sm" />
+        <button @click="searchAudit" class="text-sm bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4">Search</button>
+        <button @click="loadAudit" class="text-xs text-slate-500 dark:text-slate-400">↻ refresh</button>
+      </div>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
@@ -938,6 +956,17 @@ onMounted(async () => {
             <tr v-if="auditRows && !auditRows.length"><td colspan="4" class="text-slate-400 dark:text-slate-500 py-3">No activity yet.</td></tr>
           </tbody>
         </table>
+      </div>
+      <div v-if="auditTotal" class="flex items-center gap-3 mt-3 text-sm">
+        <span class="text-slate-400 dark:text-slate-500">
+          {{ (auditPage - 1) * auditPageSize + 1 }}–{{ Math.min(auditPage * auditPageSize, auditTotal) }} of {{ auditTotal }}
+        </span>
+        <div class="ml-auto flex gap-2">
+          <button @click="auditPrevPage" :disabled="auditPage === 1"
+                  class="px-3 py-1 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-40">Prev</button>
+          <button @click="auditNextPage" :disabled="auditPage * auditPageSize >= auditTotal"
+                  class="px-3 py-1 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-40">Next</button>
+        </div>
       </div>
     </section>
   </div>
