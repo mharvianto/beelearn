@@ -83,6 +83,10 @@ public sealed class InProcessJudgeQueue : IJudgeQueue, IJudgeJobSource, IGradeRe
         });
     }
 
+    /// <summary>Jobs waiting to be picked up by the (single, in-process) judge worker — for
+    /// the admin system-status panel. -1 if the runtime can't report a count.</summary>
+    public int PendingJobCount => _jobs.Reader.CanCount ? _jobs.Reader.Count : -1;
+
     public ValueTask EnqueueGradeAsync(GradeJob job, CancellationToken ct = default) =>
         _jobs.Writer.WriteAsync(job, ct);
 

@@ -66,6 +66,8 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
         if (CurrentRole != "Teacher") return StatusCode(StatusCodes.Status403Forbidden, "Teachers only.");
         if (string.IsNullOrWhiteSpace(dto.Idea)) return BadRequest("Describe the idea or topic.");
         if (RateLimited()) return StatusCode(StatusCodes.Status429TooManyRequests, "Give the AI a few seconds.");
+        var (allowed, reason) = await _usage.CheckGateAsync(UserId, CurrentRole);
+        if (!allowed) return StatusCode(StatusCodes.Status429TooManyRequests, reason);
         if (await _jobs.RunningForAsync(UserId) >= 2)
             return StatusCode(StatusCodes.Status429TooManyRequests, "You already have generations running — wait for those to finish.");
 
@@ -150,11 +152,12 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
                 StatementMarkdown = gp.StatementMarkdown ?? "",
                 AllowedLanguages = "",          // AI problems are I/O-based — any language is fine
                 GeneratedByAi = true,
+                PendingReview = true,           // held back from other teachers until an admin approves
                 Level = Mapping.ParseLevel(gp.Level),
                 Tags = Mapping.NormalizeTags(gp.Tags),
                 TimeLimitMs = gp.TimeLimitMs,
                 MemoryLimitKb = gp.MemoryLimitKb,
-                IsPublic = true,                // default: share with other teachers
+                IsPublic = false,               // intent is still "share with other teachers" — see admin AI review queue
             };
             int pos = 0;
             foreach (var (stdin, expected, isSample) in built)
@@ -191,6 +194,8 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
         if (!_ai.Available) return NotFound();
         if (CurrentRole != "Teacher") return StatusCode(StatusCodes.Status403Forbidden, "Teachers only.");
         if (RateLimited()) return StatusCode(StatusCodes.Status429TooManyRequests, "Give the AI a few seconds.");
+        var (allowed, reason) = await _usage.CheckGateAsync(UserId, CurrentRole);
+        if (!allowed) return StatusCode(StatusCodes.Status429TooManyRequests, reason);
         if (await _jobs.RunningForAsync(UserId) >= 2)
             return StatusCode(StatusCodes.Status429TooManyRequests, "You already have generations running — wait for those to finish.");
 
@@ -308,6 +313,8 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
     {
         if (!_ai.Available) return NotFound();
         if (RateLimited()) return StatusCode(StatusCodes.Status429TooManyRequests, "Give the AI tutor a few seconds between questions.");
+        var (allowed, reason) = await _usage.CheckGateAsync(UserId, CurrentRole);
+        if (!allowed) return StatusCode(StatusCodes.Status429TooManyRequests, reason);
 
         var (ctx, err) = await BuildContextAsync(dto);
         if (err is not null) return err;
@@ -330,6 +337,8 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
     {
         if (!_ai.Available) { Response.StatusCode = StatusCodes.Status404NotFound; return; }
         if (RateLimited()) { Response.StatusCode = StatusCodes.Status429TooManyRequests; return; }
+        var (allowed, reason) = await _usage.CheckGateAsync(UserId, CurrentRole);
+        if (!allowed) { Response.StatusCode = StatusCodes.Status429TooManyRequests; await Response.WriteAsync(reason ?? ""); return; }
 
         var (ctx, err) = await BuildContextAsync(dto);
         if (err is not null)

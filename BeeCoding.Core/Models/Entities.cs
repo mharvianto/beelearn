@@ -204,6 +204,11 @@ public class BankProblem : IHasSlug
     /// <summary>True when this problem was written by the AI generator.</summary>
     public bool GeneratedByAi { get; set; }
 
+    /// <summary>An AI-generated problem starts here — kept out of the public/shared listing
+    /// (IsPublic stays false) until an admin reviews it. See AdminUiController's AI review
+    /// queue. Never set for a teacher-authored problem.</summary>
+    public bool PendingReview { get; set; }
+
     /// <summary>Comma-separated header names a submission may NOT #include (see Problem).</summary>
     [MaxLength(300)]
     public string? BannedHeaders { get; set; }
@@ -424,6 +429,39 @@ public class AiUsage
     public int Calls { get; set; }
     public long PromptTokens { get; set; }
     public long CompletionTokens { get; set; }
+}
+
+/// <summary>Singleton row (Id=1) of admin-tunable AI runtime settings — global pause
+/// ("kill switch") and the default daily request quota per role. See AiRuntimeSettings
+/// for the in-memory cache this backs.</summary>
+public class AiSettings
+{
+    public int Id { get; set; } = 1;
+
+    public bool Paused { get; set; }
+
+    [MaxLength(300)]
+    public string? PausedReason { get; set; }
+
+    public int DailyQuotaStudent { get; set; } = 20;
+    public int DailyQuotaTeacher { get; set; } = 50;
+
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>Per-user AI override: a custom daily quota and/or an outright ban. No row for a
+/// user means "use the role default from AiSettings, not banned".</summary>
+public class AiUserSetting
+{
+    public int UserId { get; set; }
+    public User? User { get; set; }
+
+    /// <summary>Null = use the role default.</summary>
+    public int? DailyQuotaOverride { get; set; }
+
+    public bool Banned { get; set; }
+
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 
 /// <summary>

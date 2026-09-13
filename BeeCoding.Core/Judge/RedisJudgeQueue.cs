@@ -65,6 +65,11 @@ public sealed class RedisJudgeQueue : IJudgeQueue, IJudgeJobSource, IGradeResult
         });
     }
 
+    /// <summary>Jobs waiting to be popped by a judge worker — for the admin system-status
+    /// panel. Approximate: at-most-once LPOP means a job a worker is mid-processing (or
+    /// lost to a crash) isn't reflected here.</summary>
+    public Task<long> PendingJobCountAsync() => _db.ListLengthAsync(_jobsKey);
+
     // ---- producer (web) ---------------------------------------------------
     public async ValueTask EnqueueGradeAsync(GradeJob job, CancellationToken ct = default) =>
         await _db.ListRightPushAsync(_jobsKey, Encode(job));

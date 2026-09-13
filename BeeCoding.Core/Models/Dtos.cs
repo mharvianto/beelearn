@@ -50,12 +50,13 @@ public record StudentProblemDto(
 // ---- Problem bank ----
 public record BankSummaryDto(
     int Id, string Slug, string Title, string AllowedLanguages, string Level, string Tags, bool IsPublic,
-    bool Mine, string OwnerName, int TestCount, int SampleCount, DateTime UpdatedAt, bool GeneratedByAi);
+    bool Mine, string OwnerName, int TestCount, int SampleCount, DateTime UpdatedAt, bool GeneratedByAi,
+    bool PendingReview);
 
 public record BankProblemDto(
     int Id, string Slug, string Title, string StatementMarkdown, string AllowedLanguages,
     int TimeLimitMs, int MemoryLimitKb, string Level, string Tags, bool IsPublic, bool GeneratedByAi,
-    bool Mine, string OwnerName, DateTime UpdatedAt,
+    bool PendingReview, bool Mine, string OwnerName, DateTime UpdatedAt,
     List<TestCaseDto> TestCases, string? BannedHeaders, string? BannedSymbols);   // full set only for the owner; samples only otherwise
 
 public record UpsertBankProblemDto(
@@ -103,6 +104,57 @@ public record AdminProblemItem(
     string? BannedHeaders, string? BannedSymbols, List<AdminProblemTest> Tests);
 public record AdminProblemBundle(int Version, DateTime ExportedAt, List<AdminProblemItem> Problems);
 public record AdminImportResult(int Created, int Updated, int Skipped, List<string> Errors);
+
+// ---- Admin: browse all boards ----
+public record AdminBoardRow(int Id, string Slug, string Title, string OwnerEmail, string OwnerName,
+    int MemberCount, int ProblemCount, DateTime CreatedAt);
+
+// ---- Admin: trash (soft-deleted rows; admin restore/purge has no time limit) ----
+public record AdminTrashUserRow(int Id, string Email, string DisplayName, DateTime DeletedAt);
+public record AdminTrashBoardRow(string Slug, string Title, string OwnerEmail, DateTime DeletedAt);
+public record AdminTrashProblemRow(string Slug, string Title, string BoardSlug, string BoardTitle, DateTime DeletedAt);
+public record AdminTrashBankRow(string Slug, string Title, string OwnerEmail, DateTime DeletedAt);
+public record AdminTrashDto(
+    List<AdminTrashUserRow> Users, List<AdminTrashBoardRow> Boards,
+    List<AdminTrashProblemRow> Problems, List<AdminTrashBankRow> BankProblems);
+
+// ---- Admin: audit log ----
+public record AdminAuditLogRow(int Id, DateTime CreatedAt, string ActorEmail, string Action,
+    string TargetType, int TargetId, string TargetLabel);
+
+// ---- Admin: role / admin-flag management ----
+public record AdminChangeRoleDto(string Role);   // "Teacher" | "Student"
+
+// ---- Admin: bulk board archive ----
+public record AdminBulkArchiveDto(List<string> Slugs);
+public record AdminBulkArchiveResult(int Archived, List<string> Errors);
+
+// ---- Admin: system status ----
+public record AdminSystemStatusDto(
+    string SandboxMode, bool BwrapUsable, bool SandboxRequired,
+    string JudgeQueueBackend, string RealtimeBackend,
+    bool RedisConfigured, bool? RedisConnected,
+    long? PendingJudgeJobs, bool DatabaseOk, DateTime CheckedAt);
+
+// ---- Admin: AI-generated problem review queue ----
+public record AdminAiReviewTest(string Stdin, string ExpectedStdout, bool IsSample);
+public record AdminAiReviewRow(
+    string Slug, string Title, string OwnerEmail, string OwnerName, string Level, string Tags,
+    string AllowedLanguages, string StatementMarkdown, int TimeLimitMs, int MemoryLimitKb,
+    List<AdminAiReviewTest> Tests, DateTime CreatedAt);
+public record AdminAiReviewActionDto(string? Reason);
+
+// ---- Admin: AI kill-switch, quotas, per-user overrides ----
+public record AiGlobalSettingsDto(bool Paused, string? PausedReason, int DailyQuotaStudent, int DailyQuotaTeacher);
+public record AiUserOverrideDto(int UserId, string Email, string DisplayName, int? DailyQuotaOverride, bool Banned);
+public record AiSetUserOverrideDto(int? DailyQuotaOverride, bool Banned);
+
+// ---- Admin: bulk user import (CSV) ----
+public record AdminUserImportRequest(string Csv, string? BoardSlug, string? DefaultRole);
+public record AdminUserImportRow(
+    string Email, string DisplayName, string Role, bool Created, bool AddedToBoard,
+    string? GeneratedPassword, string? Error);
+public record AdminUserImportResult(int Created, int Existing, int Errors, List<AdminUserImportRow> Rows);
 
 // ---- Practice (students solve bank problems) ----
 public record PracticeSummaryDto(

@@ -46,7 +46,7 @@ public static class Mapping
     public static BankSummaryDto ToSummary(BankProblem b, int viewerUserId) => new(
         b.Id, b.Slug, b.Title, b.AllowedLanguages, b.Level.ToString(), b.Tags, b.IsPublic,
         b.OwnerId == viewerUserId, b.Owner?.DisplayName ?? "teacher",
-        b.TestCases.Count, b.TestCases.Count(t => t.IsSample), b.UpdatedAt, b.GeneratedByAi);
+        b.TestCases.Count, b.TestCases.Count(t => t.IsSample), b.UpdatedAt, b.GeneratedByAi, b.PendingReview);
 
     /// <summary>Hidden test cases are only exposed to the bank problem's owner.</summary>
     public static BankProblemDto ToDto(BankProblem b, int viewerUserId)
@@ -59,7 +59,7 @@ public static class Mapping
         return new(
             b.Id, b.Slug, b.Title, b.StatementMarkdown, b.AllowedLanguages,
             b.TimeLimitMs, b.MemoryLimitKb, b.Level.ToString(), b.Tags, b.IsPublic, b.GeneratedByAi,
-            mine, b.Owner?.DisplayName ?? "teacher", b.UpdatedAt, tests, b.BannedHeaders, b.BannedSymbols);
+            b.PendingReview, mine, b.Owner?.DisplayName ?? "teacher", b.UpdatedAt, tests, b.BannedHeaders, b.BannedSymbols);
     }
 
     public static ProblemSummaryDto ToSummary(Problem p) =>

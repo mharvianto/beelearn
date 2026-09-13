@@ -8,9 +8,26 @@ public record AiUsageBucketDto(int Calls, long PromptTokens, long CompletionToke
 public record AiUsageDto(AiUsageBucketDto Today, AiUsageBucketDto Month, AiUsageBucketDto AllTime);
 
 /// <summary>Per-user, per-day rollup of AI token consumption.</summary>
-public class AiUsageService(AppDbContext db)
+public class AiUsageService(AppDbContext db, AiRuntimeSettings runtime)
 {
     private readonly AppDbContext _db = db;
+    private readonly AiRuntimeSettings _runtime = runtime;
+
+    /// <summary>Ban / daily-quota check for a user, before an AI call is allowed to proceed.
+    /// Does NOT check the global pause — that's folded into AiTutorService.Available, which
+    /// every AI-invoking action already checks first.</summary>
+    public async Task<(bool Allowed, string? Reason)> CheckGateAsync(int userId, string role, CancellationToken ct = default)
+    {
+        var (banned, quota) = _runtime.Effective(userId, role);
+        if (banned || quota <= 0) return (false, "Your AI access has been disabled by an admin.");
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var used = await _db.AiUsages.Where(x => x.UserId == userId && x.Day == today)
+            .Select(x => x.Calls).FirstOrDefaultAsync(ct);
+        return used >= quota
+            ? (false, $"You've reached today's AI limit ({quota} requests). Try again tomorrow.")
+            : (true, null);
+    }
 
     public async Task RecordAsync(int userId, int promptTokens, int completionTokens, CancellationToken ct = default)
     {

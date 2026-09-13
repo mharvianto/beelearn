@@ -107,6 +107,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     });
 builder.Services.AddSingleton<AdminAccess>();
 builder.Services.AddScoped<AuditLog>();
+builder.Services.AddSingleton<AiRuntimeSettings>();
 builder.Services.AddSingleton<IAuthorizationHandler, AdminAuthorizationHandler>();
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("Admin", p => p.Requirements.Add(new AdminRequirement()));
@@ -233,6 +234,20 @@ using (var scope = app.Services.CreateScope())
     // the admin panel, so the "Admin" policy doesn't need a DB hit on every request.
     var dbAdminEmails = await db.Users.Where(u => u.IsAdmin).Select(u => u.Email).ToListAsync();
     scope.ServiceProvider.GetRequiredService<AdminAccess>().SetDbAdmins(dbAdminEmails);
+
+    // Same for the AI pause/quota settings + per-user overrides (see AiRuntimeSettings).
+    var aiSettings = await db.AiSettings.FindAsync(1);
+    if (aiSettings is null)
+    {
+        aiSettings = new BeeCoding.Models.AiSettings();
+        db.AiSettings.Add(aiSettings);
+        await db.SaveChangesAsync();
+    }
+    var aiOverrides = await db.AiUserSettings
+        .Select(x => new { x.UserId, x.DailyQuotaOverride, x.Banned }).ToListAsync();
+    var aiRuntime = scope.ServiceProvider.GetRequiredService<AiRuntimeSettings>();
+    aiRuntime.SetGlobal(aiSettings.Paused, aiSettings.PausedReason, aiSettings.DailyQuotaStudent, aiSettings.DailyQuotaTeacher);
+    aiRuntime.SetOverrides(aiOverrides.Select(x => (x.UserId, x.DailyQuotaOverride, x.Banned)));
 }
 
 // Build the sandbox runner + probe capabilities before serving traffic.

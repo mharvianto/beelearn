@@ -180,7 +180,11 @@ onBeforeUnmount(() => { pollStopped = true; });
           <h3 class="font-semibold text-sm">{{ b.title }}</h3>
           <div class="flex items-center gap-1 shrink-0">
             <span v-if="b.generatedByAi" class="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">✨ AI</span>
-            <span v-if="b.isPublic" class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+            <span v-if="b.pendingReview" class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+                  title="An admin reviews AI-generated problems before they're shared with other teachers">
+              ⏳ pending review
+            </span>
+            <span v-else-if="b.isPublic" class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
               shared
             </span>
           </div>

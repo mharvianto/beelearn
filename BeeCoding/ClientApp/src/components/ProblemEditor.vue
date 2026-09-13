@@ -57,6 +57,11 @@ function removeTest(i) { form.value.testCases.splice(i, 1); }
         <h2 class="font-bold text-lg">{{ props.problem?.id ? 'Edit' : 'New' }} problem</h2>
         <span v-if="props.problem?.generatedByAi"
               class="text-[11px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300">✨ AI-generated</span>
+        <span v-if="props.problem?.pendingReview"
+              class="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+              title="An admin reviews AI-generated problems before they're shared with other teachers">
+          ⏳ pending review — not shared yet
+        </span>
         <div class="ml-auto inline-flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden text-sm">
           <button type="button" @click="tab = 'problem'" class="px-3 py-1"
                   :class="tab === 'problem' ? 'bg-slate-800 text-white dark:bg-slate-600' : 'text-slate-500 dark:text-slate-400'">Problem</button>
@@ -133,9 +138,10 @@ function removeTest(i) { form.value.testCases.splice(i, 1); }
             <input v-model="form.tags" placeholder="loop, array, dp"
                    class="flex-1 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded px-2 py-1" />
           </label>
-          <label v-if="showBankFields" class="flex items-center gap-2">
-            <input type="checkbox" v-model="form.isPublic" />
+          <label v-if="showBankFields" class="flex items-center gap-2" :class="{ 'opacity-50': props.problem?.pendingReview }">
+            <input type="checkbox" v-model="form.isPublic" :disabled="props.problem?.pendingReview" />
             Share with other teachers
+            <span v-if="props.problem?.pendingReview" class="text-[11px] text-slate-400">(awaiting admin review)</span>
           </label>
         </div>
 

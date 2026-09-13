@@ -23,13 +23,16 @@ public sealed record AiHintContext(
 /// Calls an OpenAI-compatible chat-completions endpoint to produce a *hint* — it is
 /// prompted hard to never hand over a working solution. Supports one-shot and SSE streaming.
 /// </summary>
-public sealed partial class AiTutorService(HttpClient http, IOptions<AiOptions> opt, ILogger<AiTutorService> log)
+public sealed partial class AiTutorService(HttpClient http, IOptions<AiOptions> opt, AiRuntimeSettings runtime, ILogger<AiTutorService> log)
 {
     private readonly HttpClient _http = http;
     private readonly AiOptions _opt = opt.Value;
+    private readonly AiRuntimeSettings _runtime = runtime;
     private readonly ILogger<AiTutorService> _log = log;
 
-    public bool Available => _opt.Enabled && !string.IsNullOrWhiteSpace(_opt.ApiKey);
+    /// <summary>False if disabled/unconfigured in Ai:*, OR paused live from the admin panel
+    /// (AiRuntimeSettings) — the single choke point every AI-invoking action checks first.</summary>
+    public bool Available => _opt.Enabled && !string.IsNullOrWhiteSpace(_opt.ApiKey) && !_runtime.Paused;
     public string DefaultReplyLanguage => Norm(_opt.DefaultReplyLanguage);
 
     /// <summary>Model for the heavy JSON tasks; falls back to the hint model.</summary>

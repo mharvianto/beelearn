@@ -22,6 +22,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AiUsage> AiUsages => Set<AiUsage>();
     public DbSet<AiHintProgress> AiHintProgresses => Set<AiHintProgress>();
     public DbSet<AuditLogEntry> AuditLogEntries => Set<AuditLogEntry>();
+    public DbSet<AiSettings> AiSettings => Set<AiSettings>();
+    public DbSet<AiUserSetting> AiUserSettings => Set<AiUserSetting>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -124,6 +126,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         // No FK to Users: an audit row must survive the actor being purged.
         b.Entity<AuditLogEntry>().HasIndex(x => x.CreatedAt);
+
+        b.Entity<AiUserSetting>().HasKey(x => x.UserId);
+        b.Entity<AiUserSetting>()
+            .HasOne(x => x.User).WithMany()
+            .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
     }
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
