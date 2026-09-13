@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { api } from '../lib/api';
+import { withBase } from '../lib/base';
 import MarkdownBlock from './MarkdownBlock.vue';
 
 const props = defineProps({
@@ -76,7 +77,7 @@ function payload(extra = {}) {
 async function ask(extra = {}) {
   error.value = ''; reply.value = ''; busy.value = true; level.value = 0;
   try {
-    const res = await fetch('/api/ai/hint/stream', {
+    const res = await fetch(withBase('/api/ai/hint/stream'), {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },

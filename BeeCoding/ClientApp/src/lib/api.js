@@ -1,3 +1,5 @@
+import { withBase } from './base';
+
 async function request(method, url, body) {
   const opts = {
     method,
@@ -8,7 +10,7 @@ async function request(method, url, body) {
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
   }
-  const res = await fetch(url, opts);
+  const res = await fetch(url.startsWith('/') ? withBase(url) : url, opts);
   if (res.status === 204) return null;
   const text = await res.text();
   const data = text ? tryParse(text) : null;

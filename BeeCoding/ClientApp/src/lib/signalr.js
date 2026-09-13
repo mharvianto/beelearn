@@ -1,4 +1,5 @@
 import * as signalR from '@microsoft/signalr';
+import { withBase } from './base';
 
 // Some views (Solve, Live code) join the board group for a subset of its events, so the
 // hub also broadcasts ones they don't handle (presence, wallChanged, …). SignalR logs a
@@ -30,7 +31,7 @@ const HUB_BASE = import.meta.env.DEV
  */
 export function createBoardConnection() {
   return new signalR.HubConnectionBuilder()
-    .withUrl(`${HUB_BASE}/hubs/board`)
+    .withUrl(`${HUB_BASE}${withBase('/hubs/board')}`)
     .withAutomaticReconnect([0, 1000, 3000, 5000, 10000])
     .configureLogging(logger)
     .build();

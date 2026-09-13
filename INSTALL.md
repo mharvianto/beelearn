@@ -467,6 +467,97 @@ Buka `https://<domain-atau-IP>/`. Uji API: `curl -k https://<host>/api/auth/me` 
 
 ---
 
+## 4C. Jalan di subpath (mis. `/beecoding`) alih-alih root domain
+
+Berguna kalau domain/nginx yang sama juga melayani aplikasi lain. Dua sisi harus sinkron:
+build SPA dengan base path itu, dan backend diberi tahu `PathBase` yang sama.
+
+### 1) Build SPA dengan base path
+
+```bash
+cd BeeCoding/ClientApp
+VITE_BASE_PATH=/beecoding/ npm ci && VITE_BASE_PATH=/beecoding/ npm run build   # tulis ../wwwroot
+```
+
+(harus diakhiri `/`). Kalau pakai `dotnet publish` satu-proses (§4), set env var yang sama
+sebelum menjalankannya supaya target `BuildClientApp` memakainya:
+
+```bash
+cd BeeCoding
+VITE_BASE_PATH=/beecoding/ dotnet publish -c Release -o out
+```
+
+### 2) Backend: `PathBase`
+
+Tambahkan `PathBase=/beecoding` (tanpa `/` di akhir) sebagai environment variable service —
+di `/etc/systemd/system/beecoding.service` (lihat §4A):
+
+```
+Environment=PathBase=/beecoding
+```
+
+lalu `sudo systemctl daemon-reload && sudo systemctl restart beecoding`. Ini membuat
+Kestrel mengenali prefix untuk static files/routing, dan cookie login otomatis dibatasi ke
+path itu (`CookieBuilder` mem-default `Path` ke `PathBase`).
+
+### 3) nginx: **jangan** strip prefix-nya
+
+Beda dari §4B — di sini prefix **diteruskan apa adanya** ke backend (bukan dipangkas),
+karena SPA dan backend sama-sama sudah tahu mereka hidup di `/beecoding`:
+
+```nginx
+map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+upstream beecoding { server 127.0.0.1:8080; keepalive 32; }
+
+server {
+    listen 80;
+    server_name example.com;   # domain yang sama dipakai aplikasi lain juga
+
+    client_max_body_size 4m;
+
+    location /beecoding/ {
+        proxy_pass http://beecoding;            # TANPA trailing slash — path diteruskan utuh
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        $connection_upgrade;
+    }
+
+    location ~ ^/beecoding/(hubs|lsp)/ {
+        proxy_pass http://beecoding;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        $connection_upgrade;
+        proxy_read_timeout  3600s;
+        proxy_send_timeout  3600s;
+        proxy_buffering     off;
+    }
+
+    # ... location blok aplikasi lain di domain yang sama ada di sini ...
+}
+```
+
+`sudo nginx -t && sudo systemctl reload nginx`, lalu buka `https://example.com/beecoding/`.
+
+### Catatan
+
+- `VITE_BASE_PATH` dan `PathBase` **harus** sama persis (modulo trailing slash: yang satu
+  butuh `/`, yang lain tidak boleh punya). Beda salah satunya → asset 404 atau cookie tidak
+  terkirim.
+- Balik ke root domain kapan saja: hapus `PathBase` dari service, build ulang SPA tanpa
+  `VITE_BASE_PATH` (default `/`), pulihkan `location /` biasa (§4B). Tidak ada perubahan
+  kode lain yang diperlukan — semua path di frontend sudah relatif terhadap base ini.
+- `curl -k https://example.com/beecoding/api/auth/me` harus balas `401` (bukan 404) kalau
+  semuanya tersambung benar.
+
+---
+
 ## 5. Konfigurasi
 
 Ubah lewat `BeeCoding/appsettings.json`, `appsettings.Production.json`, atau environment

@@ -3,6 +3,7 @@ import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import * as monaco from 'monaco-editor';
 import { theme as appTheme } from '../lib/theme';
 import { CppLsp } from '../lib/cpplsp';
+import { withBase } from '../lib/base';
 
 function editorTheme() {
   const dark = appTheme.value === 'dark'
@@ -49,7 +50,7 @@ const lspEnabled = ref((() => { try { return localStorage.getItem(LSP_KEY) !== '
 const serverLsp = ref(false);
 let serverLspProbe = null;
 function probeServerLsp() {
-  serverLspProbe ??= fetch('/api/lsp/enabled', { credentials: 'include' })
+  serverLspProbe ??= fetch(withBase('/api/lsp/enabled'), { credentials: 'include' })
     .then((r) => (r.ok ? r.json() : null))
     .then((j) => j?.enabled === true)
     .catch(() => false);

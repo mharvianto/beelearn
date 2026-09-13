@@ -1,3 +1,5 @@
+import { withBase } from './base';
+
 /**
  * Thin LSP client for the clangd bridge (`/lsp/cpp`). One JSON-RPC message per
  * WebSocket frame. Exposes just what the Monaco providers need: completion, hover,
@@ -25,7 +27,7 @@ export class CppLsp {
         ? (import.meta.env.VITE_BACKEND_URL || 'http://localhost:5048').replace(/^http/, 'ws')
         : (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
       try {
-        this.ws = new WebSocket(`${base}/lsp/cpp?lang=${this.language}`);
+        this.ws = new WebSocket(`${base}${withBase('/lsp/cpp')}?lang=${this.language}`);
       } catch (e) { return reject(e); }
 
       const timer = setTimeout(() => { if (!settled) { settled = true; this.close(); reject(new Error('lsp timeout')); } }, timeoutMs);

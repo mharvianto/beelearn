@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '../lib/api';
+import { withBase } from '../lib/base';
 import { useAuth } from '../stores/auth';
 import { useUndoToast } from '../stores/undoToast';
 
@@ -290,7 +291,7 @@ const replaceExisting = ref(true);
 async function downloadFile(url, fallbackName) {
   err.value = '';
   try {
-    const res = await fetch(url, { credentials: 'include' });
+    const res = await fetch(url.startsWith('/') ? withBase(url) : url, { credentials: 'include' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const blob = await res.blob();
     const a = document.createElement('a');

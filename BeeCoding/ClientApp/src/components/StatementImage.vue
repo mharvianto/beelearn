@@ -1,15 +1,16 @@
 <script setup>
 import { ref, watch, onBeforeUnmount } from 'vue';
 import { theme as appTheme } from '../lib/theme';
+import { withBase } from '../lib/base';
 
 const props = defineProps({
   problemId: { type: [String, Number], default: null },   // board problem
   bankId: { type: [String, Number], default: null },      // practice (bank) problem
 });
 const endpoint = () =>
-  props.bankId != null
+  withBase(props.bankId != null
     ? `/api/practice/${props.bankId}/statement`
-    : `/api/problems/${props.problemId}/statement`;
+    : `/api/problems/${props.problemId}/statement`);
 
 const src = ref('');
 const err = ref('');

@@ -255,6 +255,15 @@ app.Services.GetRequiredService<NativeToolchain>().Initialize();
 
 app.UseForwardedHeaders();
 
+// Reverse-proxied under a subpath (e.g. nginx serving this app at /beecoding/ alongside
+// others on the same domain)? Set PathBase (env var or appsettings), no trailing slash.
+// Must match the frontend's VITE_BASE_PATH build setting (see vite.config.js). Strips the
+// prefix for routing/static files while keeping it for URL generation and the auth
+// cookie's Path (CookieBuilder defaults Path to PathBase when one is set).
+var pathBase = builder.Configuration["PathBase"];
+if (!string.IsNullOrWhiteSpace(pathBase))
+    app.UsePathBase(pathBase.TrimEnd('/'));
+
 // Security headers on every response. Override CSP with Security:ContentSecurityPolicy
 // (a custom string), or set it to "off" to send no CSP header (e.g. if Monaco breaks).
 var cspCfg = builder.Configuration["Security:ContentSecurityPolicy"];
