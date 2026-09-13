@@ -264,6 +264,23 @@ public record NoteDto(string Note);
 public record ReactDto(string Emoji);
 public record CommentBodyDto(string Body);
 
+// ---- LTI 1.3 (Learning Tools Interoperability) — admin platform registry ----
+public record AdminLtiPlatformDto(
+    int Id, string Name, string Issuer, string ClientId, string DeploymentIds,
+    string AuthLoginUrl, string AuthTokenUrl, string JwksUrl, bool Enabled, DateTime CreatedAt);
+public record AdminUpsertLtiPlatformDto(
+    string Name, string Issuer, string ClientId, string DeploymentIds,
+    string AuthLoginUrl, string AuthTokenUrl, string JwksUrl, bool Enabled);
+/// <summary>Values an LMS admin needs to register BeeCoding as an external tool —
+/// shown in the admin LTI tab so they can copy them in.</summary>
+public record AdminLtiToolConfigDto(
+    string LoginInitiationUrl, string LaunchUrl, string JwksUrl, string DeepLinkingUrl);
+
+// ---- LTI: deep-linking picker (teacher, mid-launch from the LMS) ----
+public record LtiDeepLinkContextDto(string PlatformName, bool AcceptsResourceLink);
+public record LtiDeepLinkSelectDto(string Token, string BoardSlug);
+public record LtiDeepLinkResultDto(string ReturnUrl, string Jwt);
+
 // ---- Ad-hoc run ----
 public record RunDto(string Language, string Code, string Stdin,
     int? ProblemId = null, int? BankProblemId = null);   // for per-problem header restrictions

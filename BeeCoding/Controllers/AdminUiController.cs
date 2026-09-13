@@ -671,6 +671,68 @@ public class AdminUiController(
         return NoContent();
     }
 
+    // ---- LTI 1.3 platform registry ------------------------------------------
+    /// <summary>Values an LMS admin needs to register BeeCoding as an external tool.</summary>
+    [HttpGet("lti-platforms/tool-config")]
+    public ActionResult<AdminLtiToolConfigDto> LtiToolConfig()
+    {
+        string Abs(string path) => $"{Request.Scheme}://{Request.Host}{Url.Content("~" + path)}";
+        return new AdminLtiToolConfigDto(
+            LoginInitiationUrl: Abs("/lti/login"),
+            LaunchUrl: Abs("/lti/launch"),
+            JwksUrl: Abs("/lti/jwks"),
+            DeepLinkingUrl: Abs("/lti/launch"));   // same endpoint — discriminated by message_type
+    }
+
+    [HttpGet("lti-platforms")]
+    public async Task<ActionResult<List<AdminLtiPlatformDto>>> LtiPlatforms()
+    {
+        return await _db.LtiPlatforms.OrderBy(p => p.Name).Select(p => new AdminLtiPlatformDto(
+            p.Id, p.Name, p.Issuer, p.ClientId, p.DeploymentIds, p.AuthLoginUrl, p.AuthTokenUrl, p.JwksUrl, p.Enabled, p.CreatedAt))
+            .ToListAsync();
+    }
+
+    [HttpPost("lti-platforms")]
+    public async Task<ActionResult<AdminLtiPlatformDto>> CreateLtiPlatform(AdminUpsertLtiPlatformDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.Issuer) || string.IsNullOrWhiteSpace(dto.ClientId))
+            return BadRequest("Issuer and Client ID are required.");
+        var p = new LtiPlatform
+        {
+            Name = dto.Name.Trim(), Issuer = dto.Issuer.Trim(), ClientId = dto.ClientId.Trim(),
+            DeploymentIds = dto.DeploymentIds.Trim(), AuthLoginUrl = dto.AuthLoginUrl.Trim(),
+            AuthTokenUrl = dto.AuthTokenUrl.Trim(), JwksUrl = dto.JwksUrl.Trim(), Enabled = dto.Enabled,
+        };
+        _db.LtiPlatforms.Add(p);
+        await _db.SaveChangesAsync();
+        await _audit.RecordAsync(UserId, ActorEmail, "create", "LtiPlatform", p.Id, p.Name);
+        return new AdminLtiPlatformDto(p.Id, p.Name, p.Issuer, p.ClientId, p.DeploymentIds, p.AuthLoginUrl, p.AuthTokenUrl, p.JwksUrl, p.Enabled, p.CreatedAt);
+    }
+
+    [HttpPut("lti-platforms/{id:int}")]
+    public async Task<ActionResult<AdminLtiPlatformDto>> UpdateLtiPlatform(int id, AdminUpsertLtiPlatformDto dto)
+    {
+        var p = await _db.LtiPlatforms.FindAsync(id);
+        if (p is null) return NotFound();
+        p.Name = dto.Name.Trim(); p.Issuer = dto.Issuer.Trim(); p.ClientId = dto.ClientId.Trim();
+        p.DeploymentIds = dto.DeploymentIds.Trim(); p.AuthLoginUrl = dto.AuthLoginUrl.Trim();
+        p.AuthTokenUrl = dto.AuthTokenUrl.Trim(); p.JwksUrl = dto.JwksUrl.Trim(); p.Enabled = dto.Enabled;
+        await _db.SaveChangesAsync();
+        await _audit.RecordAsync(UserId, ActorEmail, "update", "LtiPlatform", p.Id, p.Name);
+        return new AdminLtiPlatformDto(p.Id, p.Name, p.Issuer, p.ClientId, p.DeploymentIds, p.AuthLoginUrl, p.AuthTokenUrl, p.JwksUrl, p.Enabled, p.CreatedAt);
+    }
+
+    [HttpDelete("lti-platforms/{id:int}")]
+    public async Task<IActionResult> DeleteLtiPlatform(int id)
+    {
+        var p = await _db.LtiPlatforms.FindAsync(id);
+        if (p is null) return NotFound();
+        _db.LtiPlatforms.Remove(p);
+        await _db.SaveChangesAsync();
+        await _audit.RecordAsync(UserId, ActorEmail, "delete", "LtiPlatform", id, p.Name);
+        return NoContent();
+    }
+
     // ---- audit log ------------------------------------------------------------
     [HttpGet("audit-log")]
     public async Task<ActionResult<AdminPageDto<AdminAuditLogRow>>> AuditLogFeed(

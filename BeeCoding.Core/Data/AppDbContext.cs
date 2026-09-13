@@ -24,6 +24,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AuditLogEntry> AuditLogEntries => Set<AuditLogEntry>();
     public DbSet<AiSettings> AiSettings => Set<AiSettings>();
     public DbSet<AiUserSetting> AiUserSettings => Set<AiUserSetting>();
+    public DbSet<LtiPlatform> LtiPlatforms => Set<LtiPlatform>();
+    public DbSet<LtiUserLink> LtiUserLinks => Set<LtiUserLink>();
+    public DbSet<LtiResourceLink> LtiResourceLinks => Set<LtiResourceLink>();
+    public DbSet<LtiToolKey> LtiToolKeys => Set<LtiToolKey>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -131,6 +135,24 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<AiUserSetting>()
             .HasOne(x => x.User).WithMany()
             .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+        b.Entity<LtiPlatform>().HasIndex(x => new { x.Issuer, x.ClientId }).IsUnique();
+
+        b.Entity<LtiUserLink>().HasIndex(x => new { x.LtiPlatformId, x.Subject }).IsUnique();
+        b.Entity<LtiUserLink>()
+            .HasOne(x => x.LtiPlatform).WithMany()
+            .HasForeignKey(x => x.LtiPlatformId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<LtiUserLink>()
+            .HasOne(x => x.User).WithMany()
+            .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+        b.Entity<LtiResourceLink>().HasIndex(x => new { x.LtiPlatformId, x.DeploymentId, x.ContextId, x.ResourceLinkId }).IsUnique();
+        b.Entity<LtiResourceLink>()
+            .HasOne(x => x.LtiPlatform).WithMany()
+            .HasForeignKey(x => x.LtiPlatformId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<LtiResourceLink>()
+            .HasOne(x => x.Board).WithMany()
+            .HasForeignKey(x => x.BoardId).OnDelete(DeleteBehavior.SetNull);
     }
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)

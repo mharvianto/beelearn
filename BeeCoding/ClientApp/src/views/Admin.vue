@@ -16,7 +16,7 @@ const confirmDialog = useConfirmDialog();
 const undoToast = useUndoToast();
 const tabDefs = [
   ['dashboard', 'Dashboard'], ['ai', 'AI'], ['users', 'Users'], ['boards', 'Boards'], ['problems', 'Problems'],
-  ['review', 'AI review'], ['reports', 'Reports'], ['trash', 'Trash'], ['audit', 'Audit log'],
+  ['review', 'AI review'], ['reports', 'Reports'], ['trash', 'Trash'], ['audit', 'Audit log'], ['lti', 'LTI'],
 ];
 // Deep-linkable: /admin/users etc. — reload/share/bookmark lands on the same tab.
 const tab = ref(tabDefs.some((t) => t[0] === route.params.tab) ? route.params.tab : 'dashboard');
@@ -52,6 +52,10 @@ function loadTabData(id) {
   else if (id === 'reports' && !systemStatus.value) loadSystemStatus();
   else if (id === 'trash') loadTrash();     // state changes often — always refresh
   else if (id === 'audit' && !auditRows.value) loadAudit();
+  else if (id === 'lti') {
+    if (!ltiPlatforms.value) loadLtiPlatforms();
+    if (!ltiToolConfig.value) loadLtiToolConfig();
+  }
 }
 function switchTab(id) {
   if (id === tab.value) return;
@@ -408,6 +412,47 @@ async function loadAudit() {
 function searchAudit() { auditPage.value = 1; loadAudit(); }
 function auditPrevPage() { if (auditPage.value > 1) { auditPage.value--; loadAudit(); } }
 function auditNextPage() { if (auditPage.value * auditPageSize.value < auditTotal.value) { auditPage.value++; loadAudit(); } }
+
+// ---- LTI 1.3 platform registry ----
+const ltiPlatforms = ref(null);
+const ltiToolConfig = ref(null);
+const ltiEditing = ref(null);   // id of the platform being edited, or 'new'
+const ltiForm = ref({});
+const ltiCopyMsg = ref('');
+const blankLtiForm = () => ({ name: '', issuer: '', clientId: '', deploymentIds: '', authLoginUrl: '', authTokenUrl: '', jwksUrl: '', enabled: true });
+
+async function loadLtiPlatforms() {
+  err.value = '';
+  try { ltiPlatforms.value = await api.get('/api/admin-ui/lti-platforms'); }
+  catch (e) { err.value = e.message; }
+}
+async function loadLtiToolConfig() {
+  err.value = '';
+  try { ltiToolConfig.value = await api.get('/api/admin-ui/lti-platforms/tool-config'); }
+  catch (e) { err.value = e.message; }
+}
+function startNewLtiPlatform() { ltiEditing.value = 'new'; ltiForm.value = blankLtiForm(); }
+function startEditLtiPlatform(p) { ltiEditing.value = p.id; ltiForm.value = { ...p }; }
+function cancelLtiEdit() { ltiEditing.value = null; }
+async function saveLtiPlatform() {
+  err.value = '';
+  try {
+    if (ltiEditing.value === 'new') await api.post('/api/admin-ui/lti-platforms', ltiForm.value);
+    else await api.put(`/api/admin-ui/lti-platforms/${ltiEditing.value}`, ltiForm.value);
+    ltiEditing.value = null;
+    await loadLtiPlatforms();
+  } catch (e) { err.value = e.message; }
+}
+async function deleteLtiPlatform(p) {
+  if (!(await confirmDialog.ask(`Remove platform "${p.name}"? Existing linked users/boards stay, but it can no longer launch.`, { confirmLabel: 'Remove' }))) return;
+  err.value = '';
+  try { await api.del(`/api/admin-ui/lti-platforms/${p.id}`); await loadLtiPlatforms(); }
+  catch (e) { err.value = e.message; }
+}
+async function copyLtiValue(value) {
+  try { await navigator.clipboard.writeText(value); ltiCopyMsg.value = 'Copied.'; setTimeout(() => (ltiCopyMsg.value = ''), 1500); }
+  catch { /* clipboard permission denied — not worth surfacing an error for */ }
+}
 
 // ---- problems export / import ----
 const importing = ref(false);
@@ -1094,6 +1139,83 @@ onMounted(async () => {
                   class="px-3 py-1 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-40">Prev</button>
           <button @click="auditNextPage" :disabled="auditPage * auditPageSize >= auditTotal"
                   class="px-3 py-1 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-40">Next</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- LTI 1.3: register LMS platforms as tool consumers -->
+    <section v-show="tab === 'lti'" class="space-y-5">
+      <div class="border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+        <h2 class="font-semibold text-sm mb-1">Tool configuration</h2>
+        <p class="text-xs text-slate-400 dark:text-slate-500 mb-3">
+          Give these to whoever registers BeeCoding as an external tool in the LMS. The
+          LMS gives back an issuer, a client ID, and its own login/token/JWKS URLs —
+          register the platform below with those.
+        </p>
+        <div v-if="ltiToolConfig" class="space-y-1.5 text-xs">
+          <div v-for="[label, value] in [
+            ['OIDC login initiation URL', ltiToolConfig.loginInitiationUrl],
+            ['Launch / redirect URL', ltiToolConfig.launchUrl],
+            ['Public JWKS URL', ltiToolConfig.jwksUrl],
+            ['Deep Linking URL', ltiToolConfig.deepLinkingUrl],
+          ]" :key="label" class="flex items-center gap-2">
+            <span class="w-40 shrink-0 text-slate-400 dark:text-slate-500">{{ label }}</span>
+            <code class="flex-1 min-w-0 truncate bg-slate-100 dark:bg-slate-800 rounded px-2 py-1">{{ value }}</code>
+            <button @click="copyLtiValue(value)" class="shrink-0 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200" title="Copy">⧉</button>
+          </div>
+          <p v-if="ltiCopyMsg" class="text-emerald-600 dark:text-emerald-400">{{ ltiCopyMsg }}</p>
+        </div>
+      </div>
+
+      <div>
+        <div class="flex items-center gap-2 mb-2">
+          <h2 class="font-semibold text-sm">Registered platforms</h2>
+          <button @click="startNewLtiPlatform" class="ml-auto text-xs bg-amber-500 text-white rounded-lg px-3 py-1 font-medium">+ Add platform</button>
+        </div>
+
+        <div v-if="ltiEditing" class="border border-slate-200 dark:border-slate-800 rounded-xl p-4 mb-3 space-y-2 text-sm">
+          <h3 class="font-semibold text-xs text-slate-500 dark:text-slate-400">{{ ltiEditing === 'new' ? 'New platform' : 'Edit platform' }}</h3>
+          <input v-model="ltiForm.name" placeholder="Name (e.g. BINUS Moodle)" class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-1.5" />
+          <input v-model="ltiForm.issuer" placeholder="Issuer (iss)" class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-1.5" />
+          <input v-model="ltiForm.clientId" placeholder="Client ID" class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-1.5" />
+          <input v-model="ltiForm.deploymentIds" placeholder="Deployment ID(s), comma-separated" class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-1.5" />
+          <input v-model="ltiForm.authLoginUrl" placeholder="Auth login URL" class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-1.5" />
+          <input v-model="ltiForm.authTokenUrl" placeholder="Auth token URL" class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-1.5" />
+          <input v-model="ltiForm.jwksUrl" placeholder="JWKS (key set) URL" class="w-full border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-1.5" />
+          <label class="flex items-center gap-2 text-xs"><input type="checkbox" v-model="ltiForm.enabled" /> Enabled</label>
+          <div class="flex gap-2 pt-1">
+            <button @click="saveLtiPlatform" class="bg-amber-500 text-white rounded-lg px-4 py-1.5 text-sm font-medium">Save</button>
+            <button @click="cancelLtiEdit" class="text-slate-500 dark:text-slate-400 px-3 text-sm">Cancel</button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-xs text-left text-slate-400 dark:text-slate-500 border-b border-slate-200 dark:border-slate-800">
+                <th class="font-normal py-1.5 pr-3">Name</th><th class="font-normal pr-3">Issuer</th>
+                <th class="font-normal pr-3">Client ID</th><th class="font-normal pr-3">Status</th><th class="font-normal pr-3"></th>
+              </tr>
+            </thead>
+            <tbody class="[&_td]:py-1.5 [&_td]:pr-3">
+              <tr v-for="p in ltiPlatforms" :key="p.id" class="border-b border-slate-100 dark:border-slate-800/60">
+                <td class="font-medium">{{ p.name }}</td>
+                <td class="text-[11px] text-slate-400 max-w-40 truncate">{{ p.issuer }}</td>
+                <td class="text-[11px] text-slate-400 max-w-32 truncate">{{ p.clientId }}</td>
+                <td>
+                  <span class="text-[11px] px-1.5 py-0.5 rounded-full"
+                        :class="p.enabled ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'">
+                    {{ p.enabled ? 'enabled' : 'disabled' }}
+                  </span>
+                </td>
+                <td class="whitespace-nowrap">
+                  <button @click="startEditLtiPlatform(p)" class="text-[11px] text-violet-600 dark:text-violet-400 hover:underline mr-3">Edit</button>
+                  <button @click="deleteLtiPlatform(p)" class="text-[11px] text-rose-600 dark:text-rose-400 hover:underline">Remove</button>
+                </td>
+              </tr>
+              <tr v-if="ltiPlatforms && !ltiPlatforms.length"><td colspan="5" class="text-slate-400 dark:text-slate-500 py-3">No platforms registered yet.</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </section>

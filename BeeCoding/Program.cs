@@ -4,6 +4,7 @@ using BeeCoding.Services;
 using BeeCoding.Services.Ai;
 using BeeCoding.Services.Judge;
 using BeeCoding.Services.Lsp;
+using BeeCoding.Services.Lti;
 using BeeCoding.Services.Realtime;
 using StackExchange.Redis;
 using Microsoft.AspNetCore.Authentication;
@@ -121,6 +122,17 @@ builder.Services.AddSingleton<LspEndpoint>();
 builder.Services.AddHttpClient<AiTutorService>(c => c.Timeout = Timeout.InfiniteTimeSpan);
 builder.Services.AddScoped<AiUsageService>();
 builder.Services.AddScoped<AiHintProgressService>();
+
+// --- LTI 1.3 (see Controllers/LtiController.cs) ---
+builder.Services.AddHttpClient("lti", c => c.Timeout = TimeSpan.FromSeconds(15));
+builder.Services.AddSingleton<LtiLoginStateStore>();
+builder.Services.AddSingleton<LtiJwksCache>();
+builder.Services.AddSingleton<LtiLaunchValidator>();
+builder.Services.AddScoped<LtiToolKeyService>();
+builder.Services.AddScoped<LtiProvisioningService>();
+builder.Services.AddScoped<LtiDeepLinkService>();
+builder.Services.AddScoped<LtiTokenService>();
+builder.Services.AddScoped<LtiGradeSyncService>();
 
 builder.Services.AddSingleton<PasswordService>();
 builder.Services.AddSingleton<NativeToolchain>();

@@ -700,6 +700,41 @@ Tanpa clangd atau dengan `Lsp:Enabled=false`, editor tetap jalan memakai complet
 
 ---
 
+## 5A. Integrasi LTI 1.3 (BeeCoding sebagai Tool di LMS)
+
+BeeCoding bisa dibuka langsung dari dalam LMS (Moodle, Canvas, dll.) lewat **LTI 1.3
+Advantage**: mahasiswa/dosen klik link di course-nya, langsung masuk ke board BeeCoding
+tanpa daftar/login manual. Tidak perlu konfigurasi apapun di `appsettings.json` — semua
+diatur dari tab **LTI** di [/admin](/admin/lti).
+
+**Cara daftarkan LMS baru:**
+
+1. Buka tab **LTI** di admin panel — bagian "Tool configuration" menampilkan 4 URL milik
+   BeeCoding: OIDC login initiation, launch/redirect, JWKS publik, dan Deep Linking (URL
+   yang sama dengan launch). Salin ke form registrasi *external tool*/*LTI Advantage* di
+   LMS-nya.
+2. LMS akan menerbitkan: **issuer**, **client ID**, **deployment ID**, dan tiga URL
+   miliknya sendiri (auth login, auth token, key set/JWKS). Isi ke form "Add platform"
+   di tab yang sama.
+3. Selesai — dosen tinggal tambahkan BeeCoding sebagai *activity*/*external tool* di
+   course-nya. Peluncuran pertama oleh dosen otomatis membuat board baru (atau, kalau
+   ditambahkan lewat **Deep Linking**, dosen memilih board yang sudah ada); peluncuran
+   berikutnya — oleh siapa pun di course itu — otomatis masuk ke board yang sama.
+
+**Yang didukung:** launch dasar (SSO + auto-provision akun + auto-join board), Deep
+Linking (dosen memilih board dari dalam LMS saat menambah activity), dan grade passback
+(AGS) — skor "soal terpecahkan / total soal" di board terkirim ke gradebook LMS setiap
+kali mahasiswa menyelesaikan soal baru, asal LMS memberi izin *grading* pada activity itu.
+
+**Catatan keamanan:** akun yang dibuat via LTI memakai email asli dari LMS kalau
+platform-nya membagikannya; kalau tidak (mode privasi), dibuatkan email sintetis
+`lti-<platformId>-<sub>@lti.invalid` yang tidak bisa dipakai login manual. Grade
+passback bersifat *best-effort* — kalau LMS-nya tidak bisa dihubungi atau izin
+*grading*-nya dicabut, itu cuma tercatat di log server, tidak pernah menggagalkan
+proses penilaian soal itu sendiri.
+
+---
+
 ## 6. Catatan sandbox / keamanan judge
 
 - **Limit waktu & memori selalu dipaksakan** lewat `setrlimit` (CPU, address space, stack,

@@ -1,6 +1,7 @@
 using BeeCoding.Data;
 using BeeCoding.Models;
 using BeeCoding.Services.Judge;
+using BeeCoding.Services.Lti;
 using Microsoft.EntityFrameworkCore;
 
 namespace BeeCoding.Services;
@@ -66,7 +67,12 @@ public sealed class GradeResultConsumer(
         await notifier.SubmissionResultAsync(sub.UserId,
             Mapping.ToDto(sub, sub.UserId, canSeeCode: true, authorName));
         if (xp > 0)
+        {
             await notifier.ProgressBumpedAsync(sub.UserId, await progress.GetAsync(sub.UserId, ct));
+            // A newly-solved problem is the only time the board-level score (solved/total)
+            // can have moved — no point re-syncing on every wrong attempt.
+            await sp.GetRequiredService<LtiGradeSyncService>().SyncBoardAsync(problem.BoardId, sub.UserId, ct);
+        }
     }
 
     private async Task ApplyPracticeAsync(GradeResult r, CancellationToken ct)

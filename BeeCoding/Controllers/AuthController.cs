@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using System.Security.Cryptography;
 using BeeCoding.Data;
 using BeeCoding.Models;
@@ -173,22 +172,9 @@ public class AuthController(AppDbContext db, PasswordService pw, IConfiguration 
         return NoContent();
     }
 
-    private async Task SignInAsync(User user)
-    {
-        var claims = new List<Claim>
-        {
-            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new(ClaimTypes.Name, user.DisplayName),
-            new(ClaimTypes.Email, user.Email),
-            new(ClaimTypes.Role, user.Role.ToString()),
-        };
-        // Admin is NOT baked in here — it's evaluated fresh from Admin:Emails on every
-        // request (see AdminAccess / the "Admin" authorization policy) so granting or
-        // revoking it takes effect immediately, without a re-login.
-        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-        await HttpContext.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
-            new ClaimsPrincipal(identity),
-            new AuthenticationProperties { IsPersistent = true });
-    }
+    // Admin is NOT baked into the cookie — it's evaluated fresh from Admin:Emails on every
+    // request (see AdminAccess / the "Admin" authorization policy) so granting or revoking
+    // it takes effect immediately, without a re-login. Shared with LtiController — see
+    // CookieSignIn.
+    private Task SignInAsync(User user) => CookieSignIn.SignInAsync(HttpContext, user);
 }
