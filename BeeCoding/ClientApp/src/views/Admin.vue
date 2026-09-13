@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '../lib/api';
 import { withBase } from '../lib/base';
@@ -16,8 +16,8 @@ const tabDefs = [
   ['ai', 'AI'], ['users', 'Users'], ['boards', 'Boards'], ['problems', 'Problems'],
   ['review', 'AI review'], ['reports', 'Reports'], ['trash', 'Trash'], ['audit', 'Audit log'],
 ];
-// Deep-linkable: ?tab=users etc. — reload/share/bookmark lands on the same tab.
-const tab = ref(tabDefs.some((t) => t[0] === route.query.tab) ? route.query.tab : 'ai');
+// Deep-linkable: /admin/users etc. — reload/share/bookmark lands on the same tab.
+const tab = ref(tabDefs.some((t) => t[0] === route.params.tab) ? route.params.tab : 'ai');
 const err = ref('');
 
 const aiRows = ref(null);
@@ -30,9 +30,7 @@ const usersTotal = ref(0);
 const fmt = (n) => (n ?? 0).toLocaleString();
 const when = (d) => new Date(d.endsWith('Z') ? d : d + 'Z').toLocaleString();
 
-function switchTab(id) {
-  tab.value = id;
-  router.replace({ query: { ...route.query, tab: id } });
+function loadTabData(id) {
   if (id === 'ai') {
     if (!aiRows.value) loadAi();
     if (!aiSettings.value) loadAiSettings();
@@ -46,6 +44,18 @@ function switchTab(id) {
   else if (id === 'trash') loadTrash();     // state changes often — always refresh
   else if (id === 'audit' && !auditRows.value) loadAudit();
 }
+function switchTab(id) {
+  if (id === tab.value) return;
+  tab.value = id;
+  router.replace(`/admin/${id}`);
+  loadTabData(id);
+}
+// Browser back/forward (or a direct link to /admin/<tab>) changes route.params.tab
+// without going through switchTab — keep the active tab (and its data) in sync.
+watch(() => route.params.tab, (t) => {
+  const id = tabDefs.some(([k]) => k === t) ? t : 'ai';
+  if (id !== tab.value) { tab.value = id; loadTabData(id); }
+});
 
 // ---- AI settings: kill-switch, quotas, per-user overrides ----
 const aiSettings = ref(null);
@@ -411,7 +421,8 @@ async function importProblems(ev) {
 
 onMounted(async () => {
   if (!auth.user?.isAdmin) { router.replace('/boards'); return; }
-  switchTab(tab.value);
+  if (route.params.tab !== tab.value) router.replace(`/admin/${tab.value}`);
+  loadTabData(tab.value);
 });
 </script>
 
