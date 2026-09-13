@@ -125,6 +125,15 @@ public record AdminPageDto<T>(List<T> Rows, int Total, int Page, int PageSize);
 public record AdminAuditLogRow(int Id, DateTime CreatedAt, string ActorEmail, string Action,
     string TargetType, int TargetId, string TargetLabel);
 
+// ---- Admin: dashboard (overview landing tab) ----
+public record AdminDashboardDto(
+    int TotalUsers, int TeacherCount, int StudentCount, int AdminCount,
+    int TotalBoards, int TotalProblems, int TotalBankProblems,
+    int TotalSubmissions, int AcceptedSubmissions,
+    int PendingAiReview, int TrashCount,
+    AdminAiUsageBucket AiToday, AdminAiUsageBucket AiMonth,
+    List<AdminAuditLogRow> RecentActivity);
+
 // ---- Admin: role / admin-flag management ----
 public record AdminChangeRoleDto(string Role);   // "Teacher" | "Student"
 

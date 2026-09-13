@@ -38,6 +38,58 @@ public class AdminUiController(
     private readonly JudgeOptions _judgeOpt = judgeOpt.Value;
     private readonly RealtimeStoreOptions _realtimeOpt = realtimeOpt.Value;
 
+    // ---- dashboard: at-a-glance overview, the default landing tab -----------
+    [HttpGet("dashboard")]
+    public async Task<ActionResult<AdminDashboardDto>> Dashboard()
+    {
+        // In-memory: adminCount needs AdminAccess.IsAdminEmail (DB flag + Admin:Emails
+        // config union), which doesn't translate to SQL.
+        var activeUsers = await _db.Users.Where(u => u.DeletedAt == null)
+            .Select(u => new { u.Email, u.Role }).ToListAsync();
+        var totalUsers = activeUsers.Count;
+        var teacherCount = activeUsers.Count(u => u.Role == UserRole.Teacher);
+        var studentCount = activeUsers.Count(u => u.Role == UserRole.Student);
+        var adminCount = activeUsers.Count(u => _admin.IsAdminEmail(u.Email));
+
+        var totalBoards = await _db.Boards.CountAsync();
+        var totalProblems = await _db.Problems.CountAsync();
+        var totalBankProblems = await _db.BankProblems.CountAsync();
+
+        var totalSubmissions = await _db.Submissions.CountAsync() + await _db.BankSubmissions.CountAsync();
+        var acceptedSubmissions = await _db.Submissions.CountAsync(s => s.Verdict == Verdict.Accepted)
+            + await _db.BankSubmissions.CountAsync(s => s.Verdict == Verdict.Accepted);
+
+        var pendingAiReview = await _db.BankProblems.CountAsync(b => b.PendingReview);
+
+        var trashCount = await _db.Users.CountAsync(u => u.DeletedAt != null)
+            + await _db.Boards.IgnoreQueryFilters().CountAsync(b => b.DeletedAt != null)
+            + await _db.Problems.IgnoreQueryFilters().CountAsync(p => p.DeletedAt != null)
+            + await _db.BankProblems.IgnoreQueryFilters().CountAsync(b => b.DeletedAt != null);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var monthStart = new DateOnly(today.Year, today.Month, 1);
+        var usage = await _db.AiUsages.Where(x => x.Day >= monthStart).ToListAsync();
+        static AdminAiUsageBucket Sum(IEnumerable<AiUsage> xs)
+        {
+            int c = 0; long p = 0, k = 0;
+            foreach (var x in xs) { c += x.Calls; p += x.PromptTokens; k += x.CompletionTokens; }
+            return new AdminAiUsageBucket(c, p, k, p + k);
+        }
+        var aiToday = Sum(usage.Where(x => x.Day == today));
+        var aiMonth = Sum(usage);
+
+        var recentActivity = await _db.AuditLogEntries.OrderByDescending(x => x.CreatedAt).Take(8)
+            .Select(x => new AdminAuditLogRow(x.Id, x.CreatedAt, x.ActorEmail, x.Action, x.TargetType, x.TargetId, x.TargetLabel))
+            .ToListAsync();
+
+        return new AdminDashboardDto(
+            totalUsers, teacherCount, studentCount, adminCount,
+            totalBoards, totalProblems, totalBankProblems,
+            totalSubmissions, acceptedSubmissions,
+            pendingAiReview, trashCount,
+            aiToday, aiMonth, recentActivity);
+    }
+
     // ---- users -------------------------------------------------------------
     [HttpGet("users")]
     public async Task<ActionResult<AdminUserPageDto>> Users(

@@ -13,11 +13,11 @@ const router = useRouter();
 const confirmDialog = useConfirmDialog();
 const undoToast = useUndoToast();
 const tabDefs = [
-  ['ai', 'AI'], ['users', 'Users'], ['boards', 'Boards'], ['problems', 'Problems'],
+  ['dashboard', 'Dashboard'], ['ai', 'AI'], ['users', 'Users'], ['boards', 'Boards'], ['problems', 'Problems'],
   ['review', 'AI review'], ['reports', 'Reports'], ['trash', 'Trash'], ['audit', 'Audit log'],
 ];
 // Deep-linkable: /admin/users etc. — reload/share/bookmark lands on the same tab.
-const tab = ref(tabDefs.some((t) => t[0] === route.params.tab) ? route.params.tab : 'ai');
+const tab = ref(tabDefs.some((t) => t[0] === route.params.tab) ? route.params.tab : 'dashboard');
 const err = ref('');
 
 const aiRows = ref(null);
@@ -29,9 +29,16 @@ const usersTotal = ref(0);
 
 const fmt = (n) => (n ?? 0).toLocaleString();
 const when = (d) => new Date(d.endsWith('Z') ? d : d + 'Z').toLocaleString();
+const actionBadgeClass = (action) => ({
+  'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300': ['delete', 'admin-revoke', 'ai-ban', 'ai-pause', 'ai-review-reject'].includes(action),
+  'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300': ['restore', 'create', 'ai-resume', 'ai-review-approve'].includes(action),
+  'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300': ['purge', 'ai-override-clear'].includes(action),
+  'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300': ['admin-grant', 'role-change', 'ai-quota-set'].includes(action),
+});
 
 function loadTabData(id) {
-  if (id === 'ai') {
+  if (id === 'dashboard') { if (!dashboard.value) loadDashboard(); }
+  else if (id === 'ai') {
     if (!aiRows.value) loadAi();
     if (!aiSettings.value) loadAiSettings();
     if (!aiOverrides.value) loadAiOverrides();
@@ -53,9 +60,17 @@ function switchTab(id) {
 // Browser back/forward (or a direct link to /admin/<tab>) changes route.params.tab
 // without going through switchTab — keep the active tab (and its data) in sync.
 watch(() => route.params.tab, (t) => {
-  const id = tabDefs.some(([k]) => k === t) ? t : 'ai';
+  const id = tabDefs.some(([k]) => k === t) ? t : 'dashboard';
   if (id !== tab.value) { tab.value = id; loadTabData(id); }
 });
+
+// ---- dashboard: at-a-glance overview, the default landing tab ----
+const dashboard = ref(null);
+async function loadDashboard() {
+  err.value = '';
+  try { dashboard.value = await api.get('/api/admin-ui/dashboard'); }
+  catch (e) { err.value = e.message; }
+}
 
 // ---- AI settings: kill-switch, quotas, per-user overrides ----
 const aiSettings = ref(null);
@@ -439,6 +454,84 @@ onMounted(async () => {
     </div>
 
     <p v-if="err" class="text-sm text-red-600 dark:text-red-400 mb-3">{{ err }}</p>
+
+    <!-- Dashboard: at-a-glance overview -->
+    <section v-show="tab === 'dashboard'" class="space-y-5">
+      <button @click="loadDashboard" class="text-xs text-slate-500 dark:text-slate-400">↻ refresh</button>
+
+      <div v-if="dashboard" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <button type="button" @click="switchTab('users')" class="text-left border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:border-slate-300 dark:hover:border-slate-700">
+          <div class="text-xs text-slate-400 dark:text-slate-500">Users</div>
+          <div class="text-2xl font-bold">{{ fmt(dashboard.totalUsers) }}</div>
+          <div class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+            {{ dashboard.teacherCount }} teacher · {{ dashboard.studentCount }} student · {{ dashboard.adminCount }} admin
+          </div>
+        </button>
+
+        <button type="button" @click="switchTab('boards')" class="text-left border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:border-slate-300 dark:hover:border-slate-700">
+          <div class="text-xs text-slate-400 dark:text-slate-500">Boards</div>
+          <div class="text-2xl font-bold">{{ fmt(dashboard.totalBoards) }}</div>
+        </button>
+
+        <div class="border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+          <div class="text-xs text-slate-400 dark:text-slate-500">Problems</div>
+          <div class="text-2xl font-bold">{{ fmt(dashboard.totalProblems + dashboard.totalBankProblems) }}</div>
+          <div class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+            {{ fmt(dashboard.totalProblems) }} on boards · {{ fmt(dashboard.totalBankProblems) }} in bank
+          </div>
+        </div>
+
+        <div class="border border-slate-200 dark:border-slate-800 rounded-xl p-4">
+          <div class="text-xs text-slate-400 dark:text-slate-500">Submissions</div>
+          <div class="text-2xl font-bold">{{ fmt(dashboard.totalSubmissions) }}</div>
+          <div class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+            {{ dashboard.totalSubmissions ? Math.round(100 * dashboard.acceptedSubmissions / dashboard.totalSubmissions) : 0 }}% accepted
+          </div>
+        </div>
+
+        <button type="button" @click="switchTab('review')" class="text-left border rounded-xl p-4"
+                :class="dashboard.pendingAiReview
+                  ? 'border-amber-300 dark:border-amber-500/40 bg-amber-50/50 dark:bg-amber-500/5 hover:border-amber-400'
+                  : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'">
+          <div class="text-xs text-slate-400 dark:text-slate-500">Pending AI review</div>
+          <div class="text-2xl font-bold">{{ fmt(dashboard.pendingAiReview) }}</div>
+        </button>
+
+        <button type="button" @click="switchTab('trash')" class="text-left border rounded-xl p-4"
+                :class="dashboard.trashCount
+                  ? 'border-rose-300 dark:border-rose-500/40 bg-rose-50/50 dark:bg-rose-500/5 hover:border-rose-400'
+                  : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'">
+          <div class="text-xs text-slate-400 dark:text-slate-500">In trash</div>
+          <div class="text-2xl font-bold">{{ fmt(dashboard.trashCount) }}</div>
+        </button>
+
+        <button type="button" @click="switchTab('ai')" class="text-left border border-slate-200 dark:border-slate-800 rounded-xl p-4 hover:border-slate-300 dark:hover:border-slate-700">
+          <div class="text-xs text-slate-400 dark:text-slate-500">AI calls today / this month</div>
+          <div class="text-2xl font-bold">{{ fmt(dashboard.aiToday.calls) }} / {{ fmt(dashboard.aiMonth.calls) }}</div>
+        </button>
+      </div>
+      <p v-else-if="!dashboard" class="text-slate-400 dark:text-slate-500 text-sm">Loading…</p>
+
+      <div v-if="dashboard">
+        <div class="flex items-center gap-2 mb-1.5">
+          <h2 class="font-semibold text-sm">Recent activity</h2>
+          <button @click="switchTab('audit')" class="text-xs text-slate-400 dark:text-slate-500 hover:underline">view all</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <tbody class="[&_td]:py-1.5 [&_td]:pr-3">
+              <tr v-for="r in dashboard.recentActivity" :key="r.id" class="border-b border-slate-100 dark:border-slate-800/60">
+                <td class="text-[11px] text-slate-400 whitespace-nowrap">{{ when(r.createdAt) }}</td>
+                <td class="text-[11px]">{{ r.actorEmail }}</td>
+                <td><span class="text-[11px] px-1.5 py-0.5 rounded-full" :class="actionBadgeClass(r.action)">{{ r.action }}</span></td>
+                <td class="text-[11px]">{{ r.targetType }} · {{ r.targetLabel }}</td>
+              </tr>
+              <tr v-if="!dashboard.recentActivity.length"><td colspan="4" class="text-slate-400 dark:text-slate-500 py-3">No activity yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
 
     <!-- AI usage -->
     <section v-show="tab === 'ai'" class="space-y-5">
@@ -958,13 +1051,7 @@ onMounted(async () => {
               <td class="text-[11px] text-slate-400 whitespace-nowrap">{{ when(r.createdAt) }}</td>
               <td class="text-[11px]">{{ r.actorEmail }}</td>
               <td>
-                <span class="text-[11px] px-1.5 py-0.5 rounded-full"
-                      :class="{
-                        'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300': ['delete', 'admin-revoke', 'ai-ban', 'ai-pause', 'ai-review-reject'].includes(r.action),
-                        'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300': ['restore', 'create', 'ai-resume', 'ai-review-approve'].includes(r.action),
-                        'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300': ['purge', 'ai-override-clear'].includes(r.action),
-                        'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300': ['admin-grant', 'role-change', 'ai-quota-set'].includes(r.action),
-                      }">{{ r.action }}</span>
+                <span class="text-[11px] px-1.5 py-0.5 rounded-full" :class="actionBadgeClass(r.action)">{{ r.action }}</span>
               </td>
               <td class="text-[11px]">{{ r.targetType }} · {{ r.targetLabel }}</td>
             </tr>
