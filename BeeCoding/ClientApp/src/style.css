@@ -3,7 +3,13 @@
 /* Manual dark mode driven by a `.dark` class on <html> (see src/lib/theme.js). */
 @custom-variant dark (&:where(.dark, .dark *));
 
-html { color-scheme: light dark; }
+/* Native widgets (checkboxes, scrollbars, ...) must follow the app's own manual
+   .dark class, not the OS's prefers-color-scheme — otherwise, when the two disagree
+   (e.g. theme set to "light" while the OS is in dark mode), the browser renders
+   checkboxes etc. in dark-native style on an otherwise light page (looks like a
+   plain black checkbox). */
+html { color-scheme: light; }
+html.dark { color-scheme: dark; }
 html, body { height: 100%; }
 /* --app-h is the live *visual* viewport height (App.vue) so the soft keyboard
    shrinks the app instead of covering the editor. Falls back to the dynamic
