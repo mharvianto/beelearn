@@ -6,8 +6,20 @@
 	"image": "mcr.microsoft.com/devcontainers/dotnet:2-10.0-noble",
 	"features": {
 		"ghcr.io/devcontainers/features/node:2": {},
-		"ghcr.io/anthropics/devcontainer-features/claude-code:latest": {} 
+		"ghcr.io/anthropics/devcontainer-features/claude-code:latest": {}
 	},
+
+	// Let the judge use bwrap (real filesystem/network isolation) instead of
+	// rlimits-only. seccomp/apparmor=unconfined lets the container create user
+	// namespaces; systempaths=unconfined drops Docker's masked/read-only mounts
+	// under /proc, which otherwise block bwrap's `--unshare-pid --proc /proc`
+	// with "Can't mount proc: Operation not permitted".
+	// Rebuild the container after changing this. Last resort: "--privileged".
+	"runArgs": [
+		"--security-opt", "seccomp=unconfined",
+		"--security-opt", "apparmor=unconfined",
+		"--security-opt", "systempaths=unconfined"
+	],
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},
@@ -27,7 +39,8 @@
 	"customizations": {
 		"vscode": {
 			"extensions": [
-				"ms-dotnettools.csdevkit"
+				"ms-dotnettools.csdevkit",
+				"Vue.volar"
 			]
 		}
 	},
