@@ -40,8 +40,12 @@ public class AdminUiController(
 
     // ---- users -------------------------------------------------------------
     [HttpGet("users")]
-    public async Task<ActionResult<IEnumerable<AdminUserRow>>> Users([FromQuery] string? q)
+    public async Task<ActionResult<AdminUserPageDto>> Users(
+        [FromQuery] string? q, [FromQuery] int page = 1, [FromQuery] int pageSize = 25)
     {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 200);
+
         var query = _db.Users.Where(u => u.DeletedAt == null);
         if (!string.IsNullOrWhiteSpace(q))
         {
@@ -49,16 +53,21 @@ public class AdminUiController(
             query = query.Where(u => EF.Functions.Like(u.Email, $"%{n}%") || EF.Functions.Like(u.DisplayName, $"%{n}%"));
         }
 
-        var users = await query.OrderBy(u => u.Id).ToListAsync();
-        var ownedByUser = await _db.Boards.GroupBy(b => b.OwnerId)
+        var total = await query.CountAsync();
+        var users = await query.OrderBy(u => u.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+
+        var ids = users.Select(u => u.Id).ToList();
+        var ownedByUser = await _db.Boards.Where(b => ids.Contains(b.OwnerId)).GroupBy(b => b.OwnerId)
             .Select(g => new { g.Key, C = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.C);
-        var subsByUser = await _db.Submissions.GroupBy(s => s.UserId)
+        var subsByUser = await _db.Submissions.Where(s => ids.Contains(s.UserId)).GroupBy(s => s.UserId)
             .Select(g => new { g.Key, C = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.C);
 
-        return users.Select(u => new AdminUserRow(
+        var rows = users.Select(u => new AdminUserRow(
             u.Id, u.Email, u.DisplayName, u.Role.ToString(), _admin.IsAdminEmail(u.Email),
             u.Xp, u.CreatedAt,
             ownedByUser.GetValueOrDefault(u.Id), subsByUser.GetValueOrDefault(u.Id))).ToList();
+
+        return new AdminUserPageDto(rows, total, page, pageSize);
     }
 
     /// <summary>Soft-delete a user (blocks login immediately; an active session is signed

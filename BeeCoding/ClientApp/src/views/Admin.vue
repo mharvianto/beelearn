@@ -19,6 +19,9 @@ const err = ref('');
 const aiRows = ref(null);
 const users = ref(null);
 const userQ = ref('');
+const usersPage = ref(1);
+const usersPageSize = ref(25);
+const usersTotal = ref(0);
 
 const fmt = (n) => (n ?? 0).toLocaleString();
 const when = (d) => new Date(d.endsWith('Z') ? d : d + 'Z').toLocaleString();
@@ -117,15 +120,24 @@ async function loadAi() {
 }
 async function loadUsers() {
   err.value = '';
-  try { users.value = await api.get('/api/admin-ui/users' + (userQ.value.trim() ? `?q=${encodeURIComponent(userQ.value.trim())}` : '')); }
-  catch (e) { err.value = e.message; }
+  selectedUsers.value = new Set();
+  try {
+    const p = new URLSearchParams({ page: String(usersPage.value), pageSize: String(usersPageSize.value) });
+    if (userQ.value.trim()) p.set('q', userQ.value.trim());
+    const result = await api.get(`/api/admin-ui/users?${p}`);
+    users.value = result.rows;
+    usersTotal.value = result.total;
+  } catch (e) { err.value = e.message; }
 }
+function searchUsers() { usersPage.value = 1; loadUsers(); }
+function usersPrevPage() { if (usersPage.value > 1) { usersPage.value--; loadUsers(); } }
+function usersNextPage() { if (usersPage.value * usersPageSize.value < usersTotal.value) { usersPage.value++; loadUsers(); } }
 
 async function deleteUser(u) {
   err.value = '';
   try {
     await api.del(`/api/admin-ui/users/${u.id}`);
-    users.value = users.value.filter((x) => x.id !== u.id);
+    await loadUsers();
     undoToast.show(`"${u.displayName}" deleted.`, async () => {
       await api.post(`/api/admin-ui/users/${u.id}/restore`);
       await loadUsers();
@@ -455,9 +467,9 @@ onMounted(async () => {
     <!-- Users -->
     <section v-show="tab === 'users'">
       <div class="flex gap-2 mb-3">
-        <input v-model="userQ" @keyup.enter="loadUsers" placeholder="Search name or email…"
+        <input v-model="userQ" @keyup.enter="searchUsers" placeholder="Search name or email…"
                class="flex-1 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-2 text-sm" />
-        <button @click="loadUsers" class="text-sm bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4">Search</button>
+        <button @click="searchUsers" class="text-sm bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4">Search</button>
       </div>
       <div v-if="selectedUsers.size" class="flex items-center gap-2 mb-2 text-sm">
         <span>{{ selectedUsers.size }} selected</span>
@@ -511,6 +523,17 @@ onMounted(async () => {
             <tr v-if="users && !users.length"><td colspan="9" class="text-slate-400 dark:text-slate-500 py-3">No users.</td></tr>
           </tbody>
         </table>
+      </div>
+      <div v-if="usersTotal" class="flex items-center gap-3 mt-3 text-sm">
+        <span class="text-slate-400 dark:text-slate-500">
+          {{ (usersPage - 1) * usersPageSize + 1 }}–{{ Math.min(usersPage * usersPageSize, usersTotal) }} of {{ usersTotal }}
+        </span>
+        <div class="ml-auto flex gap-2">
+          <button @click="usersPrevPage" :disabled="usersPage === 1"
+                  class="px-3 py-1 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-40">Prev</button>
+          <button @click="usersNextPage" :disabled="usersPage * usersPageSize >= usersTotal"
+                  class="px-3 py-1 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-40">Next</button>
+        </div>
       </div>
 
       <div class="mt-5 border border-slate-200 dark:border-slate-800 rounded-xl p-4">

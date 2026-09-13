@@ -92,6 +92,7 @@ public record AdminIngestResultDto(
 // ---- Admin panel (cookie-authed, Admin:Emails) ----
 public record AdminUserRow(int Id, string Email, string DisplayName, string Role, bool IsAdmin,
     int Xp, DateTime CreatedAt, int OwnedBoards, int Submissions);
+public record AdminUserPageDto(List<AdminUserRow> Rows, int Total, int Page, int PageSize);
 
 public record AdminAiUsageBucket(int Calls, long PromptTokens, long CompletionTokens, long TotalTokens);
 public record AdminAiUsageRow(int UserId, string Email, string DisplayName,
