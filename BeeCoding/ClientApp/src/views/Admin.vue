@@ -676,6 +676,15 @@ onMounted(async () => {
             Weekly engagement
           </button>
         </div>
+        <div class="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <button @click="downloadFile('/api/admin-ui/analytics/report.xlsx', 'beecoding-report.xlsx')"
+                  class="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 py-1.5 text-sm font-medium">
+            📊 Export all as Excel (.xlsx)
+          </button>
+          <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+            One workbook, three sheets — Topics, Users, Weekly engagement.
+          </p>
+        </div>
       </div>
 
       <div class="border border-slate-200 dark:border-slate-800 rounded-xl p-4">

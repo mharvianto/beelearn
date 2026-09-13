@@ -6,6 +6,7 @@ using BeeCoding.Services;
 using BeeCoding.Services.Ai;
 using BeeCoding.Services.Judge;
 using BeeCoding.Services.Realtime;
+using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -597,9 +598,40 @@ public class AdminUiController(
         return NoContent();
     }
 
-    // ---- analytics export (CSV) — also usable as grant/report evidence ------
+    // ---- analytics export (CSV + Excel) — also usable as grant/report evidence ----
     [HttpGet("analytics/topics.csv")]
-    public async Task<IActionResult> TopicsCsv()
+    public async Task<IActionResult> TopicsCsv() => CsvFile(await TopicsRowsAsync(), "topic-stats.csv");
+
+    [HttpGet("analytics/users.csv")]
+    public async Task<IActionResult> UsersCsv() => CsvFile(await UsersRowsAsync(), "user-xp.csv");
+
+    [HttpGet("analytics/engagement.csv")]
+    public async Task<IActionResult> EngagementCsv([FromQuery] int weeks = 12) => CsvFile(await EngagementRowsAsync(weeks), "weekly-engagement.csv");
+
+    [HttpGet("analytics/report.xlsx")]
+    public async Task<IActionResult> ReportXlsx([FromQuery] int weeks = 12)
+    {
+        using var wb = new XLWorkbook();
+        WriteSheet(wb, "Topics", await TopicsRowsAsync());
+        WriteSheet(wb, "Users", await UsersRowsAsync());
+        WriteSheet(wb, "Weekly engagement", await EngagementRowsAsync(weeks));
+        using var ms = new MemoryStream();
+        wb.SaveAs(ms);
+        return File(ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "beecoding-report.xlsx");
+    }
+
+    private static void WriteSheet(XLWorkbook wb, string sheetName, List<string[]> rows)
+    {
+        var ws = wb.Worksheets.Add(sheetName);
+        for (var r = 0; r < rows.Count; r++)
+            for (var c = 0; c < rows[r].Length; c++)
+                ws.Cell(r + 1, c + 1).Value = rows[r][c];
+        if (rows.Count > 0) ws.Row(1).Style.Font.Bold = true;
+        ws.SheetView.FreezeRows(1);
+        ws.Columns().AdjustToContents();
+    }
+
+    private async Task<List<string[]>> TopicsRowsAsync()
     {
         var boardProblems = await _db.Problems.Select(p => new { p.Id, p.Tags }).ToListAsync();
         var bankProblems = await _db.BankProblems.Select(p => new { p.Id, p.Tags }).ToListAsync();
@@ -639,7 +671,7 @@ public class AdminUiController(
             var rate = a.Attempts > 0 ? (a.Accepted / (double)a.Attempts).ToString("0.00") : "";
             rows.Add(new[] { tag, a.ProblemIds.Count.ToString(), a.Attempts.ToString(), a.Accepted.ToString(), rate, a.Solvers.Count.ToString() });
         }
-        return CsvFile(rows, "topic-stats.csv");
+        return rows;
     }
 
     private sealed class TopicAgg
@@ -650,8 +682,7 @@ public class AdminUiController(
         public HashSet<int> Solvers { get; } = new();
     }
 
-    [HttpGet("analytics/users.csv")]
-    public async Task<IActionResult> UsersCsv()
+    private async Task<List<string[]>> UsersRowsAsync()
     {
         var users = await _db.Users.OrderBy(u => u.Id)
             .Select(u => new { u.Id, u.Email, u.DisplayName, u.Role, u.Xp, u.CreatedAt }).ToListAsync();
@@ -661,11 +692,10 @@ public class AdminUiController(
             u.Id.ToString(), u.Email, u.DisplayName, u.Role.ToString(),
             u.Xp.ToString(), ProgressService.LevelForXp(u.Xp).ToString(), u.CreatedAt.ToString("O"),
         }));
-        return CsvFile(rows, "user-xp.csv");
+        return rows;
     }
 
-    [HttpGet("analytics/engagement.csv")]
-    public async Task<IActionResult> EngagementCsv([FromQuery] int weeks = 12)
+    private async Task<List<string[]>> EngagementRowsAsync(int weeks)
     {
         weeks = Math.Clamp(weeks, 1, 52);
         var boardActivity = await _db.Submissions.Select(s => new { s.UserId, s.CreatedAt }).ToListAsync();
@@ -684,7 +714,7 @@ public class AdminUiController(
 
         var rows = new List<string[]> { new[] { "WeekStart", "ActiveUsers", "TotalSubmissions" } };
         rows.AddRange(byWeek);
-        return CsvFile(rows, "weekly-engagement.csv");
+        return rows;
     }
 
     private FileContentResult CsvFile(IEnumerable<string[]> rows, string fileName)
