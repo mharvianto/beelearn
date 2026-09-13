@@ -735,6 +735,40 @@ proses penilaian soal itu sendiri.
 
 ---
 
+## 5B. Multi-tenant: beberapa organisasi/institusi dalam satu deployment
+
+Berguna kalau satu instance BeeCoding dipakai lebih dari satu universitas/institusi
+sekaligus — tiap organisasi punya kuota AI sendiri dan **Org Admin**-nya sendiri, yang
+hanya melihat data organisasinya sendiri (tidak pernah bisa melihat organisasi lain).
+Satu user boleh jadi anggota beberapa organisasi, atau tidak sama sekali (normal, bukan
+kasus khusus).
+
+**Setup:**
+
+1. Super admin (Admin:Emails) bikin organisasi di tab **Organizations** (`/admin`) — cukup
+   nama + slug.
+2. Cara board masuk ke suatu organisasi:
+   - **Via LTI (paling otomatis):** di tab **LTI**, set field "Organization" saat
+     daftarkan platform sebuah universitas. Setiap launch lewat platform itu otomatis
+     meng-enroll user ke organisasi tsb, dan board yang otomatis dibuat ikut organisasi
+     itu — tidak perlu setting manual apa-apa lagi setelahnya.
+   - **Manual:** dosen yang sudah jadi anggota suatu organisasi bisa memilihnya saat bikin
+     board baru; kalau dia cuma anggota satu organisasi, otomatis terpilih.
+3. Super admin promosikan salah satu anggota organisasi jadi **Org Admin** lewat
+   `/org-admin` (pilih organisasi → tab Members → ubah role jadi Admin). Org Admin itu
+   sendiri lalu bisa kelola member/board/AI settings organisasinya dari halaman yang sama,
+   tanpa butuh akses super admin.
+
+**Yang bisa diatur Org Admin (di `/org-admin`):** anggota (tambah/hapus/ubah role),
+lihat daftar board organisasinya, dan kuota + pause AI khusus organisasinya (pause di
+level organisasi tidak pernah mengalahkan kill-switch platform di `/admin` — kalau
+platform di-pause, semua organisasi ikut ter-pause).
+
+**Yang TIDAK ada di Org Admin** (sengaja dibatasi ke super admin/`/admin`, karena
+lintas-organisasi): trash/restore, audit log, dan export laporan CSV/Excel.
+
+---
+
 ## 6. Catatan sandbox / keamanan judge
 
 - **Limit waktu & memori selalu dipaksakan** lewat `setrlimit` (CPU, address space, stack,

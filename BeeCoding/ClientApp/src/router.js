@@ -17,6 +17,7 @@ const routes = [
   { path: '/leaderboard', component: () => import('./views/Leaderboard.vue') },
   { path: '/account', component: () => import('./views/Account.vue') },
   { path: '/admin/:tab?', component: () => import('./views/Admin.vue') },
+  { path: '/org-admin', component: () => import('./views/OrgAdmin.vue') },
   { path: '/lti/deep-link', component: () => import('./views/LtiDeepLink.vue') },
   { path: '/boards/:slug', component: () => import('./views/Board.vue'), props: true },
   { path: '/boards/:slug/live', component: () => import('./views/LiveCode.vue'), props: true },

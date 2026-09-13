@@ -30,7 +30,7 @@ public record AiGenerateDto(string? Idea, string? Level, string? Language, int? 
 [Authorize]
 [Route("api/ai")]
 public class AiController(AppDbContext db, BoardService boards, AiTutorService ai,
-    AiUsageService usage, AiHintProgressService prog, IJudgeQueue queue, IOptions<AiOptions> opt,
+    AiUsageService usage, AiHintProgressService prog, OrgResolver orgs, IJudgeQueue queue, IOptions<AiOptions> opt,
     IAiJobStore jobs, IServiceScopeFactory scopes, ILogger<AiController> log) : ApiControllerBase
 {
     private readonly AppDbContext _db = db;
@@ -38,6 +38,7 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
     private readonly AiTutorService _ai = ai;
     private readonly AiUsageService _usage = usage;
     private readonly AiHintProgressService _prog = prog;
+    private readonly OrgResolver _orgs = orgs;
     private readonly IJudgeQueue _queue = queue;
     private readonly AiOptions _opt = opt.Value;
     private readonly IAiJobStore _jobs = jobs;
@@ -66,7 +67,7 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
         if (CurrentRole != "Teacher") return StatusCode(StatusCodes.Status403Forbidden, "Teachers only.");
         if (string.IsNullOrWhiteSpace(dto.Idea)) return BadRequest("Describe the idea or topic.");
         if (RateLimited()) return StatusCode(StatusCodes.Status429TooManyRequests, "Give the AI a few seconds.");
-        var (allowed, reason) = await _usage.CheckGateAsync(UserId, CurrentRole);
+        var (allowed, reason) = await _usage.CheckGateAsync(UserId, CurrentRole, await _orgs.ForUserAsync(UserId));
         if (!allowed) return StatusCode(StatusCodes.Status429TooManyRequests, reason);
         if (await _jobs.RunningForAsync(UserId) >= 2)
             return StatusCode(StatusCodes.Status429TooManyRequests, "You already have generations running — wait for those to finish.");
@@ -194,7 +195,7 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
         if (!_ai.Available) return NotFound();
         if (CurrentRole != "Teacher") return StatusCode(StatusCodes.Status403Forbidden, "Teachers only.");
         if (RateLimited()) return StatusCode(StatusCodes.Status429TooManyRequests, "Give the AI a few seconds.");
-        var (allowed, reason) = await _usage.CheckGateAsync(UserId, CurrentRole);
+        var (allowed, reason) = await _usage.CheckGateAsync(UserId, CurrentRole, await _orgs.ForUserAsync(UserId));
         if (!allowed) return StatusCode(StatusCodes.Status429TooManyRequests, reason);
         if (await _jobs.RunningForAsync(UserId) >= 2)
             return StatusCode(StatusCodes.Status429TooManyRequests, "You already have generations running — wait for those to finish.");
@@ -313,7 +314,8 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
     {
         if (!_ai.Available) return NotFound();
         if (RateLimited()) return StatusCode(StatusCodes.Status429TooManyRequests, "Give the AI tutor a few seconds between questions.");
-        var (allowed, reason) = await _usage.CheckGateAsync(UserId, CurrentRole);
+        var orgId = await _orgs.ForHintAsync(dto.ProblemId, dto.BoardSlug, UserId);
+        var (allowed, reason) = await _usage.CheckGateAsync(UserId, CurrentRole, orgId);
         if (!allowed) return StatusCode(StatusCodes.Status429TooManyRequests, reason);
 
         var (ctx, err) = await BuildContextAsync(dto);
@@ -337,7 +339,8 @@ public class AiController(AppDbContext db, BoardService boards, AiTutorService a
     {
         if (!_ai.Available) { Response.StatusCode = StatusCodes.Status404NotFound; return; }
         if (RateLimited()) { Response.StatusCode = StatusCodes.Status429TooManyRequests; return; }
-        var (allowed, reason) = await _usage.CheckGateAsync(UserId, CurrentRole);
+        var orgId = await _orgs.ForHintAsync(dto.ProblemId, dto.BoardSlug, UserId);
+        var (allowed, reason) = await _usage.CheckGateAsync(UserId, CurrentRole, orgId);
         if (!allowed) { Response.StatusCode = StatusCodes.Status429TooManyRequests; await Response.WriteAsync(reason ?? ""); return; }
 
         var (ctx, err) = await BuildContextAsync(dto);

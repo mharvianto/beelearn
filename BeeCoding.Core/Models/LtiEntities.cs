@@ -40,6 +40,12 @@ public class LtiPlatform
 
     public bool Enabled { get; set; } = true;
 
+    /// <summary>Which organization this LMS belongs to, if any. When set, every launch
+    /// through this platform auto-joins the launching user to the organization, and every
+    /// board this platform auto-creates is assigned to it — see LtiProvisioningService.</summary>
+    public int? OrganizationId { get; set; }
+    public Organization? Organization { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 

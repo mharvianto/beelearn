@@ -78,6 +78,14 @@ public class Board
     public int OwnerId { get; set; }
     public User? Owner { get; set; }
 
+    /// <summary>Which organization (if any) this class belongs to — null for a board with
+    /// no institutional affiliation. Scopes Org Admin visibility and (via the board) which
+    /// organization's AI settings apply. Set automatically for a board auto-created by an
+    /// LTI launch (from the platform's own OrganizationId); otherwise chosen by the owner
+    /// at creation time if they belong to more than one organization.</summary>
+    public int? OrganizationId { get; set; }
+    public Organization? Organization { get; set; }
+
     /// <summary>Board-wide exam mode: students never see peers' answers/progress.</summary>
     public bool ExamMode { get; set; }
 
@@ -436,8 +444,20 @@ public class AiUsage
 /// for the in-memory cache this backs.</summary>
 public class AiSettings
 {
-    public int Id { get; set; } = 1;
+    // No "= 1" default: that was fine while this was a true singleton, but now every
+    // organization gets its own row too (see OrganizationId below) — Program.cs sets Id=1
+    // explicitly for the one platform-default row it seeds; every other row auto-increments.
+    public int Id { get; set; }
 
+    /// <summary>Null = the platform-wide default (always row Id=1 — seeded at startup, see
+    /// Program.cs). A non-null value is one organization's own override, editable only by
+    /// that org's Org Admin (or a super admin) — see OrgAdminController. An organization
+    /// with no row here just uses the platform default.</summary>
+    public int? OrganizationId { get; set; }
+    public Organization? Organization { get; set; }
+
+    /// <summary>An org's own pause only stops that org's AI usage; the platform default row's
+    /// Paused is the one true kill switch — it wins even over an org that isn't paused.</summary>
     public bool Paused { get; set; }
 
     [MaxLength(300)]

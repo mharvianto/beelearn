@@ -28,6 +28,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<LtiUserLink> LtiUserLinks => Set<LtiUserLink>();
     public DbSet<LtiResourceLink> LtiResourceLinks => Set<LtiResourceLink>();
     public DbSet<LtiToolKey> LtiToolKeys => Set<LtiToolKey>();
+    public DbSet<Organization> Organizations => Set<Organization>();
+    public DbSet<OrganizationMembership> OrganizationMemberships => Set<OrganizationMembership>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -39,6 +41,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Board>()
             .HasOne(x => x.Owner).WithMany()
             .HasForeignKey(x => x.OwnerId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<Board>()
+            .HasOne(x => x.Organization).WithMany()
+            .HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.SetNull);
 
         b.Entity<BoardMembership>().HasIndex(x => new { x.BoardId, x.UserId }).IsUnique();
         b.Entity<BoardMembership>()
@@ -153,6 +158,27 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<LtiResourceLink>()
             .HasOne(x => x.Board).WithMany()
             .HasForeignKey(x => x.BoardId).OnDelete(DeleteBehavior.SetNull);
+
+        b.Entity<LtiPlatform>()
+            .HasOne(x => x.Organization).WithMany()
+            .HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.SetNull);
+
+        b.Entity<Organization>().HasIndex(x => x.Slug).IsUnique();
+
+        b.Entity<OrganizationMembership>().HasIndex(x => new { x.OrganizationId, x.UserId }).IsUnique();
+        b.Entity<OrganizationMembership>()
+            .HasOne(x => x.Organization).WithMany()
+            .HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<OrganizationMembership>()
+            .HasOne(x => x.User).WithMany()
+            .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+        // Id=1 is always the platform-wide default (OrganizationId == null); every other
+        // row is one organization's own override.
+        b.Entity<AiSettings>().HasIndex(x => x.OrganizationId).IsUnique().HasFilter("OrganizationId IS NOT NULL");
+        b.Entity<AiSettings>()
+            .HasOne(x => x.Organization).WithMany()
+            .HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Cascade);
     }
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)

@@ -16,13 +16,14 @@ namespace BeeCoding.Controllers;
 [Authorize]
 [Route("api/practice")]
 public class PracticeController(AppDbContext db, IJudgeQueue queue, RateLimiter rate,
-    Services.Ai.AiTutorService ai, Services.Ai.AiUsageService aiUsage) : ApiControllerBase
+    Services.Ai.AiTutorService ai, Services.Ai.AiUsageService aiUsage, OrgResolver orgs) : ApiControllerBase
 {
     private readonly AppDbContext _db = db;
     private readonly IJudgeQueue _queue = queue;
     private readonly RateLimiter _rate = rate;
     private readonly Services.Ai.AiTutorService _ai = ai;
     private readonly Services.Ai.AiUsageService _aiUsage = aiUsage;
+    private readonly OrgResolver _orgs = orgs;
 
     // per-user cache of AI picks (they cost a model call); short TTL.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, (long Ts, List<RecommendationDto> Recs)> _aiCache = new();
@@ -196,7 +197,7 @@ public class PracticeController(AppDbContext db, IJudgeQueue queue, RateLimiter 
         // Best-effort: a paused/banned/over-quota AI just falls back to the heuristic list,
         // no error surfaced — this endpoint's AI use is a nice-to-have, not a request the
         // student explicitly made (unlike the hint/generate endpoints).
-        if (ai && _ai.Available && (await _aiUsage.CheckGateAsync(UserId, CurrentRole)).Allowed)
+        if (ai && _ai.Available && (await _aiUsage.CheckGateAsync(UserId, CurrentRole, await _orgs.ForUserAsync(UserId))).Allowed)
         {
             var cached = _aiCache.GetValueOrDefault(UserId);
             if (cached.Recs is { Count: > 0 } && DateTime.UtcNow.Ticks - cached.Ts < AiTtlTicks)

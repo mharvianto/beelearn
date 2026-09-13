@@ -54,6 +54,19 @@ public class LtiProvisioningService(AppDbContext db, PasswordService pw, BoardSe
             await _db.SaveChangesAsync();
         }
 
+        // A platform tied to an organization auto-enrolls anyone who launches through it —
+        // covers both a brand-new account and an existing one launching that org's LMS for
+        // the first time. Never touches membership in any OTHER organization the user is in.
+        if (platform.OrganizationId is int orgId)
+        {
+            var isMember = await _db.OrganizationMemberships.AnyAsync(m => m.OrganizationId == orgId && m.UserId == user.Id);
+            if (!isMember)
+            {
+                _db.OrganizationMemberships.Add(new OrganizationMembership { OrganizationId = orgId, UserId = user.Id, Role = OrgRole.Member });
+                await _db.SaveChangesAsync();
+            }
+        }
+
         return user;
     }
 
@@ -91,6 +104,7 @@ public class LtiProvisioningService(AppDbContext db, PasswordService pw, BoardSe
             {
                 Title = claims.ResourceLinkTitle ?? claims.ContextTitle ?? "LTI board",
                 OwnerId = user.Id,
+                OrganizationId = platform.OrganizationId,
                 JoinCode = await _boards.GenerateJoinCodeAsync(),
                 Slug = await _boards.GenerateSlugAsync(),
             };

@@ -11,7 +11,7 @@ namespace BeeCoding.Controllers;
 [Authorize]
 [Route("api/boards")]
 public class BoardsController(AppDbContext db, BoardService boards, VisibilityService vis,
-    IBoardNotifier notifier, AdminAccess admin, AuditLog audit) : ApiControllerBase
+    IBoardNotifier notifier, AdminAccess admin, AuditLog audit, OrgResolver orgs) : ApiControllerBase
 {
     private readonly AppDbContext _db = db;
     private readonly BoardService _boards = boards;
@@ -19,6 +19,7 @@ public class BoardsController(AppDbContext db, BoardService boards, VisibilitySe
     private readonly IBoardNotifier _notifier = notifier;
     private readonly AdminAccess _admin = admin;
     private readonly AuditLog _audit = audit;
+    private readonly OrgResolver _orgs = orgs;
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<BoardDto>>> Mine()
@@ -27,6 +28,7 @@ public class BoardsController(AppDbContext db, BoardService boards, VisibilitySe
             .Where(m => m.UserId == UserId)
             .Include(m => m.Board!).ThenInclude(b => b.Members)
             .Include(m => m.Board!).ThenInclude(b => b.Problems)
+            .Include(m => m.Board!).ThenInclude(b => b.Organization)
             .ToListAsync();
 
         // Board's query filter can leave a stale membership's Board navigation null
@@ -44,10 +46,24 @@ public class BoardsController(AppDbContext db, BoardService boards, VisibilitySe
     {
         if (string.IsNullOrWhiteSpace(dto.Title)) return BadRequest("Title is required.");
 
+        int? organizationId;
+        if (dto.OrganizationId is int requested)
+        {
+            var isMember = await _db.OrganizationMemberships.AnyAsync(m => m.OrganizationId == requested && m.UserId == UserId);
+            if (!isMember) return Forbid();
+            organizationId = requested;
+        }
+        else
+        {
+            // Unambiguous only — a teacher in several organizations must pick explicitly.
+            organizationId = await _orgs.ForUserAsync(UserId);
+        }
+
         var board = new Board
         {
             Title = dto.Title.Trim(),
             OwnerId = UserId,
+            OrganizationId = organizationId,
             JoinCode = await _boards.GenerateJoinCodeAsync(),
             Slug = await _boards.GenerateSlugAsync(),
         };
@@ -59,6 +75,7 @@ public class BoardsController(AppDbContext db, BoardService boards, VisibilitySe
             Role = MembershipRole.Owner,
         });
         await _db.SaveChangesAsync();
+        if (organizationId is int orgId) board.Organization = await _db.Organizations.FindAsync(orgId);
 
         return ToDto(board, MembershipRole.Owner);
     }
@@ -70,6 +87,7 @@ public class BoardsController(AppDbContext db, BoardService boards, VisibilitySe
         var board = await _db.Boards
             .Include(b => b.Members)
             .Include(b => b.Problems)
+            .Include(b => b.Organization)
             .FirstOrDefaultAsync(b => b.JoinCode == code);
         if (board is null) return NotFound("No board with that code.");
 
@@ -89,6 +107,7 @@ public class BoardsController(AppDbContext db, BoardService boards, VisibilitySe
         var board = await _db.Boards
             .Include(b => b.Members)
             .Include(b => b.Problems)
+            .Include(b => b.Organization)
             .FirstOrDefaultAsync(b => b.Slug == slug);
         if (board is null) return NotFound();
 
@@ -160,5 +179,6 @@ public class BoardsController(AppDbContext db, BoardService boards, VisibilitySe
         b.Id, b.Slug, b.Title, b.JoinCode, b.ExamMode, b.ProtectContent, b.LecturingMode,
         b.OwnerId == UserId, role.ToString(),
         b.Members?.Count(m => m.Role == MembershipRole.Student) ?? 0,
-        b.Problems?.Count ?? 0);
+        b.Problems?.Count ?? 0,
+        b.OrganizationId, b.Organization?.Name);
 }

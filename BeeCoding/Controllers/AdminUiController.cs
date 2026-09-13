@@ -671,6 +671,43 @@ public class AdminUiController(
         return NoContent();
     }
 
+    // ---- Organizations (multi-tenant) ---------------------------------------
+    /// <summary>Creating/deleting an organization is platform-super-admin only — everything
+    /// else about running one (members, boards, AI settings) is OrgAdminController, which a
+    /// super admin can also call for any org.</summary>
+    [HttpGet("organizations")]
+    public async Task<ActionResult<List<OrganizationDto>>> Organizations()
+    {
+        return await _db.Organizations.OrderBy(o => o.Name)
+            .Select(o => new OrganizationDto(o.Id, o.Name, o.Slug, o.CreatedAt)).ToListAsync();
+    }
+
+    [HttpPost("organizations")]
+    public async Task<ActionResult<OrganizationDto>> CreateOrganization(AdminUpsertOrganizationDto dto)
+    {
+        var name = (dto.Name ?? "").Trim();
+        var slug = (dto.Slug ?? "").Trim().ToLowerInvariant();
+        if (name.Length == 0 || slug.Length == 0) return BadRequest("Name and slug are required.");
+        if (await _db.Organizations.AnyAsync(o => o.Slug == slug)) return Conflict("That slug is already used.");
+
+        var org = new Organization { Name = name, Slug = slug };
+        _db.Organizations.Add(org);
+        await _db.SaveChangesAsync();
+        await _audit.RecordAsync(UserId, ActorEmail, "create", "Organization", org.Id, org.Name);
+        return new OrganizationDto(org.Id, org.Name, org.Slug, org.CreatedAt);
+    }
+
+    [HttpDelete("organizations/{id:int}")]
+    public async Task<IActionResult> DeleteOrganization(int id)
+    {
+        var org = await _db.Organizations.FindAsync(id);
+        if (org is null) return NotFound();
+        _db.Organizations.Remove(org);   // memberships/AiSettings cascade; boards/LtiPlatforms just detach (SetNull)
+        await _db.SaveChangesAsync();
+        await _audit.RecordAsync(UserId, ActorEmail, "delete", "Organization", id, org.Name);
+        return NoContent();
+    }
+
     // ---- LTI 1.3 platform registry ------------------------------------------
     /// <summary>Values an LMS admin needs to register BeeCoding as an external tool.</summary>
     [HttpGet("lti-platforms/tool-config")]
@@ -687,8 +724,9 @@ public class AdminUiController(
     [HttpGet("lti-platforms")]
     public async Task<ActionResult<List<AdminLtiPlatformDto>>> LtiPlatforms()
     {
-        return await _db.LtiPlatforms.OrderBy(p => p.Name).Select(p => new AdminLtiPlatformDto(
-            p.Id, p.Name, p.Issuer, p.ClientId, p.DeploymentIds, p.AuthLoginUrl, p.AuthTokenUrl, p.JwksUrl, p.Enabled, p.CreatedAt))
+        return await _db.LtiPlatforms.Include(p => p.Organization).OrderBy(p => p.Name).Select(p => new AdminLtiPlatformDto(
+            p.Id, p.Name, p.Issuer, p.ClientId, p.DeploymentIds, p.AuthLoginUrl, p.AuthTokenUrl, p.JwksUrl, p.Enabled, p.CreatedAt,
+            p.OrganizationId, p.Organization != null ? p.Organization.Name : null))
             .ToListAsync();
     }
 
@@ -702,11 +740,13 @@ public class AdminUiController(
             Name = dto.Name.Trim(), Issuer = dto.Issuer.Trim(), ClientId = dto.ClientId.Trim(),
             DeploymentIds = dto.DeploymentIds.Trim(), AuthLoginUrl = dto.AuthLoginUrl.Trim(),
             AuthTokenUrl = dto.AuthTokenUrl.Trim(), JwksUrl = dto.JwksUrl.Trim(), Enabled = dto.Enabled,
+            OrganizationId = dto.OrganizationId,
         };
         _db.LtiPlatforms.Add(p);
         await _db.SaveChangesAsync();
         await _audit.RecordAsync(UserId, ActorEmail, "create", "LtiPlatform", p.Id, p.Name);
-        return new AdminLtiPlatformDto(p.Id, p.Name, p.Issuer, p.ClientId, p.DeploymentIds, p.AuthLoginUrl, p.AuthTokenUrl, p.JwksUrl, p.Enabled, p.CreatedAt);
+        var orgName = dto.OrganizationId is int oid ? await _db.Organizations.Where(o => o.Id == oid).Select(o => o.Name).FirstOrDefaultAsync() : null;
+        return new AdminLtiPlatformDto(p.Id, p.Name, p.Issuer, p.ClientId, p.DeploymentIds, p.AuthLoginUrl, p.AuthTokenUrl, p.JwksUrl, p.Enabled, p.CreatedAt, p.OrganizationId, orgName);
     }
 
     [HttpPut("lti-platforms/{id:int}")]
@@ -717,9 +757,11 @@ public class AdminUiController(
         p.Name = dto.Name.Trim(); p.Issuer = dto.Issuer.Trim(); p.ClientId = dto.ClientId.Trim();
         p.DeploymentIds = dto.DeploymentIds.Trim(); p.AuthLoginUrl = dto.AuthLoginUrl.Trim();
         p.AuthTokenUrl = dto.AuthTokenUrl.Trim(); p.JwksUrl = dto.JwksUrl.Trim(); p.Enabled = dto.Enabled;
+        p.OrganizationId = dto.OrganizationId;
         await _db.SaveChangesAsync();
         await _audit.RecordAsync(UserId, ActorEmail, "update", "LtiPlatform", p.Id, p.Name);
-        return new AdminLtiPlatformDto(p.Id, p.Name, p.Issuer, p.ClientId, p.DeploymentIds, p.AuthLoginUrl, p.AuthTokenUrl, p.JwksUrl, p.Enabled, p.CreatedAt);
+        var orgName = dto.OrganizationId is int oid ? await _db.Organizations.Where(o => o.Id == oid).Select(o => o.Name).FirstOrDefaultAsync() : null;
+        return new AdminLtiPlatformDto(p.Id, p.Name, p.Issuer, p.ClientId, p.DeploymentIds, p.AuthLoginUrl, p.AuthTokenUrl, p.JwksUrl, p.Enabled, p.CreatedAt, p.OrganizationId, orgName);
     }
 
     [HttpDelete("lti-platforms/{id:int}")]
@@ -804,7 +846,7 @@ public class AdminUiController(
         var reason = string.IsNullOrWhiteSpace(dto.PausedReason) ? null : dto.PausedReason.Trim();
 
         var s = await _db.AiSettings.FindAsync(1);
-        if (s is null) { s = new AiSettings(); _db.AiSettings.Add(s); }
+        if (s is null) { s = new AiSettings { Id = 1 }; _db.AiSettings.Add(s); }
         var wasPaused = s.Paused;
         s.Paused = dto.Paused;
         s.PausedReason = reason;

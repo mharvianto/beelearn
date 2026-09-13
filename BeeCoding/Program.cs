@@ -200,6 +200,8 @@ builder.Services.AddHostedService<JudgeJanitor>();
 
 builder.Services.AddScoped<VisibilityService>();
 builder.Services.AddScoped<BoardService>();
+builder.Services.AddScoped<OrgResolver>();
+builder.Services.AddScoped<OrgAccess>();
 builder.Services.AddScoped<WallService>();
 builder.Services.AddScoped<ProgressService>();
 
@@ -251,7 +253,7 @@ using (var scope = app.Services.CreateScope())
     var aiSettings = await db.AiSettings.FindAsync(1);
     if (aiSettings is null)
     {
-        aiSettings = new BeeCoding.Models.AiSettings();
+        aiSettings = new BeeCoding.Models.AiSettings { Id = 1 };
         db.AiSettings.Add(aiSettings);
         await db.SaveChangesAsync();
     }
@@ -260,6 +262,12 @@ using (var scope = app.Services.CreateScope())
     var aiRuntime = scope.ServiceProvider.GetRequiredService<AiRuntimeSettings>();
     aiRuntime.SetGlobal(aiSettings.Paused, aiSettings.PausedReason, aiSettings.DailyQuotaStudent, aiSettings.DailyQuotaTeacher);
     aiRuntime.SetOverrides(aiOverrides.Select(x => (x.UserId, x.DailyQuotaOverride, x.Banned)));
+
+    // Same for each organization's own AI settings override (see Organization/OrgAdminController).
+    var orgAiSettings = await db.AiSettings.Where(x => x.OrganizationId != null)
+        .Select(x => new { OrganizationId = x.OrganizationId!.Value, x.Paused, x.PausedReason, x.DailyQuotaStudent, x.DailyQuotaTeacher })
+        .ToListAsync();
+    aiRuntime.SetOrgs(orgAiSettings.Select(x => (x.OrganizationId, x.Paused, x.PausedReason, x.DailyQuotaStudent, x.DailyQuotaTeacher)));
 }
 
 // Build the sandbox runner + probe capabilities before serving traffic.

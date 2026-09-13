@@ -3,16 +3,16 @@ namespace BeeCoding.Models;
 // ---- Auth ----
 public record RegisterDto(string Email, string Password, string DisplayName, string Role, string? TeacherCode = null);
 public record LoginDto(string Email, string Password);
-public record MeDto(int Id, string Email, string DisplayName, string Role, bool IsAdmin = false);
+public record MeDto(int Id, string Email, string DisplayName, string Role, bool IsAdmin = false, bool HasOrgAdmin = false);
 public record ChangePasswordDto(string CurrentPassword, string NewPassword);
 public record UpdateProfileDto(string DisplayName);
 public record DeleteAccountDto(string Password, bool DeleteOwnedBoards = false);
 
 // ---- Boards ----
-public record CreateBoardDto(string Title);
+public record CreateBoardDto(string Title, int? OrganizationId = null);
 public record JoinBoardDto(string Code);
 public record UpdateBoardDto(bool? ExamMode, bool? ProtectContent, bool? LecturingMode);
-public record BoardDto(int Id, string Slug, string Title, string JoinCode, bool ExamMode, bool ProtectContent, bool LecturingMode, bool IsOwner, string Role, int MemberCount, int ProblemCount);
+public record BoardDto(int Id, string Slug, string Title, string JoinCode, bool ExamMode, bool ProtectContent, bool LecturingMode, bool IsOwner, string Role, int MemberCount, int ProblemCount, int? OrganizationId = null, string? OrganizationName = null);
 
 public record MemberDto(int UserId, string DisplayName, string Role, bool HiddenByTeacher);
 public record UpdateMemberDto(bool HiddenByTeacher);
@@ -267,10 +267,11 @@ public record CommentBodyDto(string Body);
 // ---- LTI 1.3 (Learning Tools Interoperability) — admin platform registry ----
 public record AdminLtiPlatformDto(
     int Id, string Name, string Issuer, string ClientId, string DeploymentIds,
-    string AuthLoginUrl, string AuthTokenUrl, string JwksUrl, bool Enabled, DateTime CreatedAt);
+    string AuthLoginUrl, string AuthTokenUrl, string JwksUrl, bool Enabled, DateTime CreatedAt,
+    int? OrganizationId, string? OrganizationName);
 public record AdminUpsertLtiPlatformDto(
     string Name, string Issuer, string ClientId, string DeploymentIds,
-    string AuthLoginUrl, string AuthTokenUrl, string JwksUrl, bool Enabled);
+    string AuthLoginUrl, string AuthTokenUrl, string JwksUrl, bool Enabled, int? OrganizationId = null);
 /// <summary>Values an LMS admin needs to register BeeCoding as an external tool —
 /// shown in the admin LTI tab so they can copy them in.</summary>
 public record AdminLtiToolConfigDto(
@@ -280,6 +281,16 @@ public record AdminLtiToolConfigDto(
 public record LtiDeepLinkContextDto(string PlatformName, bool AcceptsResourceLink);
 public record LtiDeepLinkSelectDto(string Token, string BoardSlug);
 public record LtiDeepLinkResultDto(string ReturnUrl, string Jwt);
+
+// ---- Organizations (multi-tenant: separate universities/institutions) ----
+public record OrganizationDto(int Id, string Name, string Slug, DateTime CreatedAt);
+public record AdminUpsertOrganizationDto(string Name, string Slug);
+public record OrgSummaryDto(int MemberCount, int BoardCount);
+public record OrgMemberRow(int UserId, string Email, string DisplayName, string OrgRole, DateTime JoinedAt);
+public record OrgAddMemberDto(string Email, string OrgRole);   // "Member" | "Admin"
+public record OrgSetMemberRoleDto(string OrgRole);
+public record OrgBoardRow(int Id, string Slug, string Title, string OwnerEmail, int MemberCount, int ProblemCount, DateTime CreatedAt);
+public record OrgAiSettingsDto(bool Paused, string? PausedReason, int DailyQuotaStudent, int DailyQuotaTeacher);
 
 // ---- Ad-hoc run ----
 public record RunDto(string Language, string Code, string Stdin,

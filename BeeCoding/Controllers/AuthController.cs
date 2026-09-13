@@ -63,7 +63,7 @@ public class AuthController(AppDbContext db, PasswordService pw, IConfiguration 
         await _db.SaveChangesAsync();
 
         await SignInAsync(user);
-        return new MeDto(user.Id, user.Email, user.DisplayName, user.Role.ToString(), IsAdmin(user.Email));
+        return await MeDtoAsync(user);
     }
 
     [HttpPost("login")]
@@ -85,7 +85,7 @@ public class AuthController(AppDbContext db, PasswordService pw, IConfiguration 
 
         _throttle.RecordSuccess(ip, email);
         await SignInAsync(user);
-        return new MeDto(user.Id, user.Email, user.DisplayName, user.Role.ToString(), IsAdmin(user.Email));
+        return await MeDtoAsync(user);
     }
 
     [HttpPost("logout")]
@@ -102,7 +102,7 @@ public class AuthController(AppDbContext db, PasswordService pw, IConfiguration 
     {
         var user = await _db.Users.FindAsync(UserId);
         if (user is null) return Unauthorized();
-        return new MeDto(user.Id, user.Email, user.DisplayName, user.Role.ToString(), IsAdmin(user.Email));
+        return await MeDtoAsync(user);
     }
 
     [HttpPatch("profile")]
@@ -122,7 +122,7 @@ public class AuthController(AppDbContext db, PasswordService pw, IConfiguration 
             await _db.SaveChangesAsync();
             await SignInAsync(user);   // refresh the cookie so ClaimTypes.Name (author names, etc.) is current
         }
-        return new MeDto(user.Id, user.Email, user.DisplayName, user.Role.ToString(), IsAdmin(user.Email));
+        return await MeDtoAsync(user);
     }
 
     [HttpPost("change-password")]
@@ -177,4 +177,10 @@ public class AuthController(AppDbContext db, PasswordService pw, IConfiguration 
     // it takes effect immediately, without a re-login. Shared with LtiController — see
     // CookieSignIn.
     private Task SignInAsync(User user) => CookieSignIn.SignInAsync(HttpContext, user);
+
+    private async Task<MeDto> MeDtoAsync(User user)
+    {
+        var hasOrgAdmin = await _db.OrganizationMemberships.AnyAsync(m => m.UserId == user.Id && m.Role == OrgRole.Admin);
+        return new MeDto(user.Id, user.Email, user.DisplayName, user.Role.ToString(), IsAdmin(user.Email), hasOrgAdmin);
+    }
 }
