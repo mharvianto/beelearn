@@ -134,6 +134,10 @@ public record AdminDashboardDto(
     AdminAiUsageBucket AiToday, AdminAiUsageBucket AiMonth,
     List<AdminAuditLogRow> RecentActivity);
 
+// ---- Admin: dashboard charts ----
+public record AdminWeeklyStatDto(string WeekStart, int ActiveUsers, int Submissions);
+public record AdminTopicStatDto(string Tag, int Attempts, int Accepted, double AcceptRate);
+
 // ---- Admin: role / admin-flag management ----
 public record AdminChangeRoleDto(string Role);   // "Teacher" | "Student"
 

@@ -6,6 +6,8 @@ import { withBase } from '../lib/base';
 import { useAuth } from '../stores/auth';
 import { useUndoToast } from '../stores/undoToast';
 import { useConfirmDialog } from '../stores/confirmDialog';
+import MiniLineChart from '../components/MiniLineChart.vue';
+import TopicBarChart from '../components/TopicBarChart.vue';
 
 const auth = useAuth();
 const route = useRoute();
@@ -66,11 +68,25 @@ watch(() => route.params.tab, (t) => {
 
 // ---- dashboard: at-a-glance overview, the default landing tab ----
 const dashboard = ref(null);
+const weeklyStats = ref(null);
+const topicStats = ref(null);
 async function loadDashboard() {
   err.value = '';
-  try { dashboard.value = await api.get('/api/admin-ui/dashboard'); }
-  catch (e) { err.value = e.message; }
+  try {
+    const [d, weekly, topics] = await Promise.all([
+      api.get('/api/admin-ui/dashboard'),
+      api.get('/api/admin-ui/dashboard/weekly?weeks=12'),
+      api.get('/api/admin-ui/dashboard/topics?take=8'),
+    ]);
+    dashboard.value = d;
+    weeklyStats.value = weekly;
+    topicStats.value = topics;
+  } catch (e) { err.value = e.message; }
 }
+const shortDate = (s) => new Date(`${s}T00:00:00Z`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const activeUserPoints = () => (weeklyStats.value || []).map((w) => ({ label: shortDate(w.weekStart), value: w.activeUsers }));
+const submissionPoints = () => (weeklyStats.value || []).map((w) => ({ label: shortDate(w.weekStart), value: w.submissions }));
+const topicBarItems = () => (topicStats.value || []).map((t) => ({ label: t.tag, value: t.attempts, rate: t.acceptRate }));
 
 // ---- AI settings: kill-switch, quotas, per-user overrides ----
 const aiSettings = ref(null);
@@ -511,6 +527,16 @@ onMounted(async () => {
         </button>
       </div>
       <p v-else-if="!dashboard" class="text-slate-400 dark:text-slate-500 text-sm">Loading…</p>
+
+      <div v-if="weeklyStats?.length" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <MiniLineChart title="Active users / week" :points="activeUserPoints()" />
+        <MiniLineChart title="Submissions / week" :points="submissionPoints()" />
+      </div>
+
+      <div v-if="topicStats">
+        <h2 class="font-semibold text-sm mb-1.5">Top topics by attempts</h2>
+        <TopicBarChart :items="topicBarItems()" />
+      </div>
 
       <div v-if="dashboard">
         <div class="flex items-center gap-2 mb-1.5">

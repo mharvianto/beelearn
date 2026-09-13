@@ -90,6 +90,27 @@ public class AdminUiController(
             aiToday, aiMonth, recentActivity);
     }
 
+    /// <summary>Weekly active-users + submissions, for the dashboard's trend chart —
+    /// same aggregation as the Reports tab's weekly-engagement export.</summary>
+    [HttpGet("dashboard/weekly")]
+    public async Task<ActionResult<List<AdminWeeklyStatDto>>> DashboardWeekly([FromQuery] int weeks = 12)
+    {
+        var agg = await EngagementAggAsync(weeks);
+        return agg.Select(a => new AdminWeeklyStatDto(a.WeekStart.ToString("yyyy-MM-dd"), a.ActiveUsers, a.Submissions)).ToList();
+    }
+
+    /// <summary>Top tags by attempts, for the dashboard's ranking chart — same
+    /// aggregation as the Reports tab's topic-solve-rate export.</summary>
+    [HttpGet("dashboard/topics")]
+    public async Task<ActionResult<List<AdminTopicStatDto>>> DashboardTopics([FromQuery] int take = 8)
+    {
+        take = Math.Clamp(take, 1, 50);
+        var agg = await TopicsAggAsync();
+        return agg.Take(take)
+            .Select(a => new AdminTopicStatDto(a.Tag, a.Attempts, a.Accepted, a.Attempts > 0 ? a.Accepted / (double)a.Attempts : 0))
+            .ToList();
+    }
+
     // ---- users -------------------------------------------------------------
     [HttpGet("users")]
     public async Task<ActionResult<AdminUserPageDto>> Users(
@@ -874,7 +895,7 @@ public class AdminUiController(
         ws.Columns().AdjustToContents();
     }
 
-    private async Task<List<string[]>> TopicsRowsAsync()
+    private async Task<List<TopicAgg>> TopicsAggAsync()
     {
         var boardProblems = await _db.Problems.Select(p => new { p.Id, p.Tags }).ToListAsync();
         var bankProblems = await _db.BankProblems.Select(p => new { p.Id, p.Tags }).ToListAsync();
@@ -882,7 +903,7 @@ public class AdminUiController(
         var bankSubs = await _db.BankSubmissions.Select(s => new { s.BankProblemId, s.UserId, s.Verdict, s.Score }).ToListAsync();
 
         var byTag = new Dictionary<string, TopicAgg>();
-        TopicAgg Agg(string tag) { if (!byTag.TryGetValue(tag, out var a)) byTag[tag] = a = new TopicAgg(); return a; }
+        TopicAgg Agg(string tag) { if (!byTag.TryGetValue(tag, out var a)) byTag[tag] = a = new TopicAgg { Tag = tag }; return a; }
         bool Solved(Verdict v, double score) => v == Verdict.Accepted && score >= 1.0;
 
         foreach (var p in boardProblems)
@@ -908,17 +929,24 @@ public class AdminUiController(
             }
         }
 
+        return byTag.Values.OrderByDescending(a => a.Attempts).ToList();
+    }
+
+    private async Task<List<string[]>> TopicsRowsAsync()
+    {
+        var agg = await TopicsAggAsync();
         var rows = new List<string[]> { new[] { "Tag", "Problems", "Attempts", "AcceptedSubmissions", "AcceptRate", "DistinctSolvers" } };
-        foreach (var (tag, a) in byTag.OrderByDescending(kv => kv.Value.Attempts))
+        foreach (var a in agg)
         {
             var rate = a.Attempts > 0 ? (a.Accepted / (double)a.Attempts).ToString("0.00") : "";
-            rows.Add(new[] { tag, a.ProblemIds.Count.ToString(), a.Attempts.ToString(), a.Accepted.ToString(), rate, a.Solvers.Count.ToString() });
+            rows.Add(new[] { a.Tag, a.ProblemIds.Count.ToString(), a.Attempts.ToString(), a.Accepted.ToString(), rate, a.Solvers.Count.ToString() });
         }
         return rows;
     }
 
     private sealed class TopicAgg
     {
+        public string Tag { get; set; } = "";
         public HashSet<(string Kind, int Id)> ProblemIds { get; } = new();
         public int Attempts;
         public int Accepted;
@@ -938,7 +966,7 @@ public class AdminUiController(
         return rows;
     }
 
-    private async Task<List<string[]>> EngagementRowsAsync(int weeks)
+    private async Task<List<(DateOnly WeekStart, int ActiveUsers, int Submissions)>> EngagementAggAsync(int weeks)
     {
         weeks = Math.Clamp(weeks, 1, 52);
         var boardActivity = await _db.Submissions.Select(s => new { s.UserId, s.CreatedAt }).ToListAsync();
@@ -951,12 +979,17 @@ public class AdminUiController(
             return d.AddDays(-(((int)d.DayOfWeek + 6) % 7));   // Monday of that week
         }
 
-        var byWeek = all.GroupBy(x => WeekStart(x.CreatedAt))
+        return all.GroupBy(x => WeekStart(x.CreatedAt))
             .OrderByDescending(g => g.Key).Take(weeks).OrderBy(g => g.Key)
-            .Select(g => new[] { g.Key.ToString("yyyy-MM-dd"), g.Select(x => x.UserId).Distinct().Count().ToString(), g.Count().ToString() });
+            .Select(g => (g.Key, g.Select(x => x.UserId).Distinct().Count(), g.Count()))
+            .ToList();
+    }
 
+    private async Task<List<string[]>> EngagementRowsAsync(int weeks)
+    {
+        var agg = await EngagementAggAsync(weeks);
         var rows = new List<string[]> { new[] { "WeekStart", "ActiveUsers", "TotalSubmissions" } };
-        rows.AddRange(byWeek);
+        rows.AddRange(agg.Select(a => new[] { a.WeekStart.ToString("yyyy-MM-dd"), a.ActiveUsers.ToString(), a.Submissions.ToString() }));
         return rows;
     }
 
