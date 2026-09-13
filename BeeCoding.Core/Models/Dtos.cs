@@ -125,6 +125,10 @@ public record AdminAuditLogRow(int Id, DateTime CreatedAt, string ActorEmail, st
 // ---- Admin: role / admin-flag management ----
 public record AdminChangeRoleDto(string Role);   // "Teacher" | "Student"
 
+// ---- Admin: bulk user delete ----
+public record AdminBulkDeleteUsersDto(List<int> Ids);
+public record AdminBulkDeleteUsersResult(int Deleted, List<string> Errors);
+
 // ---- Admin: bulk board archive ----
 public record AdminBulkArchiveDto(List<string> Slugs);
 public record AdminBulkArchiveResult(int Archived, List<string> Errors);

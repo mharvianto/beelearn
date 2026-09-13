@@ -78,6 +78,28 @@ public class AdminUiController(
         return NoContent();
     }
 
+    /// <summary>Bulk version of <see cref="DeleteUser"/> — pick ids from the Users tab.
+    /// Same soft-delete, same restore path (individually, or via Trash).</summary>
+    [HttpPost("users/bulk-delete")]
+    public async Task<ActionResult<AdminBulkDeleteUsersResult>> BulkDeleteUsers(AdminBulkDeleteUsersDto dto)
+    {
+        int deleted = 0;
+        var errors = new List<string>();
+        foreach (var id in (dto.Ids ?? new()).Distinct())
+        {
+            if (id == UserId) { errors.Add($"{id}: can't delete your own account"); continue; }
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == id);
+            if (user is null) { errors.Add($"{id}: not found"); continue; }
+            if (user.DeletedAt is not null) continue;
+
+            user.DeletedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            await _audit.RecordAsync(UserId, ActorEmail, "delete", "User", user.Id, $"{user.Email} (bulk)");
+            deleted++;
+        }
+        return new AdminBulkDeleteUsersResult(deleted, errors);
+    }
+
     [HttpPost("users/{id:int}/restore")]
     public async Task<IActionResult> RestoreUser(int id)
     {

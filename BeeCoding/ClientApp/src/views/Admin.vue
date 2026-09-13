@@ -132,6 +132,32 @@ async function deleteUser(u) {
   } catch (e) { err.value = e.message; }
 }
 
+// ---- bulk-delete users ----
+const selectedUsers = ref(new Set());
+function toggleUserSelect(id) {
+  const next = new Set(selectedUsers.value);
+  next.has(id) ? next.delete(id) : next.add(id);
+  selectedUsers.value = next;
+}
+function selectAllUsers(checked) {
+  selectedUsers.value = checked
+    ? new Set((users.value || []).filter((u) => u.id !== auth.user?.id).map((u) => u.id))
+    : new Set();
+}
+const userDeleteResultMsg = ref('');
+async function deleteSelectedUsers() {
+  const ids = [...selectedUsers.value];
+  if (!ids.length) return;
+  if (!confirm(`Delete ${ids.length} user(s)? They'll move to Trash and can be restored there.`)) return;
+  err.value = ''; userDeleteResultMsg.value = '';
+  try {
+    const result = await api.post('/api/admin-ui/users/bulk-delete', { ids });
+    selectedUsers.value = new Set();
+    await loadUsers();
+    userDeleteResultMsg.value = `Deleted ${result.deleted} user(s).` + (result.errors.length ? ` Errors: ${result.errors.join(', ')}` : '');
+  } catch (e) { err.value = e.message; }
+}
+
 async function changeRole(u, role) {
   if (role === u.role) return;
   err.value = '';
@@ -432,10 +458,21 @@ onMounted(async () => {
                class="flex-1 border border-slate-300 dark:border-slate-700 dark:bg-slate-800 rounded-lg px-3 py-2 text-sm" />
         <button @click="loadUsers" class="text-sm bg-slate-800 dark:bg-slate-700 text-white rounded-lg px-4">Search</button>
       </div>
+      <div v-if="selectedUsers.size" class="flex items-center gap-2 mb-2 text-sm">
+        <span>{{ selectedUsers.size }} selected</span>
+        <button @click="deleteSelectedUsers" class="bg-rose-600 hover:bg-rose-700 text-white rounded-lg px-3 py-1 text-xs font-medium">
+          Delete selected
+        </button>
+      </div>
+      <p v-if="userDeleteResultMsg" class="text-xs text-emerald-600 dark:text-emerald-400 mb-2">{{ userDeleteResultMsg }}</p>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
             <tr class="text-xs text-left text-slate-400 dark:text-slate-500 border-b border-slate-200 dark:border-slate-800">
+              <th class="font-normal py-1.5 pr-3">
+                <input type="checkbox" :checked="!!users?.length && selectedUsers.size === users.filter((u) => u.id !== auth.user?.id).length"
+                       @change="selectAllUsers($event.target.checked)" />
+              </th>
               <th class="font-normal py-1.5 pr-3">#</th><th class="font-normal pr-3">Name / email</th>
               <th class="font-normal pr-3">Role</th><th class="font-normal pr-3">XP</th>
               <th class="font-normal pr-3">Boards</th><th class="font-normal pr-3">Subs</th>
@@ -444,6 +481,7 @@ onMounted(async () => {
           </thead>
           <tbody class="[&_td]:py-1.5 [&_td]:pr-3">
             <tr v-for="u in users" :key="u.id" class="border-b border-slate-100 dark:border-slate-800/60">
+              <td><input v-if="u.id !== auth.user?.id" type="checkbox" :checked="selectedUsers.has(u.id)" @change="toggleUserSelect(u.id)" /></td>
               <td class="text-slate-400">{{ u.id }}</td>
               <td><div class="font-medium">{{ u.displayName }}</div><div class="text-[11px] text-slate-400">{{ u.email }}</div></td>
               <td>
@@ -469,7 +507,7 @@ onMounted(async () => {
                 </template>
               </td>
             </tr>
-            <tr v-if="users && !users.length"><td colspan="8" class="text-slate-400 dark:text-slate-500 py-3">No users.</td></tr>
+            <tr v-if="users && !users.length"><td colspan="9" class="text-slate-400 dark:text-slate-500 py-3">No users.</td></tr>
           </tbody>
         </table>
       </div>
